@@ -114,6 +114,7 @@ func (n *Machine) Validate() {
 					n.AddError(ValidName("Invalid Stage", parts[1]))
 				case "bootenv":
 					n.AddError(ValidName("Invalid BootEnv", parts[1]))
+				case "chroot":
 				default:
 					n.Errorf("Invalid Task Step %s", t)
 				}

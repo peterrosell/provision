@@ -53,7 +53,7 @@ type MachineAgent struct {
 	client                                    *Client
 	events                                    *EventStream
 	machine                                   *models.Machine
-	runnerDir                                 string
+	runnerDir, chrootDir                      string
 	doPower, exitOnNotRunnable, exitOnFailure bool
 	logger                                    io.Writer
 	err                                       error
@@ -244,28 +244,38 @@ func (a *MachineAgent) WaitRunnable() {
 //
 // * AGENT_WAIT_FOR_RUNNABLE if no other conditions were met.
 func (a *MachineAgent) RunTask() {
-	runner, err := NewTaskRunner(a.client, a.machine, a.runnerDir, a.logger)
+	runner, err := NewTaskRunner(a.client, a.machine, a.runnerDir, a.chrootDir, a.logger)
 	if err != nil {
 		a.err = err
 		a.initOrExit()
 		return
 	}
 	if runner == nil {
+		if a.chrootDir != "" {
+			a.Logf("Current tasks finished, exiting chroot\n")
+			a.state = AGENT_EXIT
+			return
+		}
 		if a.machine.Workflow == "" {
 			a.Logf("Current tasks finished, check to see if stage needs to change\n")
 			a.state = AGENT_CHANGE_STAGE
 			return
-		} else {
-			a.Logf("Current tasks finished, wait for stage or bootenv to change\n")
-			a.state = AGENT_WAIT_FOR_CHANGE_STAGE
-			return
 		}
+		a.Logf("Current tasks finished, wait for stage or bootenv to change\n")
+		a.state = AGENT_WAIT_FOR_CHANGE_STAGE
+		return
 	}
 	a.Logf("Runner created for task %s:%s (%d:%d)",
 		runner.j.Uuid.String(),
 		runner.j.Task,
 		runner.j.CurrentIndex,
 		runner.j.NextIndex)
+	if runner.wantChroot {
+		a.chrootDir = runner.jobDir
+		a.state = AGENT_WAIT_FOR_RUNNABLE
+		runner.Close()
+		return
+	}
 	if err := runner.Run(); err != nil {
 		a.err = err
 		a.initOrExit()
@@ -447,8 +457,14 @@ func (a *MachineAgent) Run() error {
 			a.Logf("Agent changing stage\n")
 			a.ChangeStage()
 		case AGENT_EXIT:
-			a.Logf("Agent exiting\n")
-			return a.err
+			if a.chrootDir != "" {
+				a.Logf("Agent exiting chroot %s\n", a.chrootDir)
+				a.chrootDir = ""
+				a.WaitRunnable()
+			} else {
+				a.Logf("Agent exiting\n")
+				return a.err
+			}
 		case AGENT_REBOOT:
 			a.Logf("Agent rebooting\n")
 			return a.power("reboot")

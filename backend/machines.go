@@ -578,6 +578,7 @@ func (n *Machine) Validate() {
 				if bootenvs.Find(parts[1]) == nil {
 					n.Errorf("BootEnv %s (at %d) does not exist", parts[1], i)
 				}
+			case "chroot":
 			default:
 				n.Errorf("%s (at %d) is malformed", ent, i)
 			}

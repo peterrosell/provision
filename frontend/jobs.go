@@ -378,6 +378,10 @@ func (f *Frontend) InitJobApi() {
 							}
 							// Handle bootenv and stage changes if needed
 							switch st[0] {
+							case "chroot":
+								rt.Infof("Machine %s agent is being signalled to chroot to %s and continue",
+									b.Machine.String(), st[1])
+
 							case "stage":
 								if m.Stage == st[1] {
 									continue
