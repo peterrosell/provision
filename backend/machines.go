@@ -489,6 +489,7 @@ func (n *Machine) Validate() {
 				}
 			case "action":
 				continue
+			case "chroot":
 			default:
 				n.Errorf("%s (at %d) is malformed", ent, i)
 			}
