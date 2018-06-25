@@ -170,7 +170,11 @@ func (n *rMachine) Url() string {
 	return n.renderData.rt.FileURL(n.renderData.remoteIP) + "/" + n.Path()
 }
 
-func (n *rMachine) MacAddr(format string) string {
+func (n *rMachine) MacAddr(params ...string) string {
+	format := "raw"
+	if len(params) > 0 {
+		format = params[0]
+	}
 	switch format {
 	case "pxelinux":
 		return "01-" + strings.Replace(n.currMac, ":", "-", -1)
