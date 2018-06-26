@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -28,6 +29,9 @@ type PrometheusPushGateway struct {
 
 	// Logger for output
 	l logger.Logger
+
+	// Stop channel
+	stop chan bool
 }
 
 // SetPushGateway sends metrics to a remote pushgateway exposed on pushGatewayURL
@@ -69,9 +73,21 @@ func (ppg *PrometheusPushGateway) sendMetricsToPushGateway(metrics []byte) {
 
 func (ppg *PrometheusPushGateway) startPushTicker() {
 	ticker := time.NewTicker(time.Second * ppg.pushIntervalSeconds)
+	ppg.stop = make(chan bool, 1)
+
 	go func() {
-		for range ticker.C {
-			ppg.sendMetricsToPushGateway(ppg.getMetrics())
+		for {
+			select {
+			case <-ticker.C:
+				ppg.sendMetricsToPushGateway(ppg.getMetrics())
+			case <-ppg.stop:
+				return
+			}
 		}
 	}()
+}
+
+func (ppg *PrometheusPushGateway) Shutdown(ctx context.Context) error {
+	ppg.stop <- true
+	return nil
 }

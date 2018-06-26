@@ -339,6 +339,41 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 
 var EmbeddedAssetsServerFunc func(*gin.Engine, logger.Logger) error
 
+func compressParams(val string) bool {
+	for _, tv := range []string{
+		"name",
+		"uuid",
+		"key",
+		"path",
+		"id",
+		"address",
+		// "cmd", _useful to see what commands are being run.
+	} {
+		if tv == val {
+			return true
+		}
+	}
+	return false
+}
+
+func compressUrl(c *gin.Context) string {
+	if c.Request.Method == "OPTIONS" {
+		return "CORS_OPTIONS"
+	}
+	url := c.Request.URL.String()
+	url = strings.Split(url, "?")[0]
+	for _, p := range c.Params {
+		if compressParams(p.Key) {
+			if strings.HasPrefix(p.Value, "/") {
+				url = strings.Replace(url, p.Value, fmt.Sprintf("/*%s", p.Key), 1)
+			} else {
+				url = strings.Replace(url, p.Value, fmt.Sprintf(":%s", p.Key), 1)
+			}
+		}
+	}
+	return url
+}
+
 func NewFrontend(
 	dt *backend.DataTracker,
 	lgr logger.Logger,
@@ -378,6 +413,7 @@ func NewFrontend(
 	mgmtApi.Use(gzip.Gzip(gzip.BestSpeed))
 
 	p := utils.NewPromGin(lgr, "api", nil)
+	p.ReqCntURLLabelMappingFn = compressUrl
 	mgmtApi.Use(p.HandlerGinFunc())
 
 	mgmtApi.Use(func(c *gin.Context) {

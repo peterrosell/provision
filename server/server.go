@@ -47,6 +47,7 @@ import (
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/frontend"
 	"github.com/digitalrebar/provision/midlayer"
+	"github.com/digitalrebar/provision/utils"
 	"github.com/digitalrebar/store"
 )
 
@@ -114,6 +115,9 @@ type ProgOpts struct {
 	HaEnabled   bool   `long:"ha-enabled" description:"Enable HA"`
 	HaAddress   string `long:"ha-address" description:"IP address to advertise as our HA address" default:""`
 	HaInterface string `long:"ha-interface" description:"Interface to put the VIP on for HA" default:""`
+
+	PromGwUrl    string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:""`
+	PromInterval int    `long:"prometheus-interval" description:"Duration in seconds to push metrics" default:"5"`
 }
 
 func mkdir(d string) error {
@@ -282,6 +286,13 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		return fmt.Sprintf("Error starting metrics server: %v", err)
 	}
 	services = append(services, svc)
+
+	if cOpts.PromGwUrl != "" {
+		ppg := utils.NewPrometheusPushGateway(buf.Log("promgateway"), cOpts.PromGwUrl,
+			fmt.Sprintf("http://127.0.0.1:%d/metrics", cOpts.MetricsPort),
+			time.Duration(cOpts.PromInterval)*time.Second)
+		services = append(services, ppg)
+	}
 
 	// Make data store
 	dtStore, err := midlayer.DefaultDataStack(cOpts.DataRoot, cOpts.BackEndType,
