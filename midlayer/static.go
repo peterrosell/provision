@@ -6,6 +6,7 @@ import (
 
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/backend"
+	"github.com/digitalrebar/provision/utils"
 )
 
 func ServeStatic(listenAt string, responder http.Handler, logger logger.Logger, pubs *backend.Publishers) (*http.Server, error) {
@@ -13,9 +14,13 @@ func ServeStatic(listenAt string, responder http.Handler, logger logger.Logger, 
 	if err != nil {
 		return nil, err
 	}
+
+	p := utils.NewPromGin(logger, "static", nil)
+	r := p.Handler(responder)
+
 	svr := &http.Server{
 		Addr:    listenAt,
-		Handler: responder,
+		Handler: r,
 		ConnState: func(n net.Conn, cs http.ConnState) {
 			if cs == http.StateActive {
 				laddr, lok := n.LocalAddr().(*net.TCPAddr)

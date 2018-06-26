@@ -76,10 +76,10 @@ func TestServerArgs(t *testing.T) {
 	badArgTest(t, "Error creating required directory", "--base-root", tmpDir, "--saas-content-root", existingFile)
 
 	badArgTest(t, "Unable to create DataStack: Failed to open local content: Unknown schema type:", "--base-root", tmpDir, "--local-content", existingFile)
-	badArgTest(t, "Unable to create DataStack: Failed to open default content: Unknown schema type:", "--base-root", tmpDir, "--local-content", "", "--default-content", existingFile)
+	badArgTest(t, "Unable to create DataStack: Failed to open default content: Unknown schema type:", "--base-root", tmpDir, "--local-content", "", "--default-content", existingFile, "--metrics-port", "10102")
 	badArgTest(t, "Try one of `trace`,`debug`,`info`,`warn`,`error`,`fatal`,`panic`", "--base-root", tmpDir, "--default-content", "", "--local-content", "", "--log-level", "cow")
 
-	badArgTest(t, "Error building certs: failed to open key.pem for writing: open", "--base-root", tmpDir, "--default-content", "", "--local-content", "", "--drp-id", "gregfield", "--tls-cert", certFile, "--tls-key", tmpDir)
+	badArgTest(t, "Error building certs: failed to open key.pem for writing: open", "--base-root", tmpDir, "--default-content", "", "--local-content", "", "--drp-id", "gregfield", "--tls-cert", certFile, "--tls-key", tmpDir, "--metrics-port", "10103")
 
 	os.Remove(certFile)
 	os.Remove(existingFile)
@@ -95,6 +95,7 @@ func TestServer(t *testing.T) {
 		"--api-port", "10001",
 		"--static-port", "10002",
 		"--tftp-port", "10003",
+		"--metrics-port", "10004",
 		"--disable-dhcp",
 		"--local-content", "directory:../test-data/etc/dr-provision?codec=yaml",
 		"--default-content", "file:../test-data/usr/share/dr-provision/default.yaml?codec=yaml",

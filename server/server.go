@@ -62,6 +62,7 @@ type ProgOpts struct {
 	DisableProvisioner  bool   `long:"disable-provisioner" description:"Disable provisioner"`
 	DisableDHCP         bool   `long:"disable-dhcp" description:"Disable DHCP server"`
 	DisableBINL         bool   `long:"disable-pxe" description:"Disable PXE/BINL server"`
+	MetricsPort         int    `long:"metrics-port" description:"Port the metrics HTTP server should listen on" default:"8080"`
 	StaticPort          int    `long:"static-port" description:"Port the static HTTP file server should listen on" default:"8091"`
 	TftpPort            int    `long:"tftp-port" description:"Port for the TFTP server to listen on" default:"69"`
 	ApiPort             int    `long:"api-port" description:"Port for the API server to listen on" default:"8092"`
@@ -268,6 +269,20 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		}
 	}
 
+	logLevel, err := logger.ParseLevel(cOpts.DefaultLogLevel)
+	if err != nil {
+		localLogger.Printf("Invalid log level %s", cOpts.DefaultLogLevel)
+		return fmt.Sprintf("Try one of `trace`,`debug`,`info`,`warn`,`error`,`fatal`,`panic`")
+	}
+	buf := logger.New(localLogger).SetDefaultLevel(logLevel)
+
+	localLogger.Printf("Starting metrics server")
+	svc, err := midlayer.ServeMetrics(fmt.Sprintf(":%d", cOpts.MetricsPort), buf.Log("metrics"))
+	if err != nil {
+		return fmt.Sprintf("Error starting metrics server: %v", err)
+	}
+	services = append(services, svc)
+
 	// Make data store
 	dtStore, err := midlayer.DefaultDataStack(cOpts.DataRoot, cOpts.BackEndType,
 		cOpts.LocalContent, cOpts.DefaultContent, cOpts.SaasContentRoot, cOpts.FileRoot)
@@ -283,14 +298,8 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	if err != nil {
 		return fmt.Sprintf("Unable to open secrets store: %v", err)
 	}
-	logLevel, err := logger.ParseLevel(cOpts.DefaultLogLevel)
-	if err != nil {
-		localLogger.Printf("Invalid log level %s", cOpts.DefaultLogLevel)
-		return fmt.Sprintf("Try one of `trace`,`debug`,`info`,`warn`,`error`,`fatal`,`panic`")
-	}
 
 	// We have a backend, now get default assets
-	buf := logger.New(localLogger).SetDefaultLevel(logLevel)
 	publishers := backend.NewPublishers(localLogger)
 
 	dt := backend.NewDataTracker(dtStore,

@@ -17,6 +17,7 @@ import (
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/midlayer"
 	"github.com/digitalrebar/provision/models"
+	"github.com/digitalrebar/provision/utils"
 	"github.com/digitalrebar/store"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/gzip"
@@ -375,6 +376,10 @@ func NewFrontend(
 
 	mgmtApi := gin.New()
 	mgmtApi.Use(gzip.Gzip(gzip.BestSpeed))
+
+	p := utils.NewPromGin(lgr, "api", nil)
+	mgmtApi.Use(p.HandlerGinFunc())
+
 	mgmtApi.Use(func(c *gin.Context) {
 		l := me.Logger.Fork()
 		if logLevel := c.GetHeader("X-Log-Request"); logLevel != "" {

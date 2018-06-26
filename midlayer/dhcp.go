@@ -49,6 +49,7 @@ type DhcpRequest struct {
 	lPort                 int
 	duration              time.Duration
 	offerPXE              bool
+	start                 time.Time
 }
 
 // xid is a helper function that returns the xid of the request we are
@@ -736,7 +737,7 @@ func (dhr *DhcpRequest) buildBinlOptions(
 
 // ServeBinl is responsible for handling ProxyDHCP Request messages
 // and binl Discover messages.  Both of those come in on port 4011.
-func (dhr *DhcpRequest) ServeBinl(msgType dhcp.MessageType) dhcp.Packet {
+func (dhr *DhcpRequest) ServeBinl(msgType dhcp.MessageType) (dhcp.Packet, string) {
 	req, _ := dhr.reqAddr(msgType)
 	if !(msgType == dhcp.Discover || msgType == dhcp.Request) {
 		dhr.Infof("%s: Ignoring DHCP %s from %s to the BINL service", dhr.xid(), msgType, req)
@@ -745,27 +746,27 @@ func (dhr *DhcpRequest) ServeBinl(msgType dhcp.MessageType) dhcp.Packet {
 	respType := dhcp.ACK
 	if msgType == dhcp.Request && !req.IsGlobalUnicast() {
 		dhr.Infof("%s: NAK'ing invalid requested IP %s", dhr.xid(), req)
-		return dhr.nak(dhr.respondFrom(req))
+		return dhr.nak(dhr.respondFrom(req)), "NAK"
 	}
 	lease, subnet, reservation := dhr.FakeLease(req)
 	if lease == nil {
-		return nil
+		return nil, "NoInfo"
 	}
 	lease.Addr = req
 	serverID := dhr.respondFrom(req)
 	dhr.buildBinlOptions(lease, subnet, reservation, serverID)
 	if !dhr.offerPXE {
 		dhr.Infof("%s: BINL directed to not offer PXE response to %s", dhr.xid(), req)
-		return nil
+		return nil, "NoPXE"
 	}
 	reply := dhr.buildReply(respType, serverID, req)
-	return reply
+	return reply, "ACK"
 }
 
 // ServeDHCP is responsible for handling regular DHCP traffic as well
 // as ProxyDHCP DISCOVER messages -- essentially everything that comes
 // in on port 67.
-func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
+func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) (dhcp.Packet, string) {
 	// need code to figure out which interface or relay it came from
 	req, reqState := dhr.reqAddr(msgType)
 	var err error
@@ -820,11 +821,11 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
 		server := net.IP(serverBytes)
 		if ok && !dhr.listenOn(server) {
 			dhr.Warnf("%s: Ignoring request for DHCP server %s", dhr.xid(), net.IP(server))
-			return nil
+			return nil, "OtherServer"
 		}
 		if !req.IsGlobalUnicast() {
 			dhr.Infof("%s: NAK'ing invalid requested IP %s", dhr.xid(), req)
-			return dhr.nak(dhr.respondFrom(req))
+			return dhr.nak(dhr.respondFrom(req)), "NAK"
 		}
 		var lease *backend.Lease
 		var reservation *backend.Reservation
@@ -853,7 +854,7 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
 						req,
 						err)
 				}
-				return dhr.nak(dhr.respondFrom(req))
+				return dhr.nak(dhr.respondFrom(req)), "NAK"
 			}
 			if lease != nil {
 				break
@@ -862,19 +863,19 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
 		if lease == nil {
 			if reqState == reqInitReboot {
 				dhr.Infof("%s: No lease for %s in database, client in INIT-REBOOT.  Ignoring request.", dhr.xid(), req)
-				return nil
+				return nil, "NoLease"
 			}
 			if subnet != nil || reservation != nil {
 				dhr.Infof("%s: No lease for %s in database, NAK'ing", dhr.xid(), req)
-				return dhr.nak(dhr.respondFrom(req))
+				return dhr.nak(dhr.respondFrom(req)), "NAK"
 			}
 
 			dhr.Infof("%s: No lease in database, and no subnet or reservation covers %s. Ignoring request", dhr.xid(), req)
-			return nil
+			return nil, "NoLease"
 		}
 		if lease.Fake() {
 			dhr.Infof("%s: Proxy Subnet should not respond to %s.", dhr.xid(), req)
-			return nil
+			return nil, "ProxySubnet"
 		}
 		serverID := dhr.respondFrom(lease.Addr)
 		dhr.buildDhcpOptions(lease, subnet, reservation, serverID)
@@ -884,7 +885,7 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
 			reply.YIAddr(),
 			reply.CHAddr(),
 			serverID)
-		return reply
+		return reply, "ACK"
 	case dhcp.Discover:
 		for _, s := range dhr.handler.strats {
 			strat := s.Name
@@ -912,7 +913,7 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
 					if !fresh {
 						// Someone other goroutine is already working this lease.
 						rt.Debugf("%s: Ignoring DISCOVER from %s, its request is being processed by another goroutine", dhr.xid(), token)
-						return nil
+						return nil, "InFlight"
 					}
 					rt.Debugf("%s: Testing to see if %s is in use", dhr.xid(), lease.Addr)
 					addrUsed, valid := <-dhr.pinger.InUse(lease.Addr.String(), 3*time.Second)
@@ -921,7 +922,7 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
 							rt.Debugf("%s: System shutting down, deleting lease for %s", dhr.xid(), lease.Addr)
 							rt.Remove(lease)
 						})
-						return nil
+						return nil, "Leaving"
 					}
 					if addrUsed {
 						rt.Do(func(d backend.Stores) {
@@ -933,7 +934,7 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
 					}
 					rt.Do(func(d backend.Stores) {
 						rt.Debugf("%s: IP address %s appears to be free", dhr.xid(), lease.Addr)
-						lease.State = "OFFER"
+						lease.State = "Offer"
 						rt.Save(lease)
 					})
 				default:
@@ -942,7 +943,7 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
 				break
 			}
 			if lease == nil {
-				return nil
+				return nil, "NoLease"
 			}
 			if lease.Fake() {
 				lease.Addr = net.IPv4(0, 0, 0, 0)
@@ -950,13 +951,13 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
 				// This is a proxy DHCP response
 				dhr.buildBinlOptions(lease, subnet, reservation, serverID)
 				if !dhr.offerPXE {
-					return nil
+					return nil, "NoPXE"
 				}
 				reply := dhr.buildReply(dhcp.Offer, serverID, lease.Addr)
 				reply.SetBroadcast(true)
 
 				dhr.Infof("%s: Sending ProxyDHCP offer to %s via %s", dhr.xid(), reply.CHAddr(), serverID)
-				return reply
+				return reply, "Offer"
 			}
 			serverID := dhr.respondFrom(lease.Addr)
 			dhr.buildDhcpOptions(lease, subnet, reservation, serverID)
@@ -967,37 +968,37 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) dhcp.Packet {
 				reply.YIAddr(),
 				reply.CHAddr(),
 				serverID)
-			return reply
+			return reply, "Offer"
 		}
 	}
-	return nil
+	return nil, "NotHandled"
 }
 
 // Process is responsible for checking basic sanity of an incoming
 // DHCP packet, handing it off to ServeDHCP or ServeBinl, and
 // performing some common post-processing if we have an outgoing
 // packet to send.
-func (dhr *DhcpRequest) Process() dhcp.Packet {
+func (dhr *DhcpRequest) Process() (dhcp.Packet, string, string) {
 	if dhr.IsDebug() {
 		dhr.Debugf("Handling packet:\n%s", dhr.PrintIncoming())
 	}
 	if dhr.pkt.HLen() > 16 {
 		dhr.Errorf("Invalid hlen")
-		return nil
+		return nil, "InvalidHlen", "Error"
 	}
 	dhr.pktOpts = dhr.pkt.ParseOptions()
 	var reqType dhcp.MessageType
 	if t, ok := dhr.pktOpts[dhcp.OptionDHCPMessageType]; !ok || len(t) != 1 {
 		dhr.Errorf("Missing DHCP message type")
-		return nil
+		return nil, "MissingType", "Error"
 	} else if reqType = dhcp.MessageType(t[0]); reqType < dhcp.Discover || reqType > dhcp.Inform {
 		dhr.Errorf("Invalid DHCP message type")
-		return nil
+		return nil, "InvalidType", "Error"
 	}
 	tgtName := dhr.ifname()
 	if tgtName == "" {
 		dhr.Infof("Inferface at index %d vanished", dhr.cm.IfIndex)
-		return nil
+		return nil, reqType.String(), "BadInterface"
 	}
 	if len(dhr.handler.ifs) > 0 {
 		canProcess := false
@@ -1009,22 +1010,23 @@ func (dhr *DhcpRequest) Process() dhcp.Packet {
 		}
 		if !canProcess {
 			dhr.Infof("%s Ignoring packet from interface %s", dhr.xid(), tgtName)
-			return nil
+			return nil, reqType.String(), "Ignored"
 		}
 	}
 	var res dhcp.Packet
+	var resType string
 	if dhr.binlOnly() {
-		res = dhr.ServeBinl(reqType)
+		res, resType = dhr.ServeBinl(reqType)
 	} else {
-		res = dhr.ServeDHCP(reqType)
+		res, resType = dhr.ServeDHCP(reqType)
 	}
 	if res == nil {
-		return nil
+		return nil, reqType.String(), resType
 	}
 	// If IP not available, broadcast
 	ipStr, portStr, err := net.SplitHostPort(dhr.srcAddr.String())
 	if err != nil {
-		return nil
+		return nil, reqType.String(), "BadBcast"
 	}
 	port, _ := strconv.Atoi(portStr)
 	if dhr.pkt.GIAddr().Equal(net.IPv4zero) {
@@ -1038,17 +1040,19 @@ func (dhr *DhcpRequest) Process() dhcp.Packet {
 	if dhr.IsDebug() {
 		dhr.Debugf("Sending packet:\n%s", dhr.PrintOutgoing(res))
 	}
-	return res
+	return res, reqType.String(), resType
 }
 
 // Run processes an incoming DhcpRequest and sends the resulting
 // packet (if any) back out over the same interface it came in on.
-func (dhr *DhcpRequest) Run() {
-	res := dhr.Process()
-	if res == nil {
-		return
+func (dhr *DhcpRequest) Run(count int) {
+	res, rqt, rst := dhr.Process()
+	if res != nil {
+		dhr.handler.conn.WriteTo(res, dhr.cm, dhr.srcAddr)
 	}
-	dhr.handler.conn.WriteTo(res, dhr.cm, dhr.srcAddr)
+
+	elapsed := float64(time.Since(dhr.start)) / float64(time.Second)
+	dhr.handler.metrics.CountPacket(float64(count), elapsed, res, rqt, rst)
 }
 
 // DhcpHandler is responsible for listening to incoming DHCP packets,
@@ -1066,9 +1070,10 @@ type DhcpHandler struct {
 	pinger     pinger.Pinger
 	strats     []*Strategy
 	publishers *backend.Publishers
+	metrics    *DhcpMetrics
 }
 
-func (h *DhcpHandler) NewRequest(buf []byte, cm *ipv4.ControlMessage, srcAddr net.Addr) *DhcpRequest {
+func (h *DhcpHandler) NewRequest(buf []byte, cm *ipv4.ControlMessage, srcAddr net.Addr, start time.Time) *DhcpRequest {
 	res := &DhcpRequest{}
 	res.Logger = h.Logger.Fork()
 	res.srcAddr = srcAddr
@@ -1078,6 +1083,7 @@ func (h *DhcpHandler) NewRequest(buf []byte, cm *ipv4.ControlMessage, srcAddr ne
 	res.handler = h
 	res.pinger = h.pinger
 	res.lPort = h.port
+	res.start = start
 	res.fill()
 	return res
 }
@@ -1095,12 +1101,14 @@ func (h *DhcpHandler) Serve() error {
 		if err != nil {
 			return err
 		}
+		start := time.Now()
 		if cnt < 240 {
+			h.metrics.CountPacket(float64(cnt), float64(0), nil, "TooSmall", "TooSmall")
 			continue
 		}
 		pktBytes := make([]byte, cnt)
 		copy(pktBytes, buf)
-		go h.NewRequest(pktBytes, cm, srcAddr).Run()
+		go h.NewRequest(pktBytes, cm, srcAddr, start).Run(cnt)
 	}
 }
 
@@ -1141,6 +1149,7 @@ func StartDhcpHandler(dhcpInfo *backend.DataTracker,
 		strats:     []*Strategy{{Name: "MAC", GenToken: MacStrategy}},
 		publishers: pubs,
 		binlOnly:   proxyOnly,
+		metrics:    NewDhcpMetrics(log, proxyOnly),
 	}
 
 	// If we aren't the PXE/BINL proxy, run a pinger
