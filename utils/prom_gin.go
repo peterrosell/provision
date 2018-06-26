@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/digitalrebar/logger"
@@ -179,7 +180,8 @@ func (pr *PromResponder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pr.p.Observe("resSz", resSz)
 	c := &gin.Context{Request: r, Params: []gin.Param{}}
 	url := pr.p.ReqCntURLLabelMappingFn(c)
-	pr.p.CounterWithLabelValues("reqCnt", status, r.Method, r.RemoteAddr, url).Inc()
+	hostIndex := strings.LastIndex(r.RemoteAddr, ":")
+	pr.p.CounterWithLabelValues("reqCnt", status, r.Method, r.RemoteAddr[:hostIndex], url).Inc()
 }
 
 // From https://github.com/DanielHeckrath/gin-prometheus/blob/master/gin_prometheus.go
