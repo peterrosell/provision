@@ -286,7 +286,7 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 		} else if hdrParts[0] == "Bearer" {
 			t, err := fe.dt.GetToken(string(hdrParts[1]))
 			if err != nil {
-				fe.l(c).Warnf("No DRP authentication token")
+				fe.l(c).Warnf("No DRP authentication token from %s", c.ClientIP())
 				c.Header("WWW-Authenticate", "dr-provision")
 				c.AbortWithStatus(http.StatusForbidden)
 				return
