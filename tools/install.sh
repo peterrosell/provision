@@ -16,6 +16,8 @@ Options:
     --isolated              # Sets up current directory as install location for drpcli
                             # and dr-provision
     --nocontent             # Don't add content to the system
+    --zip-file=filename.zip # Don't download the dr-provision.zip file, instead use
+                            # the referenced zip file (useful for airgap deployments)
     --ipaddr=<ip>           # The IP to use for the system identified IP.  The system
                             # will attepmto to discover the value if not specified
     --version=<string>      # Version identifier if downloading.  stable, tip, or
@@ -76,6 +78,9 @@ while (( $# > 0 )); do
             ;;
         --version|--drp-version)
             DRP_VERSION=${arg_data}
+            ;;
+        --zip-file)
+            ZIP_FILE=${arg_data}
             ;;
         --isolated)
             ISOLATED=true
@@ -176,7 +181,8 @@ install_epel() {
     fi 
 }
 
-# set our downloader GET variable appropriately
+# set our downloader GET variable appropriately - supports standard
+# (curl) downloader or (experimental) aria2c fast downloader
 get() {
     if [[ -z "$*" ]]; then
         echo "Internal error, get() expects files to get"
@@ -398,26 +404,37 @@ case $MODE in
                      echo "Installing Version $DRP_VERSION of Digital Rebar Provision"
                      ZIP="dr-provision.zip"
                      SHA="dr-provision.sha256"
-                     get $URL_BASE_DRP/$DRP_VERSION/$ZIP $URL_BASE_DRP/$DRP_VERSION/$SHA
-                     $shasum -c dr-provision.sha256
+                     if [[ -n "$ZIP_FILE" ]]
+                     then
+                       [[ "$ZIP_FILE" != "dr-provision.zip" ]] && cp "$ZIP_FILE" dr-provision.zip
+                       echo "WARNING:  No sha256sum check perforemd for '--zip-file' mode."
+                       echo "          We assume you've already verified your download file."
+                     else
+                       get $URL_BASE_DRP/$DRP_VERSION/$ZIP $URL_BASE_DRP/$DRP_VERSION/$SHA
+                       $shasum -c dr-provision.sha256
+                     fi
                      $tar -xf dr-provision.zip
                  fi
                  $shasum -c sha256sums || exit 1
              fi
 
-             if [[ $NO_CONTENT == false ]] ; then
+             if [[ $NO_CONTENT == false ]]; then
                  DRP_CONTENT_VERSION=stable
-                 if [[ $DRP_VERSION == tip ]] ; then
+                 if [[ $DRP_VERSION == tip ]]; then
                      DRP_CONTENT_VERSION=tip
                  fi
                  echo "Installing Version $DRP_CONTENT_VERSION of Digital Rebar Provision Community Content"
+                 if [[ -n "$ZIP_FILE" ]]; then 
+                   echo "WARNING: '--zip-file' specified, still trying to downoad community content..."
+                   echo "         (specify '--nocontent' to skip download of community content"
+                 fi
                  CC_YML=drp-community-content.yaml
                  CC_SHA=drp-community-content.sha256
                  get $URL_BASE_CONTENT/$DRP_CONTENT_VERSION/$CC_YML $URL_BASE_CONTENT/$DRP_CONTENT_VERSION/$CC_SHA
                  $shasum -c $CC_SHA
              fi
 
-             if [[ $ISOLATED == false ]] ; then
+             if [[ $ISOLATED == false ]]; then
                  TFTP_DIR="/var/lib/dr-provision/tftpboot"
                  sudo cp "$binpath"/* "$bindest"
                  if [[ $initfile ]]; then
@@ -548,7 +565,7 @@ case $MODE in
              sudo rm -rf "/usr/share/dr-provision" "/etc/dr-provision" "/var/lib/dr-provision"
          fi;;
      *)
-         echo "Unknown action \"$1\". Please use 'install' or 'remove'";;
+         echo "Unknown action \"$1\". Please use 'install', 'upgrade', or 'remove'";;
 esac
 
 exit 0
