@@ -182,7 +182,6 @@ func (r *TaskRunner) Perform(action *models.JobAction, taskDir string) error {
 	// as we will continue to use them.
 	r.Log("Command running")
 	pState, _ := cmd.Process.Wait()
-	r.exitChroot()
 	status := pState.Sys().(syscall.WaitStatus)
 	sane := r.t.HasFeature("sane-exit-codes")
 	if !sane {
@@ -221,24 +220,13 @@ func (r *TaskRunner) Perform(action *models.JobAction, taskDir string) error {
 	return nil
 }
 
-// Run loops over all of the actions for a particular job,
-// placing files and executing scripts as appropriate.
-// It also arranges for all logging output for the actions
-// to go to the right places.
-func (r *TaskRunner) Run() error {
-	finalErr := &models.Error{
-		Type:  "RUNNER_ERR",
-		Model: r.j.Prefix(),
-		Key:   r.j.Key(),
-	}
-	jKey := r.j.Key()
+func (r *TaskRunner) withLog() {
 	// Arrange to log everything to the job log and stderr at the same time.
 	// Due to how io.Pipe works, this should wind up being fairly synchronous.
 	reader, writer := net.Pipe()
 
 	r.in = io.MultiWriter(writer, r.logger)
 	r.pipeWriter = writer
-	helperWritten := false
 
 	go func() {
 		defer reader.Close()
@@ -252,7 +240,7 @@ func (r *TaskRunner) Run() error {
 				continue
 			}
 			if pos > 0 {
-				if r.c.Req().Put(buf[:pos]).UrlFor("jobs", jKey, "log").Do(nil) != nil {
+				if r.c.Req().Put(buf[:pos]).UrlFor("jobs", r.j.Key(), "log").Do(nil) != nil {
 					return
 				}
 				pos = 0
@@ -266,6 +254,85 @@ func (r *TaskRunner) Run() error {
 			}
 		}
 	}()
+}
+
+func (r *TaskRunner) runTasks(finalErr *models.Error) (finalState string) {
+	finalState = "incomplete"
+	taskDir, err := ioutil.TempDir(r.agentDir, r.j.Task+"-")
+	if err != nil {
+		r.Log("Failed to create local tmpdir: %v", err)
+		finalErr.AddError(err)
+		return
+	}
+	// No matter how the function exits, we will try to patch the Job
+	// to an appropriate final state.
+	defer os.RemoveAll(taskDir)
+	helperWritten := false
+	actions, err := r.c.JobActions(r.j)
+	if err != nil {
+		r.Log("Failed to render actions: %v", err)
+		finalErr.AddError(err)
+		return
+	}
+	for i, action := range actions {
+		final := len(actions)-1 == i
+		r.failed = false
+		r.incomplete = false
+		r.poweroff = false
+		r.reboot = false
+		r.stop = false
+		var err error
+		if action.Path != "" {
+			err = r.Expand(action, taskDir)
+		} else {
+			if !helperWritten {
+				err = ioutil.WriteFile(path.Join(taskDir, "helper"), cmdHelper, 0600)
+				if err != nil {
+					finalErr.AddError(err)
+					return
+				}
+				helperWritten = true
+			}
+			err = r.Perform(action, taskDir)
+			// Contents is a script to run, run it.
+		}
+		if err != nil {
+			r.failed = true
+			finalState = "failed"
+			finalErr.AddError(err)
+			r.Log("Task %s %s", r.j.Task, finalState)
+			return
+		}
+		r.Log("Action %s finished", action.Name)
+		// If a non-final action sets the incomplete flag, it actually
+		// means early success and stop processing actions for this task.
+		// This allows actions to be structured in an "early exit"
+		// fashion.
+		//
+		// Only the final action can actually set things as incomplete.
+		if !final && r.incomplete {
+			r.incomplete = !r.incomplete
+			break
+		}
+		if r.failed {
+			finalState = "failed"
+			break
+		}
+		if r.reboot || r.poweroff || r.stop {
+			r.incomplete = !final
+			break
+		}
+	}
+	return
+}
+
+func (r *TaskRunner) do(thunk func(*models.Error) string) error {
+	r.withLog()
+	finalErr := &models.Error{
+		Type:  "RUNNER_ERR",
+		Model: r.j.Prefix(),
+		Key:   r.j.Key(),
+	}
 	// We are responsible for going from created to running.
 	// If this patch fails, we cannot do it
 	patch := jsonpatch2.Patch{
@@ -273,15 +340,6 @@ func (r *TaskRunner) Run() error {
 		{Op: "replace", Path: "/State", Value: "running"},
 	}
 	finalState := "incomplete"
-	taskDir, err := ioutil.TempDir(r.agentDir, r.j.Task+"-")
-	if err != nil {
-		r.Log("Failed to create local tmpdir: %v", err)
-		finalErr.AddError(err)
-		return finalErr
-	}
-	// No matter how the function exits, we will try to patch the Job
-	// to an appropriate final state.
-	defer os.RemoveAll(taskDir)
 	defer func() {
 		if r.failed || r.reboot || r.stop || r.poweroff || r.incomplete {
 			newM := models.Clone(r.m).(*models.Machine)
@@ -322,67 +380,51 @@ func (r *TaskRunner) Run() error {
 	}
 	r.j = obj.(*models.Job)
 	r.Log("Starting task %s on %s", r.j.Task, r.m.Uuid)
+	finalState = thunk(finalErr)
 	// At this point, we are running.
-	actions, err := r.c.JobActions(r.j)
-	if err != nil {
-		r.Log("Failed to render actions: %v", err)
-		finalErr.AddError(err)
-		return finalErr
-	}
-	for i, action := range actions {
-		final := len(actions)-1 == i
-		r.failed = false
-		r.incomplete = false
-		r.poweroff = false
-		r.reboot = false
-		r.stop = false
-		var err error
-		if action.Path != "" {
-			err = r.Expand(action, taskDir)
-		} else {
-			if !helperWritten {
-				err = ioutil.WriteFile(path.Join(taskDir, "helper"), cmdHelper, 0600)
-				if err != nil {
-					finalErr.AddError(err)
-					return finalErr
-				}
-				helperWritten = true
-			}
-			err = r.Perform(action, taskDir)
-			// Contents is a script to run, run it.
-		}
-		if err != nil {
-			r.failed = true
-			finalState = "failed"
-			finalErr.AddError(err)
-			r.Log("Task %s %s", r.j.Task, finalState)
-			return finalErr
-		}
-		r.Log("Action %s finished", action.Name)
-		// If a non-final action sets the incomplete flag, it actually
-		// means early success and stop processing actions for this task.
-		// This allows actions to be structured in an "early exit"
-		// fashion.
-		//
-		// Only the final action can actually set things as incomplete.
-		if !final && r.incomplete {
-			r.incomplete = !r.incomplete
-			break
-		}
-		if r.failed {
-			finalState = "failed"
-			break
-		}
-		if r.reboot || r.poweroff || r.stop {
-			r.incomplete = !final
-			break
-		}
-	}
 	if !r.failed && !r.incomplete {
 		finalState = "finished"
 	}
 	r.Log("Task %s %s", r.j.Task, finalState)
 	return nil
+}
+
+// Run loops over all of the actions for a particular job,
+// placing files and executing scripts as appropriate.
+// It also arranges for all logging output for the actions
+// to go to the right places.
+func (r *TaskRunner) Run() error {
+	return r.do(r.runTasks)
+}
+
+func (r *TaskRunner) fillChroot(finalErr *models.Error) (finalState string) {
+	finalState = "incomplete"
+	if r.chrootDir != "" && r.chrootDir != r.jobDir {
+		if err := exitChroot(r.chrootDir); err != nil {
+			r.Log("Error exiting chroot %s: %v", err)
+			finalErr.AddError(err)
+			r.failed = true
+			return
+		}
+	}
+	if err := mountChroot(r.jobDir, r.agentDir); err != nil {
+		finalErr.AddError(err)
+		finalErr.AddError(exitChroot(r.jobDir))
+		r.failed = true
+	}
+	return
+}
+
+func (r *TaskRunner) enterChroot(cmd *exec.Cmd) error {
+	if r.chrootDir == "" {
+		return nil
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: r.chrootDir}
+	return nil
+}
+
+func (r *TaskRunner) MountChroot() error {
+	return r.do(r.fillChroot)
 }
 
 // Agent runs the machine Agent on the current machine.

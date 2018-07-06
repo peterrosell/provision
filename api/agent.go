@@ -270,13 +270,12 @@ func (a *MachineAgent) RunTask() {
 		runner.j.Task,
 		runner.j.CurrentIndex,
 		runner.j.NextIndex)
+	rt := runner.Run
 	if runner.wantChroot {
+		rt = runner.MountChroot
 		a.chrootDir = runner.jobDir
-		a.state = AGENT_WAIT_FOR_RUNNABLE
-		runner.Close()
-		return
 	}
-	if err := runner.Run(); err != nil {
+	if err := rt(); err != nil {
 		a.err = err
 		a.initOrExit()
 		return
@@ -459,6 +458,9 @@ func (a *MachineAgent) Run() error {
 		case AGENT_EXIT:
 			if a.chrootDir != "" {
 				a.Logf("Agent exiting chroot %s\n", a.chrootDir)
+				if err := exitChroot(a.chrootDir); err != nil {
+					a.Logf("Error unmounting chroot filesystems: %v", err)
+				}
 				a.chrootDir = ""
 				a.WaitRunnable()
 			} else {

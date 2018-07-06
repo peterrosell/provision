@@ -4,15 +4,11 @@ package api
 
 import (
 	"fmt"
-	"os/exec"
 	"runtime"
 )
 
-func (r *TaskRunner) enterChroot(cmd *exec.Cmd) error {
-	if r.chrootDir != "" {
-		return fmt.Errorf("enterChroot not supported on %v", runtime.GOOS)
-	}
-	return nil
+func mountChroot(chroot, agentDir string) error {
+	return fmt.Errorf("enterChroot not supported on %v", runtime.GOOS)
 }
 
-func (r *TaskRunner) exitChroot() {}
+func exitChroot() error { return nil }
