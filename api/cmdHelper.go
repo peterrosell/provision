@@ -224,4 +224,18 @@ mount_chroot() {
     mkdir -p "$fs"
     mount --bind "$RS_RUNNER_DIR" "$fs"
 }
+
+# Unmount all mountpoints in a chroot, possibly including the
+# chroot itself.
+umount_chroot() {
+    # $1 = path of chroot to umount
+    if ! [[ -d $1 ]]; then
+        echo "$1 is not a directory!"
+        exit 1
+    fi
+    local d
+    for d in $(tac /proc/self/mounts |awk "/ $1/ {print \$2}"); do
+        umount -d -l "$d"
+    done
+}
 `)
