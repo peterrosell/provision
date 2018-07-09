@@ -190,4 +190,38 @@ addr_port() {
         printf '%s:%d' "$1" "$2"
     fi
 }
+
+mount_chroot() {
+    # $1 = path of chroot to populate with required sub filesystems
+    if [[ $(uname -o) != 'GNU/Linux' ]]; then
+        echo "Cannot fill out chroot on $(uname -o)"
+        exit 1
+    fi
+    if ! [[ -d $1 ]]; then
+        echo "$1 is not a directory!"
+        exit 1
+    fi
+    # We have to have these populated in a chroot for even basic stuff to work.
+    (cd "$1" && mkdir -p proc sys dev)
+    local d fs
+    for d in /proc /sys /dev /sys/firmware/efi/efivars /dev/pts; do
+        [[ -d $d ]] || continue
+        fs="$(readlink -m "$1$d")"
+        fgrep -q " $fs " /prof/self/mounts && continue
+        mount --bind "$d" "$1$d"
+    done
+    # If the chroot is a real root directory, try to mount the filesystems it wants as well.
+    if [[ -f $1/etc/fstab ]]; then
+        for fs in $(awk '/^(\/dev|UUID=|LABEL=)/ { print length($2), $2 }' "$1/etc/fstab" |sort -n |cut -f2- -d' '); do
+            [[ $fs = / ]] && continue
+            fgrep -q "$(readlink -m "$1$fs")" /proc/self/mounts && continue
+            chroot "$1" mount "$fs"
+        done
+    fi
+    # Finally, bind-mount the runner dir into the chroot as well.
+    fs="$(readlink -m "$1$RS_RUNNER_DIR")"
+    fgrep -q " $fs " /prof/self/mounts && return 0
+    mkdir -p "$fs"
+    mount --bind "$RS_RUNNER_DIR" "$fs"
+}
 `)
