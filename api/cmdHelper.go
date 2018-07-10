@@ -207,12 +207,12 @@ mount_chroot() {
     for d in /proc /sys /dev /sys/firmware/efi/efivars /dev/pts; do
         [[ -d $d ]] || continue
         fs="$(readlink -m "$1$d")"
-        fgrep -q " $fs " /prof/self/mounts && continue
+        fgrep -q " $fs " /proc/self/mounts && continue
         mount --bind "$d" "$1$d"
     done
     # If the chroot is a real root directory, try to mount the filesystems it wants as well.
     if [[ -f $1/etc/fstab ]]; then
-        for fs in $(awk '/^(\/dev|UUID=|LABEL=)/ { print length($2), $2 }' "$1/etc/fstab" |sort -n |cut -f2- -d' '); do
+        for fs in $(awk '/^(\/dev|UUID=|LABEL=)/ { print length($2), $2, $3 }' "$1/etc/fstab" |sort -n |cut -f2- -d' ' |grep -v ' swap' |cut -f1 -d' '); do
             [[ $fs = / ]] && continue
             fgrep -q "$(readlink -m "$1$fs")" /proc/self/mounts && continue
             chroot "$1" mount "$fs"
@@ -220,7 +220,7 @@ mount_chroot() {
     fi
     # Finally, bind-mount the runner dir into the chroot as well.
     fs="$(readlink -m "$1$RS_RUNNER_DIR")"
-    fgrep -q " $fs " /prof/self/mounts && return 0
+    fgrep -q " $fs " /proc/self/mounts && return 0
     mkdir -p "$fs"
     mount --bind "$RS_RUNNER_DIR" "$fs"
 }
@@ -234,7 +234,7 @@ umount_chroot() {
         exit 1
     fi
     local d
-    for d in $(tac /proc/self/mounts |awk "/ $1/ {print \$2}"); do
+    for d in $(tac /proc/self/mounts |awk "/ \\$1/ {print \$2}"); do
         umount -d -l "$d"
     done
 }
