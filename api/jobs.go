@@ -415,14 +415,6 @@ func (r *TaskRunner) fillChroot(finalErr *models.Error) (finalState string) {
 	return
 }
 
-func (r *TaskRunner) enterChroot(cmd *exec.Cmd) error {
-	if r.chrootDir == "" {
-		return nil
-	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: r.chrootDir}
-	return nil
-}
-
 func (r *TaskRunner) MountChroot() error {
 	return r.do(r.fillChroot)
 }

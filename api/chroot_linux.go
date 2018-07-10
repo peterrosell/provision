@@ -110,13 +110,8 @@ func basicBinds(chrootDir string) ([]string, error) {
 }
 
 // In addition, we want to bind-mount the agent dir into the chroot.
-func bindFSes(chrootDir, agentDir string) ([]string, error) {
-	binds, err := basicBinds(chrootDir)
-	if err != nil {
-		return binds, err
-	}
-	binds = append(binds, agentDir)
-	return binds, nil
+func bindFSes(chroot string) ([]string, error) {
+	return basicBinds(chroot)
 }
 
 func ignoreFSes() (map[string]struct{}, error) {
@@ -191,8 +186,16 @@ func mountOthers(chroot string) ([]string, error) {
 // mountChroot mounts all the required bind mounts along with all of
 // the sub file systems mentioned in the /etc/fstab in the chroot.
 // If / in the chroot is a seperate filesystem, it must already be mounted.
+//
+// Mounts must happen in the following order:
+//
+// 1. Basic bind mounts
+//
+// 2. Mount "real" filesystems mentioned in /etc/fatab in the chroot, if any
+//
+// 3. Bind mount the agent dir into the chroot.
 func mountChroot(chroot, agentDir string) error {
-	binds, err := bindFSes(chroot, agentDir)
+	binds, err := bindFSes(chroot)
 	if err != nil {
 		return err
 	}
@@ -203,7 +206,10 @@ func mountChroot(chroot, agentDir string) error {
 	if err != nil {
 		return err
 	}
-	return subMount(chroot, others...)
+	if err := subMount(chroot, others...); err != nil {
+		return err
+	}
+	return bindMount(chroot, agentDir)
 }
 
 // exitChroot unmounts all the filesystems in the chroot,
@@ -223,5 +229,13 @@ func exitChroot(chroot string) error {
 	for i := len(toUmount) - 1; i > -1; i-- {
 		syscall.Unmount(toUmount[i], 0)
 	}
+	return nil
+}
+
+func (r *TaskRunner) enterChroot(cmd *exec.Cmd) error {
+	if r.chrootDir == "" {
+		return nil
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: r.chrootDir}
 	return nil
 }
