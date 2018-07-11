@@ -78,6 +78,7 @@ func ExtractAssets(replaceRoot, fileRoot string) error {
 		"bootia32.efi": "",
 		"bootia64.efi": "",
 		"bootx64.efi":  "",
+		"chain.c32":    "",
 		"esxi.0":       "",
 		"ipxe.efi":     "",
 		"ipxe.pxe":     "",
