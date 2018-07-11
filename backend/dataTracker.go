@@ -21,6 +21,23 @@ import (
 
 func BasicContent() store.Store {
 	var (
+		localBootParam = &models.Param{
+			Name:        `pxelinux-local-boot`,
+			Description: `The method pxelinux should use to try to boot to the local disk`,
+			Documentation: `
+On most systems, using 'localboot 0' is the proper thing to do to have
+pxelinux try to boot off the first hard drive.  However, some systems
+do not behave properlydoing that, either due to firmware bugs or
+malconfigured hard drives.  This param allows you to override 'localboot 0'
+with another pxelinux command.  A useful reference for alternate boot methods
+is at https://www.syslinux.org/wiki/index.php?title=Comboot/chain.c32`,
+			Schema: `
+{
+    "type": "string",
+    "default": "localboot 0"
+}
+`,
+		}
 		ignoreBoot = &models.BootEnv{
 			Name:        `ignore`,
 			Description: "The boot environment you should use to have unknown machines boot off their local hard drive",
@@ -36,7 +53,7 @@ func BasicContent() store.Store {
 PROMPT 0
 TIMEOUT 10
 LABEL local
-localboot 0
+{{.Param "pxelinux-local-boot"}}
 `,
 				},
 				{
@@ -72,7 +89,7 @@ chain tftp://{{.ProvisionerAddress}}/${netX/ip}.ipxe || exit
 PROMPT 0
 TIMEOUT 10
 LABEL local
-localboot 0
+{{.Param "pxelinux-local-boot"}}
 `,
 				},
 				{
@@ -89,7 +106,7 @@ exit
 PROMPT 0
 TIMEOUT 10
 LABEL local
-localboot 0
+{{.Param "pxelinux-local-boot"}}
 `,
 				},
 				{
@@ -132,6 +149,7 @@ exit
 	bootEnvs, _ := res.MakeSub("bootenvs")
 	stages, _ := res.MakeSub("stages")
 	roles, _ := res.MakeSub("roles")
+	params, _ := res.MakeSub("params")
 	localBoot.ClearValidation()
 	ignoreBoot.ClearValidation()
 	noneStage.ClearValidation()
@@ -142,6 +160,8 @@ exit
 	noneStage.Fill()
 	localStage.Fill()
 	superUser.Fill()
+	localBootParam.Fill()
+	params.Save("pxelinux-local-boot", localBootParam)
 	bootEnvs.Save("local", localBoot)
 	bootEnvs.Save("ignore", ignoreBoot)
 	stages.Save("none", noneStage)
