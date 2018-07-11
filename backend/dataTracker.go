@@ -31,12 +31,10 @@ do not behave properlydoing that, either due to firmware bugs or
 malconfigured hard drives.  This param allows you to override 'localboot 0'
 with another pxelinux command.  A useful reference for alternate boot methods
 is at https://www.syslinux.org/wiki/index.php?title=Comboot/chain.c32`,
-			Schema: `
-{
-    "type": "string",
-    "default": "localboot 0"
-}
-`,
+			Schema: map[string]string{
+				"type":    "string",
+				"default": "localboot 0",
+			},
 		}
 		ignoreBoot = &models.BootEnv{
 			Name:        `ignore`,
