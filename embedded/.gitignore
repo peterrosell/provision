@@ -5,6 +5,7 @@ assets/bootia32.efi
 assets/bootia64.efi
 assets/bootx64.efi
 assets/busybox
+assets/chain.c32
 assets/esxi.0
 assets/ipxe.efi
 assets/ipxe.pxe
