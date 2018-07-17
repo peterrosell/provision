@@ -6,9 +6,11 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/backend"
+	"github.com/digitalrebar/provision/utils"
 	"github.com/pin/tftp"
 )
 
@@ -38,7 +40,15 @@ func ServeTftp(listen string, responder func(string, net.IP) (io.Reader, error),
 	if err != nil {
 		return nil, err
 	}
+
+	p := utils.NewPromGin(log, "tftp", nil)
+
 	readHandler := func(filename string, rf io.ReaderFrom) error {
+		start := time.Now()
+		recorded := false
+		method := "INFO"
+		status := "CRASH"
+
 		var local net.IP
 		var remote net.UDPAddr
 		l := log.Fork()
@@ -48,6 +58,7 @@ func ServeTftp(listen string, responder func(string, net.IP) (io.Reader, error),
 			local = rpi.LocalIP()
 		}
 		if outgoing {
+			method = "GET"
 			remote = t.RemoteAddr()
 		}
 		if outgoing && haveRPI {
@@ -59,6 +70,12 @@ func ServeTftp(listen string, responder func(string, net.IP) (io.Reader, error),
 		defer func() {
 			if r := recover(); r != nil {
 				l.Errorf("TFTP: Recovered from panic:\n%v", r)
+				if !recorded {
+					elapsed := float64(time.Since(start)) / float64(time.Second)
+					p.Observe("reqDur", elapsed)
+					p.Observe("resSz", 0)
+					p.CounterWithLabelValues("reqCnt", status, method, remote.IP.String(), filename).Inc()
+				}
 			}
 		}()
 		source, err := responder(filename, remote.IP)
@@ -68,8 +85,8 @@ func ServeTftp(listen string, responder func(string, net.IP) (io.Reader, error),
 		if cl, ok := source.(io.ReadCloser); ok {
 			defer cl.Close()
 		}
+		var size int64
 		if outgoing {
-			var size int64
 			switch src := source.(type) {
 			case *os.File:
 				defer src.Close()
@@ -85,9 +102,17 @@ func ServeTftp(listen string, responder func(string, net.IP) (io.Reader, error),
 		_, err = rf.ReadFrom(source)
 		if err != nil {
 			l.Infof("TFTP: %s: transfer error: %v", filename, err)
-			return err
+			status = "FAILED"
+		} else {
+			status = "SUCCESS"
 		}
-		return nil
+		recorded = true
+		elapsed := float64(time.Since(start)) / float64(time.Second)
+		p.Observe("reqDur", elapsed)
+		p.Observe("resSz", float64(size))
+		p.CounterWithLabelValues("reqCnt", status, method, remote.IP.String(), filename).Inc()
+
+		return err
 	}
 	svr := tftp.NewServer(readHandler, nil)
 
