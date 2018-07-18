@@ -551,10 +551,12 @@ func (j *Job) RenderActions(rt *RequestTracker) ([]*models.JobAction, error) {
 	for _, r := range rds {
 		rr, err1 := r.write(addr)
 		if err1 != nil {
+			err.Code = http.StatusUnprocessableEntity
 			err.AddError(err1)
 		} else {
 			b, err2 := ioutil.ReadAll(rr)
 			if err2 != nil {
+				err.Code = http.StatusUnprocessableEntity
 				err.AddError(err2)
 			} else {
 				na := &models.JobAction{Name: r.name, Path: r.path, Content: string(b)}

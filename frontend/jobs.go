@@ -634,6 +634,7 @@ func (f *Frontend) InitJobApi() {
 				} else {
 					c.JSON(http.StatusBadRequest, models.NewError(c.Request.Method, http.StatusBadRequest, err.Error()))
 				}
+				return
 			}
 			c.JSON(http.StatusOK, actions)
 
