@@ -549,13 +549,12 @@ func (b *BootEnv) render(rt *RequestTracker, m *Machine, e models.ErrorAdder) re
 	res := renderers([]renderer{})
 	toRender := r.validateRequiredParams(e)
 	for i := range toRender {
-		switch toRender[i].Name {
-		case "ipxe-mac", "pxelinux-mac":
+		if strings.Contains(toRender[i].Path, `{{.Machine.MacAddr `) {
 			for _, mac := range m.HardwareAddrs {
 				r.Machine.currMac = mac
 				res = r.addRenderer(e, &toRender[i], res)
 			}
-		default:
+		} else {
 			res = r.addRenderer(e, &toRender[i], res)
 		}
 	}
