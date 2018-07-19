@@ -20,7 +20,7 @@ type PrometheusPushGateway struct {
 	// where JOBNAME can be any string of your choice
 	pushGatewayURL string
 
-	// Local metrics URL where metrics are fetched from, this could be ommited in the future
+	// Local metrics URL where metrics are fetched from, this could be omitted in the future
 	// if implemented using prometheus common/expfmt instead
 	metricsURL string
 

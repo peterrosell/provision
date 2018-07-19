@@ -67,7 +67,7 @@ func buildKeys(curveOrBits, certFile, keyFile string) error {
 	}
 
 	rsaBits := 2048
-	ecdsaCurve := "P384"
+	var ecdsaCurve string
 	if curveOrBits[0] == 'P' {
 		ecdsaCurve = curveOrBits
 	} else if curveOrBits == "RSA" {
