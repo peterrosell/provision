@@ -181,33 +181,33 @@ func NewDhcpMetrics(l logger.Logger, binlOnly bool) *DhcpMetrics {
 		ss = "binl"
 	}
 	mets := []*utils.Metric{
-		&utils.Metric{
+		{
 			ID:          "reqCnt",
 			Name:        "requests_total",
 			Description: "How many DHCP requests processed, partitioned by type.",
 			Type:        "counter_vec",
 			Args:        []string{"type"},
 		},
-		&utils.Metric{
+		{
 			ID:          "resCnt",
 			Name:        "replies_total",
 			Description: "How many DHCP replies sent, partitioned by type.",
 			Type:        "counter_vec",
 			Args:        []string{"type"},
 		},
-		&utils.Metric{
+		{
 			ID:          "reqDur",
 			Name:        "request_duration_seconds",
 			Description: "The DHCP request latencies in seconds.",
 			Type:        "summary",
 		},
-		&utils.Metric{
+		{
 			ID:          "resSz",
 			Name:        "response_size_bytes",
 			Description: "The DHCP response sizes in bytes.",
 			Type:        "summary",
 		},
-		&utils.Metric{
+		{
 			ID:          "reqSz",
 			Name:        "request_size_bytes",
 			Description: "The DHCP request sizes in bytes.",

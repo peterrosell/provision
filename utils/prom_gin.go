@@ -14,26 +14,26 @@ import (
 var noWritten = -1
 var defaultStatus = 200
 var standardGinMetrics = []*Metric{
-	&Metric{
+	{
 		ID:          "reqCnt",
 		Name:        "requests_total",
 		Description: "How many HTTP requests processed, partitioned by status code and HTTP method.",
 		Type:        "counter_vec",
 		Args:        []string{"code", "method", "host", "url"},
 	},
-	&Metric{
+	{
 		ID:          "reqDur",
 		Name:        "request_duration_seconds",
 		Description: "The HTTP request latencies in seconds.",
 		Type:        "summary",
 	},
-	&Metric{
+	{
 		ID:          "resSz",
 		Name:        "response_size_bytes",
 		Description: "The HTTP response sizes in bytes.",
 		Type:        "summary",
 	},
-	&Metric{
+	{
 		ID:          "reqSz",
 		Name:        "request_size_bytes",
 		Description: "The HTTP request sizes in bytes.",

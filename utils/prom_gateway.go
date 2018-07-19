@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -49,7 +50,10 @@ func NewPrometheusPushGateway(l logger.Logger, pushGatewayURL, metricsURL string
 }
 
 func (ppg *PrometheusPushGateway) getMetrics() []byte {
-	response, _ := http.Get(ppg.metricsURL)
+	response, err := http.Get(ppg.metricsURL)
+	if err != nil {
+		return []byte(fmt.Sprintf("Failed to get metrics: %v", err))
+	}
 
 	defer response.Body.Close()
 	body, _ := ioutil.ReadAll(response.Body)
