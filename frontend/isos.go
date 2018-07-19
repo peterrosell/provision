@@ -288,7 +288,7 @@ func uploadIso(c *gin.Context, fileRoot, name string, dt *backend.DataTracker) {
 		}
 	case `multipart/form-data`:
 		header, _ := c.FormFile("file")
-		file, err := header.Open()
+		file, _ := header.Open()
 		defer file.Close()
 		copied, err = io.Copy(out, file)
 		if err != nil {

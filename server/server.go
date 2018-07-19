@@ -301,7 +301,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		return fmt.Sprintf("Unable to create DataStack: %v", err)
 	}
 	var secretStore store.Store
-	if u, err := url.Parse(cOpts.SecretsType); err == nil && u.Scheme != "" {
+	if u, perr := url.Parse(cOpts.SecretsType); perr == nil && u.Scheme != "" {
 		secretStore, err = store.Open(cOpts.SecretsType)
 	} else {
 		secretStore, err = store.Open(fmt.Sprintf("%s://%s", cOpts.SecretsType, cOpts.SecretsRoot))

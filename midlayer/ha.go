@@ -21,6 +21,9 @@ type ConsulClient struct {
 func (cc *ConsulClient) GetSession(sessionName string) string {
 	name := cc.GetAgentName()
 	sessions, _, err := cc.Client.Session().List(nil)
+	if err != nil {
+		cc.l.Println(err)
+	}
 	for _, session := range sessions {
 		if session.Name == sessionName && session.Node == name {
 			return session.ID
