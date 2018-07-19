@@ -888,7 +888,7 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) (dhcp.Packet, string
 		return reply, "ACK"
 	case dhcp.Discover:
 		for _, s := range dhr.handler.strats {
-			strat := s.Name
+			strategy := s.Name
 			token := s.GenToken(dhr.pkt, dhr.pktOpts)
 			via := []net.IP{dhr.pkt.GIAddr()}
 			if via[0] == nil || via[0].IsUnspecified() {
@@ -902,7 +902,7 @@ func (dhr *DhcpRequest) ServeDHCP(msgType dhcp.MessageType) (dhcp.Packet, string
 			rt := dhr.Request("leases", "reservations", "subnets")
 			for {
 				var fresh bool
-				lease, subnet, reservation, fresh = backend.FindOrCreateLease(rt, strat, token, req, via)
+				lease, subnet, reservation, fresh = backend.FindOrCreateLease(rt, strategy, token, req, via)
 				if lease == nil {
 					break
 				}
