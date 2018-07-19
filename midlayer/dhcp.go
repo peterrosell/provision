@@ -683,13 +683,13 @@ func (dhr *DhcpRequest) reqAddr(msgType dhcp.MessageType) (addr net.IP, state in
 func (dhr *DhcpRequest) FakeLease(req net.IP) (*backend.Lease, *backend.Subnet, *backend.Reservation) {
 	rt := dhr.Request("leases", "reservations", "subnets")
 	for _, s := range dhr.handler.strats {
-		strat := s.Name
+		strategy := s.Name
 		token := s.GenToken(dhr.pkt, dhr.pktOpts)
 		via := []net.IP{dhr.pkt.GIAddr()}
 		if via[0] == nil || via[0].IsUnspecified() {
 			via = dhr.listenIPs()
 		}
-		lease, sub, res := backend.FakeLeaseFor(rt, strat, token, via)
+		lease, sub, res := backend.FakeLeaseFor(rt, strategy, token, via)
 		if sub == nil && res == nil {
 			continue
 		}

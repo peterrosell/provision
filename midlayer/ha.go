@@ -50,9 +50,9 @@ func (cc *ConsulClient) AquireSessionKey(key string, session string) (bool, erro
 		Session: session,
 	}
 
-	aquired, _, err := cc.Client.KV().Acquire(pair, nil)
+	acquired, _, err := cc.Client.KV().Acquire(pair, nil)
 
-	return aquired, err
+	return acquired, err
 }
 
 func (cc *ConsulClient) GetAgentName() string {
@@ -148,8 +148,8 @@ func (le *LeaderElection) ElectLeader(wakeme chan bool) {
 					return
 				}
 				session := le.GetSession(le.LeaderKey)
-				aquired, err := client.AquireSessionKey(le.LeaderKey, session)
-				if aquired {
+				acquired, err := client.AquireSessionKey(le.LeaderKey, session)
+				if acquired {
 					le.l.Printf("%s is now the leader\n", name)
 					if !imleader {
 						wakeme <- true
@@ -185,7 +185,7 @@ func BecomeLeader(l *log.Logger) *LeaderElection {
 	consulclient, _ := consul.NewClient(consul.DefaultConfig())
 	le := &LeaderElection{
 		StopElection:  make(chan bool),                           // The channel for stopping the election
-		LeaderKey:     "service/drp/leader",                      // The leadership key to create/aquire
+		LeaderKey:     "service/drp/leader",                      // The leadership key to create/acquire
 		WatchWaitTime: 1,                                         // Time in seconds to check for leadership
 		Client:        &ConsulClient{l: l, Client: consulclient}, // The injected Consul api client
 		l:             l,

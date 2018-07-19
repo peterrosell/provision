@@ -9,23 +9,23 @@ import (
 )
 
 type ltf struct {
-	msg          string
-	strat, token string
-	req          net.IP
-	found, err   bool
+	msg             string
+	strategy, token string
+	req             net.IP
+	found, err      bool
 }
 
 func (l *ltf) find(t *testing.T, rt *RequestTracker) {
 	t.Helper()
-	res, _, _, err := FindLease(rt, l.strat, l.token, l.req)
+	res, _, _, err := FindLease(rt, l.strategy, l.token, l.req)
 	if l.found {
 		if res == nil {
-			t.Errorf("%s: Expected a lease for %s:%s, failed to get one", l.msg, l.strat, l.token)
-		} else if res.Strategy != l.strat || res.Token != l.token {
-			t.Errorf("%s: Expected lease to have %s:%s, has %s:%s", l.msg, l.strat, l.token, res.Strategy, res.Token)
+			t.Errorf("%s: Expected a lease for %s:%s, failed to get one", l.msg, l.strategy, l.token)
+		} else if res.Strategy != l.strategy || res.Token != l.token {
+			t.Errorf("%s: Expected lease to have %s:%s, has %s:%s", l.msg, l.strategy, l.token, res.Strategy, res.Token)
 		} else if l.req != nil {
 			if !res.Addr.Equal(l.req) {
-				t.Errorf("%s: Expected lease %s:%s to have address %s, it has %s", l.msg, l.strat, l.token, l.req, res.Addr)
+				t.Errorf("%s: Expected lease %s:%s to have address %s, it has %s", l.msg, l.strategy, l.token, l.req, res.Addr)
 			}
 		} else {
 			t.Logf("%s: Got lease %s:%s (%s)", l.msg, res.Strategy, res.Token, res.Addr)
@@ -34,7 +34,7 @@ func (l *ltf) find(t *testing.T, rt *RequestTracker) {
 		if res != nil {
 			t.Errorf("%s: Did not expect to get lease, got %s:%s (%s)", l.msg, res.Strategy, res.Token, res.Addr)
 		} else {
-			t.Logf("%s: As expected, did not get lease for %s:%s", l.msg, l.strat, l.token)
+			t.Logf("%s: As expected, did not get lease for %s:%s", l.msg, l.strategy, l.token)
 		}
 	}
 	if l.err {
@@ -141,27 +141,27 @@ func TestDHCPRenew(t *testing.T) {
 }
 
 type ltc struct {
-	msg          string
-	strat, token string
-	req, via     net.IP
-	created      bool
-	expected     net.IP
+	msg             string
+	strategy, token string
+	req, via        net.IP
+	created         bool
+	expected        net.IP
 }
 
 func (l *ltc) test(t *testing.T, rt *RequestTracker) {
 	t.Helper()
-	res, _, _, _ := FindOrCreateLease(rt, l.strat, l.token, l.req, []net.IP{l.via})
+	res, _, _, _ := FindOrCreateLease(rt, l.strategy, l.token, l.req, []net.IP{l.via})
 	if l.created {
 		if res == nil {
-			t.Errorf("%s: Expected to create a lease with %s:%s, but did not!", l.msg, l.strat, l.token)
+			t.Errorf("%s: Expected to create a lease with %s:%s, but did not!", l.msg, l.strategy, l.token)
 		} else if l.expected != nil && !res.Addr.Equal(l.expected) {
-			t.Errorf("%s: Lease %s:%s got %s, expected %s", l.msg, l.strat, l.token, res.Addr, l.expected)
+			t.Errorf("%s: Lease %s:%s got %s, expected %s", l.msg, l.strategy, l.token, res.Addr, l.expected)
 		} else {
 			t.Logf("%s: Created lease %s:%s: %s", l.msg, res.Strategy, res.Token, res.Addr)
 		}
 	} else {
 		if res != nil {
-			t.Errorf("%s: Did not expect to create lease %s:%s: %s", l.msg, l.strat, l.token, res.Addr)
+			t.Errorf("%s: Did not expect to create lease %s:%s: %s", l.msg, l.strategy, l.token, res.Addr)
 		} else {
 			t.Logf("%s: No lease created, as expected", l.msg)
 		}
