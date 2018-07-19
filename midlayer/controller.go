@@ -461,7 +461,7 @@ func (pc *PluginController) UploadPluginProvider(c *gin.Context, fileRoot, name 
 		}
 	case `multipart/form-data`:
 		header, _ := c.FormFile("file")
-		file, err := header.Open()
+		file, _ := header.Open()
 		defer file.Close()
 		copied, err = io.Copy(tgt, file)
 		if err != nil {

@@ -104,6 +104,9 @@ func decrypt(key []byte, b64ciphertext string) (string, error) {
 	}
 
 	ciphertext, err := base64.URLEncoding.DecodeString(b64ciphertext)
+	if err != nil {
+		return "", err
+	}
 
 	if len(ciphertext) < aes.BlockSize {
 		err = errors.New("ciphertext too short")

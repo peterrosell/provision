@@ -301,7 +301,7 @@ func (f *Frontend) InitJobApi() {
 			if b.Uuid == nil || len(b.Uuid) == 0 {
 				b.Uuid = uuid.NewRandom()
 			}
-			var res models.Model
+			var res *models.Job
 			var err error
 			rt := f.rt(c, b.Locks("create")...)
 			code := http.StatusNoContent
@@ -480,11 +480,11 @@ func (f *Frontend) InitJobApi() {
 			})
 			switch code {
 			case http.StatusAccepted, http.StatusCreated:
-				s, ok := models.Model(b).(Sanitizable)
+				s, ok := models.Model(b.Job).(Sanitizable)
 				if ok {
-					res = s.Sanitize()
+					res = s.Sanitize().(*models.Job)
 				} else {
-					res = b
+					res = b.Job
 				}
 				c.JSON(code, res)
 			case http.StatusNoContent:
@@ -634,6 +634,7 @@ func (f *Frontend) InitJobApi() {
 				} else {
 					c.JSON(http.StatusBadRequest, models.NewError(c.Request.Method, http.StatusBadRequest, err.Error()))
 				}
+				return
 			}
 			c.JSON(http.StatusOK, actions)
 

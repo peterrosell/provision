@@ -47,6 +47,7 @@ import (
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/frontend"
 	"github.com/digitalrebar/provision/midlayer"
+	"github.com/digitalrebar/provision/utils"
 	"github.com/digitalrebar/store"
 )
 
@@ -62,6 +63,7 @@ type ProgOpts struct {
 	DisableProvisioner  bool   `long:"disable-provisioner" description:"Disable provisioner"`
 	DisableDHCP         bool   `long:"disable-dhcp" description:"Disable DHCP server"`
 	DisableBINL         bool   `long:"disable-pxe" description:"Disable PXE/BINL server"`
+	MetricsPort         int    `long:"metrics-port" description:"Port the metrics HTTP server should listen on" default:"8080"`
 	StaticPort          int    `long:"static-port" description:"Port the static HTTP file server should listen on" default:"8091"`
 	TftpPort            int    `long:"tftp-port" description:"Port for the TFTP server to listen on" default:"69"`
 	ApiPort             int    `long:"api-port" description:"Port for the API server to listen on" default:"8092"`
@@ -113,6 +115,9 @@ type ProgOpts struct {
 	HaEnabled   bool   `long:"ha-enabled" description:"Enable HA"`
 	HaAddress   string `long:"ha-address" description:"IP address to advertise as our HA address" default:""`
 	HaInterface string `long:"ha-interface" description:"Interface to put the VIP on for HA" default:""`
+
+	PromGwUrl    string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:""`
+	PromInterval int    `long:"prometheus-interval" description:"Duration in seconds to push metrics" default:"5"`
 }
 
 func mkdir(d string) error {
@@ -268,6 +273,27 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		}
 	}
 
+	logLevel, err := logger.ParseLevel(cOpts.DefaultLogLevel)
+	if err != nil {
+		localLogger.Printf("Invalid log level %s", cOpts.DefaultLogLevel)
+		return fmt.Sprintf("Try one of `trace`,`debug`,`info`,`warn`,`error`,`fatal`,`panic`")
+	}
+	buf := logger.New(localLogger).SetDefaultLevel(logLevel)
+
+	localLogger.Printf("Starting metrics server")
+	svc, err := midlayer.ServeMetrics(fmt.Sprintf(":%d", cOpts.MetricsPort), buf.Log("metrics"))
+	if err != nil {
+		return fmt.Sprintf("Error starting metrics server: %v", err)
+	}
+	services = append(services, svc)
+
+	if cOpts.PromGwUrl != "" {
+		ppg := utils.NewPrometheusPushGateway(buf.Log("promgateway"), cOpts.PromGwUrl,
+			fmt.Sprintf("http://127.0.0.1:%d/metrics", cOpts.MetricsPort),
+			time.Duration(cOpts.PromInterval)*time.Second)
+		services = append(services, ppg)
+	}
+
 	// Make data store
 	dtStore, err := midlayer.DefaultDataStack(cOpts.DataRoot, cOpts.BackEndType,
 		cOpts.LocalContent, cOpts.DefaultContent, cOpts.SaasContentRoot, cOpts.FileRoot)
@@ -275,7 +301,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		return fmt.Sprintf("Unable to create DataStack: %v", err)
 	}
 	var secretStore store.Store
-	if u, err := url.Parse(cOpts.SecretsType); err == nil && u.Scheme != "" {
+	if u, perr := url.Parse(cOpts.SecretsType); perr == nil && u.Scheme != "" {
 		secretStore, err = store.Open(cOpts.SecretsType)
 	} else {
 		secretStore, err = store.Open(fmt.Sprintf("%s://%s", cOpts.SecretsType, cOpts.SecretsRoot))
@@ -283,14 +309,8 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	if err != nil {
 		return fmt.Sprintf("Unable to open secrets store: %v", err)
 	}
-	logLevel, err := logger.ParseLevel(cOpts.DefaultLogLevel)
-	if err != nil {
-		localLogger.Printf("Invalid log level %s", cOpts.DefaultLogLevel)
-		return fmt.Sprintf("Try one of `trace`,`debug`,`info`,`warn`,`error`,`fatal`,`panic`")
-	}
 
 	// We have a backend, now get default assets
-	buf := logger.New(localLogger).SetDefaultLevel(logLevel)
 	publishers := backend.NewPublishers(localLogger)
 
 	dt := backend.NewDataTracker(dtStore,

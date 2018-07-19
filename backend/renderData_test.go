@@ -245,16 +245,17 @@ func TestRenderData(t *testing.T) {
 		t.Logf("BootEnv nothing rendered properly for test machine")
 	}
 	rt.Do(func(d Stores) {
+		var s string
 		// Test the render functions directly.
 		rd := newRenderData(rt, nil, nil)
 		// Test ParseUrl - independent of Machine and Env
-		s, e := rd.ParseUrl("scheme", "http://192.168.0.%31:8080/")
+		_, e := rd.ParseUrl("scheme", "http://192.168.0.%31:8080/")
 		if e == nil {
 			t.Errorf("ParseUrl with bad URL should have generated an error\n")
 		} else if e.Error() != "parse http://192.168.0.%31:8080/: invalid URL escape \"%31\"" {
 			t.Errorf("ParseUrl with bad URL should have generated an error: %s, but got %s\n", "parse http://192.168.0.%31:8080/: invalid URL escape \"%31\"", e.Error())
 		}
-		s, e = rd.ParseUrl("bogus", "https://fred/path/apt")
+		_, e = rd.ParseUrl("bogus", "https://fred/path/apt")
 		if e == nil {
 			t.Errorf("ParseUrl with bad segment should have generated an error\n")
 		} else if e.Error() != "No idea how to get URL part bogus from https://fred/path/apt" {
@@ -322,7 +323,7 @@ func TestRenderData(t *testing.T) {
 			t.Errorf("Parameter test with default should have been `default`m not `%v`", s)
 		}
 
-		s, e = rd.BootParams()
+		_, e = rd.BootParams()
 		if e == nil {
 			t.Errorf("BootParams with no ENV should have generated an error\n")
 		} else if e.Error() != "Missing bootenv" {
@@ -488,7 +489,7 @@ func TestRenderData(t *testing.T) {
 			t.Errorf("ParamExists test should return true when machine profile has test defined in RenderData\n")
 		}
 
-		s, e = rd.BootParams()
+		_, e = rd.BootParams()
 		errString := "template: machine:1:2: executing \"machine\" at <.Param>: error calling Param: No such machine parameter cow"
 		if e == nil {
 			t.Errorf("BootParams with no ENV should have generated an error\n")

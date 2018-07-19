@@ -9,7 +9,9 @@ import (
 
 	"golang.org/x/net/ipv4"
 
+	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/models"
+	"github.com/digitalrebar/provision/utils"
 	dhcp "github.com/krolaw/dhcp4"
 )
 
@@ -167,4 +169,62 @@ func (dhr *DhcpRequest) UnmarshalText(buf []byte) error {
 	}
 	dhr.pkt = res
 	return nil
+}
+
+type DhcpMetrics struct {
+	p *utils.Prometheus
+}
+
+func NewDhcpMetrics(l logger.Logger, binlOnly bool) *DhcpMetrics {
+	ss := "dhcp"
+	if binlOnly {
+		ss = "binl"
+	}
+	mets := []*utils.Metric{
+		{
+			ID:          "reqCnt",
+			Name:        "requests_total",
+			Description: "How many DHCP requests processed, partitioned by type.",
+			Type:        "counter_vec",
+			Args:        []string{"type"},
+		},
+		{
+			ID:          "resCnt",
+			Name:        "replies_total",
+			Description: "How many DHCP replies sent, partitioned by type.",
+			Type:        "counter_vec",
+			Args:        []string{"type"},
+		},
+		{
+			ID:          "reqDur",
+			Name:        "request_duration_seconds",
+			Description: "The DHCP request latencies in seconds.",
+			Type:        "summary",
+		},
+		{
+			ID:          "resSz",
+			Name:        "response_size_bytes",
+			Description: "The DHCP response sizes in bytes.",
+			Type:        "summary",
+		},
+		{
+			ID:          "reqSz",
+			Name:        "request_size_bytes",
+			Description: "The DHCP request sizes in bytes.",
+			Type:        "summary",
+		},
+	}
+	return &DhcpMetrics{p: utils.NewPrometheus(l, ss, mets)}
+}
+
+func (dm *DhcpMetrics) CountPacket(count, elapsed float64, res dhcp.Packet, reqType, resType string) {
+	dm.p.Observe("reqDur", elapsed)
+	dm.p.Observe("reqSz", count)
+	dm.p.CounterWithLabelValues("reqCnt", reqType).Inc()
+	resSz := float64(0)
+	if res != nil {
+		resSz = float64(len(res))
+	}
+	dm.p.Observe("resSz", resSz)
+	dm.p.CounterWithLabelValues("resCnt", resType).Inc()
 }
