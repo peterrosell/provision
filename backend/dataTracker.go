@@ -708,6 +708,61 @@ func (p *DataTracker) LocalIP(remote net.IP) string {
 	return gwIp.String()
 }
 
+func (p *DataTracker) regenSecureParams(
+	rt *RequestTracker,
+	hard, soft *models.Error) {
+	p.Debugf("Scanning for params to secure")
+	secure := map[string]struct{}{}
+	for _, obj := range p.objs["params"].Items() {
+		param := obj.(*Param)
+		if !param.Secure {
+			continue
+		}
+		secure[param.Name] = struct{}{}
+	}
+	for _, m := range models.All() {
+		if _, ok := m.(models.Paramer); !ok {
+			continue
+		}
+		for _, obj := range p.objs[m.Prefix()].Items() {
+			paramer := obj.(models.Paramer)
+			params := paramer.GetParams()
+			pubkey, err := rt.PublicKeyFor(obj)
+			if err != nil {
+				hard.Errorf("Error getting public key for %s:%s: %v", obj.Prefix(), obj.Key(), err)
+				continue
+			}
+			secureParams := map[string]interface{}{}
+			for k, v := range params {
+				if _, ok := secure[k]; !ok {
+					continue
+				}
+				secureV := &models.SecureData{}
+				if err := models.Remarshal(v, secureV); err == nil {
+					continue
+				}
+				if err := secureV.Marshal(pubkey, v); err != nil {
+					hard.Errorf("Error marshalling secure data: %v", err)
+					continue
+				}
+				p.Infof("Securing param %s on %s:%s", k, obj.Prefix(), obj.Key())
+				secureParams[k] = secureV
+			}
+			if len(secureParams) == 0 {
+				continue
+			}
+			for k, v := range secureParams {
+				params[k] = v
+			}
+			paramer.SetParams(params)
+			if _, err := rt.Save(paramer); err != nil {
+				hard.Errorf("Error saving %s:%s with secured params: %v", obj.Prefix(), obj.Key(), err)
+				continue
+			}
+		}
+	}
+}
+
 func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.Error) {
 	hard = &models.Error{Code: 500, Type: "Failed to load backing objects from cache"}
 	soft = &models.Error{Code: 422, Type: ValidationError}
@@ -782,6 +837,7 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 			p.rootTemplate.Option("missingkey=error")
 		}
 	}
+	p.regenSecureParams(loadRT, hard, soft)
 	p.loadLicense(loadRT)
 	return
 }
@@ -1176,6 +1232,7 @@ func (p *DataTracker) Backup() ([]byte, error) {
 
 // Assumes that all locks are held
 func (p *DataTracker) ReplaceBackend(rt *RequestTracker, st store.Store) (hard, soft error) {
+	p.Debugf("Replacing backend data store")
 	p.Backend = st
 	return p.rebuildCache(rt)
 }

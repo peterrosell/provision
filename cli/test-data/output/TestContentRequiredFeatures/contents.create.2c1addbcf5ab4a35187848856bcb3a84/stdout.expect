@@ -1,0 +1,17 @@
+{
+  "Counts": {
+    "params": 1
+  },
+  "Warnings": [],
+  "meta": {
+    "Description": "",
+    "Documentation": "",
+    "Name": "insecure",
+    "Overwritable": false,
+    "RequiredFeatures": "secure-params",
+    "Source": "",
+    "Type": "dynamic",
+    "Version": "",
+    "Writable": false
+  }
+}
