@@ -35,7 +35,7 @@ func TestTftpFiles(t *testing.T) {
 
 	_, hh = ServeTftp("1.1.1.1:11112", fs.TftpResponder(), l, backend.NewPublishers(locallogger))
 	if hh != nil {
-		if !strings.Contains(hh.Error(), "listen udp 1.1.1.1:11112: bind: ") {
+		if !strings.Contains(hh.Error(), "1.1.1.1:11112: bind: ") {
 			t.Errorf("Expected a different error: %v", hh.Error())
 		}
 	} else {
