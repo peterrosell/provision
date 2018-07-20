@@ -2,7 +2,6 @@ package midlayer
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/backend"
@@ -74,16 +74,16 @@ func (d *DataStack) Clone() *DataStack {
 // sure that it can integrate the new store into the stack, making
 // whatever changes are needed to the current datastack to make
 // inclusion possible.  It must take care to scan and detect if it
-// will not be able to maek changes, because any changes it has to
+// will not be able to make changes, because any changes it has to
 // make to items in the data stack will be live and not possible to
 // undo after FixerUpper returns.
-type FixerUpper func(*DataStack, store.Store) error
+type FixerUpper func(*DataStack, store.Store, logger.Logger) error
 
 func (d *DataStack) rebuild(oldStore, secrets store.Store,
 	logger logger.Logger,
 	fixup FixerUpper,
 	newStore store.Store) (*DataStack, error, error) {
-	if err := d.buildStack(fixup, newStore); err != nil {
+	if err := d.buildStack(fixup, newStore, logger); err != nil {
 		if m, ok := err.(*models.Error); ok {
 			return nil, m, nil
 		}
@@ -134,7 +134,7 @@ func (d *DataStack) AddReplacePluginLayer(
 	return dtStore.rebuild(oldStore, secrets, logger, fixup, newStore)
 }
 
-func fixBasic(d *DataStack, l store.Store) error {
+func fixBasic(d *DataStack, l store.Store, logger logger.Logger) error {
 	toRemove := [][]string{}
 	layer0 := d.Layers()[0]
 	lSubs := l.Subs()
@@ -158,7 +158,7 @@ func fixBasic(d *DataStack, l store.Store) error {
 				return fmt.Errorf("fixBasic: cannot replace %s:%s: item in writable store not equal to static version\n%v\n%v",
 					k, key, dItem, lItem)
 			}
-			log.Printf("fixBasic: Replacing writable %s:%s with immutable one", k, key)
+			logger.Infof("fixBasic: Replacing writable %s:%s with immutable one", k, key)
 			toRemove = append(toRemove, []string{k, key})
 		}
 	}
@@ -169,19 +169,38 @@ func fixBasic(d *DataStack, l store.Store) error {
 	return nil
 }
 
-func (d *DataStack) buildStack(fixup FixerUpper, newStore store.Store) error {
-	if ns, ok := newStore.(store.MetaSaver); ok && ns.MetaData()["Name"] == "" {
+func (d *DataStack) buildStack(fixup FixerUpper, newStore store.Store, logger logger.Logger) error {
+	if ns, ok := newStore.(store.MetaSaver); ok {
 		ret := &models.Error{
 			Model: "contents",
 			Type:  "STORE_ERROR",
 			Code:  http.StatusUnprocessableEntity,
 		}
-		ret.Errorf("Content Store must have a name")
-		return ret
+		if ns.MetaData()["Name"] == "" {
+			ret.Errorf("Content Store must have a name")
+		}
+		if ns.MetaData()["RequiredFeatures"] != "" {
+			stackFeatures := strings.Split(ns.MetaData()["RequiredFeatures"], ",")
+			info := &models.Info{}
+			info.Fill()
+			ofMap := map[string]struct{}{}
+			for _, f := range info.Features {
+				ofMap[strings.TrimSpace(strings.ToLower(f))] = struct{}{}
+			}
+			for _, f := range stackFeatures {
+				if _, ok := ofMap[strings.TrimSpace(strings.ToLower(f))]; ok {
+					continue
+				}
+				ret.Errorf("dr-provision missing required feature %s", f)
+			}
+		}
+		if ret.ContainsError() {
+			return ret
+		}
 	}
 	wrapperFixup := func(ns store.Store, f1, f2 bool) error {
 		if fixup != nil && newStore == ns {
-			if err := fixup(d, ns); err != nil {
+			if err := fixup(d, ns, logger); err != nil {
 				return err
 			}
 		}
@@ -231,7 +250,7 @@ func (d *DataStack) buildStack(fixup FixerUpper, newStore store.Store) error {
 		}
 	}
 	if err := d.Push(d.basicContent, false, false); err != nil {
-		if err = fixBasic(d, d.basicContent); err == nil {
+		if err = fixBasic(d, d.basicContent, logger); err == nil {
 			return d.Push(d.basicContent, false, false)
 		}
 		return err
@@ -239,7 +258,9 @@ func (d *DataStack) buildStack(fixup FixerUpper, newStore store.Store) error {
 	return nil
 }
 
-func DefaultDataStack(dataRoot, backendType, localContent, defaultContent, saasDir, fileRoot string) (*DataStack, error) {
+func DefaultDataStack(
+	dataRoot, backendType, localContent, defaultContent, saasDir, fileRoot string,
+	logger logger.Logger) (*DataStack, error) {
 	dtStore := &DataStack{
 		StackedStore:   store.StackedStore{},
 		saasContents:   map[string]store.Store{},
@@ -335,5 +356,5 @@ func DefaultDataStack(dataRoot, backendType, localContent, defaultContent, saasD
 			}
 		}
 	}
-	return dtStore, dtStore.buildStack(nil, nil)
+	return dtStore, dtStore.buildStack(nil, nil, logger)
 }

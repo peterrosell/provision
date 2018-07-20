@@ -232,7 +232,7 @@ func (pc *PluginController) buildNewStore(content *models.Content) (newStore sto
 	return
 }
 
-func forceParamRemoval(d *DataStack, l store.Store) error {
+func forceParamRemoval(d *DataStack, l store.Store, logger logger.Logger) error {
 	toRemove := [][]string{}
 	layer0 := d.Layers()[0]
 	lSubs := l.Subs()

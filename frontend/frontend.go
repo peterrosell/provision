@@ -137,9 +137,6 @@ func (a *authBlob) isLicensed(scope, action string) bool {
 	switch action {
 	case "list", "get":
 		return true
-	case "getSecure", "updateSecure":
-		license := a.f.dt.LicenseFor("secure-params")
-		return license != nil && license.Active
 	default:
 		switch scope {
 		case "roles", "tenants":
