@@ -241,6 +241,10 @@ func (dhr *DhcpRequest) ipxeIsSane(arch uint) bool {
 			dhr.Warnf("Incoming iPXE does not support bzImage")
 			return false
 		}
+		if !opts.comboot {
+			dhr.Warnf("Incoming iPXE does not support comboot")
+			return false
+		}
 	}
 	if arch != 0 && !opts.efi {
 		dhr.Errorf("Incoming iPXE for arch %d does not support efi. This should not happen", arch)
@@ -519,14 +523,21 @@ func (dhr *DhcpRequest) coalesceOptions(
 		if val, ok := dhr.pktOpts[dhcp.OptionClientArchitecture]; ok {
 			arch = uint(val[0])<<8 + uint(val[1])
 		}
+		inIPxe := false
 		if val, ok := dhr.pktOpts[dhcp.OptionUserClass]; ok &&
-			string(val) == "iPXE" &&
-			dhr.ipxeIsSane(arch) {
+			string(val) == "iPXE" {
+			inIPxe = true
+		}
+		if inIPxe && dhr.ipxeIsSane(arch) {
 			fname = "default.ipxe"
 		} else {
 			switch arch {
 			case 0:
-				fname = "lpxelinux.0"
+				if inIPxe {
+					fname = "ipxe.pxe"
+				} else {
+					fname = "lpxelinux.0"
+				}
 			case 7, 9:
 				fname = "ipxe.efi"
 			case 6:
@@ -534,7 +545,7 @@ func (dhr *DhcpRequest) coalesceOptions(
 			case 10:
 				dhr.Errorf("dr-provision does not support 32 bit ARM EFI systems")
 			case 11:
-				dhr.Errorf("dr-provision does not support 64 bit ARM EFI systems")
+				fname = "ipxe-arm64.efi"
 			default:
 				dhr.Errorf("Unknown client arch %d: cannot PXE boot it remotely", arch)
 			}

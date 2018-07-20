@@ -25,8 +25,6 @@ for f in ipxe.efi ipxe.pxe jq bootx64.efi lpxelinux.0 esxi.0 wimboot; do
     [[ -f $f ]] && continue
     echo "Downloading asset for $f"
     case $f in
-        ipxe.efi) curl -sfgL http://boot.ipxe.org/ipxe.efi -o ipxe.efi;;
-        ipxe.pxe) curl -sfgL http://boot.ipxe.org/undionly.kpxe -o ipxe.pxe;;
         jq)
             curl -sfgL https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64 -o jq
             chmod 755 jq;;

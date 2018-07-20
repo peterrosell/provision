@@ -75,19 +75,20 @@ func ExtractAssets(replaceRoot, fileRoot string) error {
 		"jq": "files",
 
 		// General Boot things
-		"bootia32.efi": "",
-		"bootia64.efi": "",
-		"bootx64.efi":  "",
-		"chain.c32":    "",
-		"esxi.0":       "",
-		"ipxe.efi":     "",
-		"ipxe.pxe":     "",
-		"ldlinux.c32":  "",
-		"libutil.c32":  "",
-		"lpxelinux.0":  "",
-		"pxechn.c32":   "",
-		"libcom32.c32": "",
-		"wimboot":      "",
+		"bootia32.efi":   "",
+		"bootia64.efi":   "",
+		"bootx64.efi":    "",
+		"chain.c32":      "",
+		"esxi.0":         "",
+		"ipxe.efi":       "",
+		"ipxe-arm64.efi": "",
+		"ipxe.pxe":       "",
+		"ldlinux.c32":    "",
+		"libutil.c32":    "",
+		"lpxelinux.0":    "",
+		"pxechn.c32":     "",
+		"libcom32.c32":   "",
+		"wimboot":        "",
 	}
 
 	for src, dest := range assets {
