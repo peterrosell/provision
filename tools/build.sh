@@ -62,9 +62,6 @@ export VERFLAGS="-s -w \
 
 glide install
 rm -rf client genmodels embedded/assets/swagger.json
-rm -rf api/fake_api_server.go
-rm -rf cli/fake_cli_server.go
-rm -rf cli/fake_midlayer_server.go
 go generate embedded/assets.go
 
 # Update cli docs if needed. - does change date.

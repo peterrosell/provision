@@ -22,11 +22,6 @@ else
     PATH=`pwd`/bin/linux/amd64:$PATH
 fi
 
-# These let codecoverage work "correctly" - They are removed by build.sh
-cp tools/fake_api_server.go api
-cp tools/fake_cli_server.go cli
-cp tools/fake_midlayer_server.go midlayer
-
 i=0
 for d in $(go list ./... 2>/dev/null | grep -v cmds) ; do
     echo "----------- TESTING $d -----------"
