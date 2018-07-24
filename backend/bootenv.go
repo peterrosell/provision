@@ -130,7 +130,7 @@ func (b *BootEnv) Backend() store.Store {
 	return b.rt.backend(b)
 }
 
-func (b *BootEnv) pathFor(f string) string {
+func (b *BootEnv) PathFor(f string) string {
 	res := b.OS.Name
 	if strings.HasSuffix(b.Name, "-install") {
 		res = path.Join(res, "install")
@@ -175,12 +175,12 @@ func (b *BootEnv) fillInstallRepo() {
 		b.rt.Infof("BootEnv %s: Using repo %s as an install source", b.Name, r.Tag)
 		b.kernelVerified = true
 		b.installRepo = r
-		pf := b.pathFor("")
+		pf := b.PathFor("")
 		fileRoot := b.rt.dt.FileRoot
 		l := b.rt.Logger
 		b.pathLookaside = func(p string) (io.Reader, error) {
 			// Always use local copy if available
-			if _, err := os.Stat(path.Join(fileRoot, b.pathFor(""))); err == nil || b.installRepo == nil {
+			if _, err := os.Stat(path.Join(fileRoot, b.PathFor(""))); err == nil || b.installRepo == nil {
 				return nil, nil
 			}
 			tgtUri := strings.TrimSuffix(b.installRepo.URL, "/") + strings.TrimPrefix(p, pf)
@@ -212,12 +212,12 @@ func (b *BootEnv) fillInstallRepo() {
 
 func (b *BootEnv) AddDynamicTree() {
 	if b.pathLookaside != nil {
-		b.rt.dt.FS.AddDynamicTree(b.pathFor(""), b.pathLookaside)
+		b.rt.dt.FS.AddDynamicTree(b.PathFor(""), b.pathLookaside)
 	}
 }
 
 func (b *BootEnv) localPathFor(f string) string {
-	return path.Join(b.rt.dt.FileRoot, b.pathFor(f))
+	return path.Join(b.rt.dt.FileRoot, b.PathFor(f))
 }
 
 func (b *BootEnv) genRoot(commonRoot *template.Template, e models.ErrorAdder) *template.Template {
@@ -512,7 +512,7 @@ func (b *BootEnv) AfterDelete() {
 			index.Sort(b.Indexes()["OsName"]),
 			index.Eq(b.OS.Name))(&(b.rt.stores("bootenvs").Index))
 		if idxerr == nil && idx.Count() == 0 {
-			b.rt.dt.FS.DelDynamicTree(b.pathFor(""))
+			b.rt.dt.FS.DelDynamicTree(b.PathFor(""))
 		}
 	}
 }

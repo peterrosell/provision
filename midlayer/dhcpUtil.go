@@ -49,7 +49,7 @@ func (dhr *DhcpRequest) marshalText(p dhcp.Packet) ([]byte, error) {
 }
 
 func (dhr *DhcpRequest) MarshalText() ([]byte, error) {
-	return dhr.marshalText(dhr.pkt)
+	return dhr.marshalText(dhr.request)
 }
 
 func (dhr *DhcpRequest) PrintIncoming() string {
@@ -134,7 +134,7 @@ func (dhr *DhcpRequest) UnmarshalText(buf []byte) error {
 	}
 	res.SetCHAddr(mac)
 	if len(lines) == 3 {
-		dhr.pkt = res
+		dhr.request = res
 		return nil
 	}
 	for _, line := range lines[3:] {
@@ -167,7 +167,7 @@ func (dhr *DhcpRequest) UnmarshalText(buf []byte) error {
 			opt.AddToPacket(&res)
 		}
 	}
-	dhr.pkt = res
+	dhr.request = res
 	return nil
 }
 

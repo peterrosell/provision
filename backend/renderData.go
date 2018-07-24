@@ -197,7 +197,7 @@ type rBootEnv struct {
 //    tftp: Will expand to the path the file can be accessed at via TFTP.
 //    disk: Will expand to the path of the file inside the provisioner container.
 func (b *rBootEnv) PathFor(proto, f string) string {
-	tail := b.pathFor(f)
+	tail := b.BootEnv.PathFor(f)
 	switch proto {
 	case "tftp":
 		return strings.TrimPrefix(tail, "/")
