@@ -33,6 +33,7 @@ type ReadSizer interface {
 
 type renderer struct {
 	path, name string
+	meta       map[string]string
 	write      func(net.IP) (io.Reader, error)
 }
 
@@ -828,7 +829,9 @@ func (r *RenderData) addRenderer(e models.ErrorAdder, ti *models.TemplateInfo, r
 			tmplPath = path.Clean("/" + buf.String())
 		}
 	}
-	return append(rts, newRenderedTemplate(r, ti.Id(), tmplPath))
+	rt := newRenderedTemplate(r, ti.Id(), tmplPath)
+	rt.meta = ti.Meta
+	return append(rts, rt)
 }
 
 func (r *RenderData) makeRenderers(e models.ErrorAdder) renderers {

@@ -33,7 +33,7 @@ type JobsResponse struct {
 // swagger:response
 type JobActionsResponse struct {
 	// in: body
-	Body []*models.JobAction
+	Body models.JobActions
 }
 
 // JobParamsResponse return on a successful GET of all Job's Params
@@ -138,6 +138,8 @@ type JobActionsPathParameter struct {
 	Uuid uuid.UUID `json:"uuid"`
 	// in: query
 	Plugin string `json:"plugin"`
+	// in: query
+	OS string `json:"os"`
 }
 
 // JobActionPathParameter used to find a Job / Action in the path
@@ -626,7 +628,8 @@ func (f *Frontend) InitJobApi() {
 			if !f.assureSimpleAuth(c, "jobs", "actions", j.AuthKey()) {
 				return
 			}
-			actions, err := j.RenderActions(rt)
+			rt.Errorf("Rendering jobs for %s os %s", uuid, c.Query("os"))
+			actions, err := j.RenderActions(rt, c.Query("os"))
 			if err != nil {
 				be, ok := err.(*models.Error)
 				if ok {

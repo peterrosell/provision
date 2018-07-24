@@ -510,7 +510,7 @@ func (j *Job) BeforeDelete() error {
 	return e.HasError()
 }
 
-func (j *Job) RenderActions(rt *RequestTracker) ([]*models.JobAction, error) {
+func (j *Job) RenderActions(rt *RequestTracker, targetOS string) (models.JobActions, error) {
 	var rds renderers
 	var addr net.IP
 	var err *models.Error
@@ -547,8 +547,12 @@ func (j *Job) RenderActions(rt *RequestTracker) ([]*models.JobAction, error) {
 		return nil, err
 	}
 	err = &models.Error{}
-	actions := []*models.JobAction{}
+	actions := models.JobActions{}
 	for _, r := range rds {
+		na := &models.JobAction{Meta: r.meta, Name: r.name, Path: r.path}
+		if !na.ValidForOS(targetOS) {
+			continue
+		}
 		rr, err1 := r.write(addr)
 		if err1 != nil {
 			err.Code = http.StatusUnprocessableEntity
@@ -559,12 +563,11 @@ func (j *Job) RenderActions(rt *RequestTracker) ([]*models.JobAction, error) {
 				err.Code = http.StatusUnprocessableEntity
 				err.AddError(err2)
 			} else {
-				na := &models.JobAction{Name: r.name, Path: r.path, Content: string(b)}
+				na.Content = string(b)
 				actions = append(actions, na)
 			}
 		}
 	}
-
 	return actions, err.HasError()
 }
 
