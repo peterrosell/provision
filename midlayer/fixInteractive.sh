@@ -7,7 +7,17 @@ prompt_to_copy() {
     cp "$1" "$2"
 }
 
-go test "$@"
+args=()
+while (( "$#" )); do
+  args+=($1)
+  if [[ "$1" == "-run" ]]; then
+    shift
+    args+=("TestFirst|$1")
+  fi
+  shift
+done
+
+go test "${args[@]}"
 
 for testcase in dhcp-tests/*/*.request; do
     [[ -f $testcase ]] || continue

@@ -22,10 +22,10 @@ else
     PATH=`pwd`/bin/linux/amd64:$PATH
 fi
 
-# These let codecoverage work "correctly" - They are removed by build.sh
-cp tools/fake_api_server.go api
-cp tools/fake_cli_server.go cli
-cp tools/fake_midlayer_server.go midlayer
+# Move the files to make coverage better.
+mv api/fake_api_server_test.go api/fake_api_server.go
+mv midlayer/fake_midlayer_server_test.go midlayer/fake_midlayer_server.go
+mv cli/fake_cli_server_test.go cli/fake_cli_server.go
 
 i=0
 for d in $(go list ./... 2>/dev/null | grep -v cmds) ; do
@@ -35,6 +35,11 @@ for d in $(go list ./... 2>/dev/null | grep -v cmds) ; do
 done
 go run tools/mergeProfiles.go profile*.txt >coverage.txt
 rm profile*.txt
+
+mv api/fake_api_server.go api/fake_api_server_test.go
+mv midlayer/fake_midlayer_server.go midlayer/fake_midlayer_server_test.go
+mv cli/fake_cli_server.go cli/fake_cli_server_test.go
+
 if [[ $FAILED ]]; then
     echo "FAILED"
     exit 1
