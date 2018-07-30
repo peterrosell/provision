@@ -1,0 +1,7 @@
+proto:dhcp4 iface:eno1 ifaddr:192.168.124.10:68 lport:67
+op:0x02 htype:0x01 hlen:0x06 hops:0x00 xid:0x00000000 secs:0x0000 flags:0x0000
+ci:0.0.0.0 yi:192.168.124.10 si:0.0.0.0 gi:0.0.0.0 ch:52:54:be:1e:00:00
+file:"ipxe.efi"
+option:code:053 val:"ack"
+option:code:054 val:"192.168.124.1"
+option:code:060 val:"AAPLBSDPC"

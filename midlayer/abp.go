@@ -19,10 +19,6 @@ const (
 
 type bsdpBootOption models.BsdpBootOption
 
-func (bo *bsdpBootOption) UnmarshalText(buf []byte) error {
-	return (*models.BsdpBootOption)(bo).UnmarshalText(buf)
-}
-
 func (bo *bsdpBootOption) FromOption(buf []byte) {
 	bo.Install = buf[0]&0x80 > 0
 	bo.OSType = buf[0] | 0x7f
@@ -162,8 +158,8 @@ func (o *bsdpOpts) ToOption() []byte {
 	return res
 }
 
-func (dhr *DhcpRequest) bsdpFromBootenv() *bsdpBootOption {
-	img := &bsdpBootOption{}
+func (dhr *DhcpRequest) bsdpFromBootenv() *models.BsdpBootOption {
+	img := &models.BsdpBootOption{}
 	img.UnmarshalText([]byte("netboot:diags::1:dr-boot:ipxe.efi:"))
 	if dhr.machine != nil && dhr.bootEnv != nil && dhr.bootEnv.Meta["AppleBsdp"] != "" {
 		img.UnmarshalText([]byte(dhr.bootEnv.Meta["AppleBsdp"]))
@@ -183,7 +179,6 @@ func (dhr *DhcpRequest) buildAppleBsdpOptions(serverID net.IP) {
 	dhr.outOpts = dhcp.Options{}
 	dhr.outOpts[dhcp.OptionTFTPServerName] = []byte(dhr.nextServer.String())
 	dhr.outOpts[dhcp.OptionVendorClassIdentifier] = []byte("AAPLBSDPC")
-	dhr.outOpts[dhcp.OptionTFTPServerName] = []byte(dhr.nextServer.String())
 	dhr.outOpts[dhcp.OptionBootFileName] = []byte(img.Booter)
 	if img.RootPath != "" {
 		dhr.outOpts[dhcp.OptionRootPath] = []byte(img.RootPath)
@@ -205,15 +200,20 @@ func (dhr *DhcpRequest) ServeAppleBSDP() string {
 		dhr.Infof("%s: Ignoring DHCP %s from %s to the Apple BSDP service", dhr.xid(), dhr.reqType, req)
 		return "Ignored"
 	}
-	dhr.offerNetBoot = true
 	opts := &bsdpOpts{}
 	opts.Parse(dhr)
 	l, s, _ := dhr.FakeLease(req)
 	dhr.checkMachine(l, s)
+	if dhr.bootEnv != nil && !dhr.bootEnv.NetBoot() {
+		dhr.Infof("%s: BootEnv says to ignore NetBoot request from %s", dhr.xid(), req)
+		return "Ignored"
+	}
+	dhr.offerNetBoot = true
+	dhr.Infof("%s: Handling BSDP msg type %d from %s", dhr.xid(), opts.msgtype, req)
 	switch opts.msgtype {
 	case bsdpList:
 		// Construct a list ACK, send it back.
-		opts.defaultImage = dhr.bsdpFromBootenv()
+		opts.defaultImage = (*bsdpBootOption)(dhr.bsdpFromBootenv())
 		opts.imageList = BsdpBootOptions{opts.defaultImage}
 		opts.srvID = srvID
 		dhr.outOpts = dhcp.Options{}
@@ -221,7 +221,7 @@ func (dhr *DhcpRequest) ServeAppleBSDP() string {
 		dhr.outOpts[dhcp.OptionVendorSpecificInformation] = opts.ToOption()
 		dhr.Reply(dhr.buildReply(dhcp.ACK, srvID, req))
 	case bsdpSelect:
-		if !bytes.Equal(opts.srvID, srvID) || !dhr.offerNetBoot {
+		if !bytes.Equal(opts.srvID, srvID) {
 			return "Ignored"
 		}
 		// Add a notation in the applicable Lease, send it back.
