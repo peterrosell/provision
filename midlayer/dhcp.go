@@ -247,6 +247,9 @@ func (dhr *DhcpRequest) checkMachine(l *backend.Lease, s *backend.Subnet) {
 			return
 		}
 		dhr.offerNetBoot = true
+		if l.Fake() {
+			return
+		}
 		// We want the machine to PXE boot, and we know what address it is
 		// getting.  However, that address may not be one that we are
 		// currently rendering templates for.  Check to see if we need to

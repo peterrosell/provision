@@ -4,55 +4,28 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"path"
 	"strings"
 
+	"github.com/digitalrebar/provision/models"
 	dhcp "github.com/krolaw/dhcp4"
 )
 
 const (
-	bsdpOS9       = 0
-	bsdpOSX       = 1
-	bsdpOSXServer = 2
-	bsdpDiags     = 3
-	bsdpList      = 1
-	bsdpSelect    = 2
-	bsdpFail      = 3
+	bsdpList   = 1
+	bsdpSelect = 2
+	bsdpFail   = 3
 )
 
-type bsdpBootOption struct {
-	Install        bool
-	ImgType        byte
-	Index          uint16
-	Name           string
-	Loader, RootFS string
-}
+type bsdpBootOption models.BsdpBootOption
 
-func (bo *bsdpBootOption) String() string {
-	res := []string{}
-	switch bo.Install {
-	case true:
-		res = append(res, "install")
-	case false:
-		res = append(res, "netboot")
-	}
-	switch bo.ImgType {
-	case bsdpOS9:
-		res = append(res, "os9")
-	case bsdpOSX:
-		res = append(res, "osx")
-	case bsdpOSXServer:
-		res = append(res, "osxsrv")
-	case bsdpDiags:
-		res = append(res, "diags")
-	}
-	res = append(res, fmt.Sprintf("%d", bo.Index))
-	res = append(res, bo.Name)
-	return strings.Join(res, ":")
+func (bo *bsdpBootOption) UnmarshalText(buf []byte) error {
+	return (*models.BsdpBootOption)(bo).UnmarshalText(buf)
 }
 
 func (bo *bsdpBootOption) FromOption(buf []byte) {
 	bo.Install = buf[0]&0x80 > 0
-	bo.ImgType = buf[0] | 0x7f
+	bo.OSType = buf[0] | 0x7f
 	bo.Index = uint16(buf[2])<<8 + uint16(buf[3])
 	if len(buf) > 5 {
 		bo.Name = string(buf[5:])
@@ -61,7 +34,7 @@ func (bo *bsdpBootOption) FromOption(buf []byte) {
 
 func (bo *bsdpBootOption) ToID() []byte {
 	res := make([]byte, 4)
-	res[0] = bo.ImgType
+	res[0] = bo.OSType
 	if bo.Install {
 		res[0] += 0x80
 	}
@@ -85,9 +58,9 @@ func (bo *bsdpBootOption) ToOption() []byte {
 	return res
 }
 
-type bsdpBootOptions []*bsdpBootOption
+type BsdpBootOptions []*bsdpBootOption
 
-func (bos bsdpBootOptions) ToOptions(budget int) []byte {
+func (bos BsdpBootOptions) ToOptions(budget int) []byte {
 	res := []byte{0x09, 0x00}
 	for i := range bos {
 		buf := bos[i].ToOption()
@@ -100,8 +73,8 @@ func (bos bsdpBootOptions) ToOptions(budget int) []byte {
 	return res
 }
 
-func fillBsdpBootOptions(buf []byte) bsdpBootOptions {
-	res := bsdpBootOptions{}
+func fillBsdpBootOptions(buf []byte) BsdpBootOptions {
+	res := BsdpBootOptions{}
 	for len(buf) > 4 {
 		oLen := buf[4] + 5
 		val := buf[:oLen]
@@ -122,7 +95,7 @@ type bsdpOpts struct {
 	replyPort     uint16          // code = 5, uint16, port to send reply to.  Defaults to 68.
 	defaultImage  *bsdpBootOption // code = 7, uint32, ID of the default image to boot.
 	selectedImage *bsdpBootOption // code = 8, uint32, ID of the selected image to boot.
-	imageList     bsdpBootOptions // code = 9, list of available images in the following format:
+	imageList     BsdpBootOptions // code = 9, list of available images in the following format:
 }
 
 func (o *bsdpOpts) Parse(dhr *DhcpRequest) {
@@ -189,23 +162,32 @@ func (o *bsdpOpts) ToOption() []byte {
 	return res
 }
 
+func (dhr *DhcpRequest) bsdpFromBootenv() *bsdpBootOption {
+	img := &bsdpBootOption{}
+	img.UnmarshalText([]byte("netboot:diags::1:dr-boot:ipxe.efi:"))
+	if dhr.machine != nil && dhr.bootEnv != nil && dhr.bootEnv.Meta["AppleBsdp"] != "" {
+		img.UnmarshalText([]byte(dhr.bootEnv.Meta["AppleBsdp"]))
+		img.Booter = dhr.bootEnv.PathFor(path.Join("i386", img.Booter))
+		if img.RootPath != "" {
+			img.RootPath = fmt.Sprintf("http://%s:%d%s",
+				dhr.srcAddr.String(),
+				dhr.handler.bk.StaticPort,
+				dhr.bootEnv.PathFor(img.RootPath))
+		}
+	}
+	return img
+}
+
 func (dhr *DhcpRequest) buildAppleBsdpOptions(serverID net.IP) {
+	img := dhr.bsdpFromBootenv()
 	dhr.outOpts = dhcp.Options{}
 	dhr.outOpts[dhcp.OptionTFTPServerName] = []byte(dhr.nextServer.String())
-	dhr.outOpts[dhcp.OptionBootFileName] = []byte("ipxe.efi")
 	dhr.outOpts[dhcp.OptionVendorClassIdentifier] = []byte("AAPLBSDPC")
-	/*
-		if dhr.bootEnv != nil {
-			dhr.outOpts[dhcp.OptionBootFileName] = []byte(dhr.bootEnv.PathFor(dhr.bootEnv.Kernel))
-			if len(dhr.bootEnv.BootParams) > 0 {
-				dhr.outOpts[dhcp.OptionRootPath] = []byte(
-					fmt.Sprintf("http://%s:%d%s",
-						dhr.srcAddr.String(),
-						dhr.handler.bk.StaticPort,
-						dhr.bootEnv.PathFor(dhr.bootEnv.BootParams)))
-			}
-		}
-	*/
+	dhr.outOpts[dhcp.OptionTFTPServerName] = []byte(dhr.nextServer.String())
+	dhr.outOpts[dhcp.OptionBootFileName] = []byte(img.Booter)
+	if img.RootPath != "" {
+		dhr.outOpts[dhcp.OptionRootPath] = []byte(img.RootPath)
+	}
 }
 
 func (dhr *DhcpRequest) offerAppleBoot() bool {
@@ -226,26 +208,20 @@ func (dhr *DhcpRequest) ServeAppleBSDP() string {
 	dhr.offerNetBoot = true
 	opts := &bsdpOpts{}
 	opts.Parse(dhr)
+	l, s, _ := dhr.FakeLease(req)
+	dhr.checkMachine(l, s)
 	switch opts.msgtype {
 	case bsdpList:
-		images := bsdpBootOptions{}
-		images = append(images, &bsdpBootOption{
-			Install: false,
-			ImgType: bsdpDiags,
-			Index:   1,
-			Name:    "dr-boot",
-			Loader:  "ipxe.efi",
-		})
 		// Construct a list ACK, send it back.
-		opts.defaultImage = images[0]
-		opts.imageList = images
+		opts.defaultImage = dhr.bsdpFromBootenv()
+		opts.imageList = BsdpBootOptions{opts.defaultImage}
 		opts.srvID = srvID
 		dhr.outOpts = dhcp.Options{}
 		dhr.outOpts[dhcp.OptionVendorClassIdentifier] = []byte("AAPLBSDPC")
 		dhr.outOpts[dhcp.OptionVendorSpecificInformation] = opts.ToOption()
 		dhr.Reply(dhr.buildReply(dhcp.ACK, srvID, req))
 	case bsdpSelect:
-		if !bytes.Equal(opts.srvID, srvID) {
+		if !bytes.Equal(opts.srvID, srvID) || !dhr.offerNetBoot {
 			return "Ignored"
 		}
 		// Add a notation in the applicable Lease, send it back.
