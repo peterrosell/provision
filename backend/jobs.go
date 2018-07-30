@@ -422,22 +422,10 @@ func (j *Job) Validate() {
 	objs := j.rt.d
 	tasks := objs("tasks")
 	stages := objs("stages")
-	machines := objs("machines")
-
-	var m *Machine
-	if om := machines.Find(j.Machine.String()); om == nil {
-		j.Errorf("Machine %s does not exist", j.Machine.String())
-	} else {
-		m = AsMachine(om)
-		if j.oldState != j.State {
-			switch j.State {
-			case "failed":
-				m.Runnable = false
-				_, e2 := j.rt.Save(m)
-				j.AddError(e2)
-			case "created":
-				j.StartTime = time.Now()
-			}
+	if j.oldState != j.State {
+		switch j.State {
+		case "created":
+			j.StartTime = time.Now()
 		}
 	}
 	if !strings.Contains(j.Task, ":") {
