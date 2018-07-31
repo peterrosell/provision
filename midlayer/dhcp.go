@@ -373,6 +373,9 @@ func (dhr *DhcpRequest) buildReply(
 	// THis also appears to be required to make UEFI boot mode work properly on
 	// the Dell T320.
 	for _, opt := range dhr.outOpts.SelectOrderOrAll(order) {
+		if dhr.offerNetBoot {
+			dhr.Debugf("OfferBoot: opt %d: %v", opt.Code, opt.Value)
+		}
 		switch opt.Code {
 		case dhcp.OptionBootFileName:
 			fileName = opt.Value

@@ -367,7 +367,7 @@ func (b *BootEnv) Validate() {
 			seenIPXE = true
 		}
 	}
-	if !(seenPxeLinux || seenIPXE) && b.Kernel != "" {
+	if !(seenPxeLinux || seenIPXE) && b.Kernel != "" && b.Meta["KernelIsLoader"] != "true" {
 		b.Errorf("bootenv: Missing elilo or pxelinux template")
 	}
 	// Make sure the ISO for this bootenv has been exploded locally so that

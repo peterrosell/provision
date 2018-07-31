@@ -67,6 +67,8 @@ imports:
   version: dec09d789f3dba190787f8b4454c7d3c936fed9e
 - name: github.com/gorilla/websocket
   version: a69d9f6de432e2c6b296a947d8a5ee88f68522cf
+- name: github.com/groob/plist
+  version: dd56909aee38bb3860460e3e1ca8a4270c04ce15
 - name: github.com/hashicorp/consul
   version: a0b974620c29ec9372fa0583b4f1d0f0315062c8
   subpackages:

@@ -158,24 +158,31 @@ func (o *bsdpOpts) ToOption() []byte {
 	return res
 }
 
-func (dhr *DhcpRequest) bsdpFromBootenv() *models.BsdpBootOption {
+func (dhr *DhcpRequest) bsdpFromBootenv(serverID net.IP) *models.BsdpBootOption {
 	img := &models.BsdpBootOption{}
 	img.UnmarshalText([]byte("netboot:diags::1:dr-boot:ipxe.efi:"))
 	if dhr.machine != nil && dhr.bootEnv != nil && dhr.bootEnv.Meta["AppleBsdp"] != "" {
 		img.UnmarshalText([]byte(dhr.bootEnv.Meta["AppleBsdp"]))
 		img.Booter = dhr.bootEnv.PathFor(path.Join("i386", img.Booter))
 		if img.RootPath != "" {
+			if sel, ok := dhr.pktOpts[dhcp.OptionParameterRequestList]; ok {
+				sel = append(sel, byte(dhcp.OptionRootPath))
+				dhr.pktOpts[dhcp.OptionParameterRequestList] = sel
+			} else {
+				dhr.pktOpts[dhcp.OptionParameterRequestList] = []byte{43, 60, byte(dhcp.OptionRootPath)}
+			}
 			img.RootPath = fmt.Sprintf("http://%s:%d%s",
-				dhr.srcAddr.String(),
+				serverID,
 				dhr.handler.bk.StaticPort,
 				dhr.bootEnv.PathFor(img.RootPath))
 		}
 	}
+	dhr.Debugf("BSDPBootOption: %#v", img)
 	return img
 }
 
 func (dhr *DhcpRequest) buildAppleBsdpOptions(serverID net.IP) {
-	img := dhr.bsdpFromBootenv()
+	img := dhr.bsdpFromBootenv(serverID)
 	dhr.outOpts = dhcp.Options{}
 	dhr.outOpts[dhcp.OptionTFTPServerName] = []byte(dhr.nextServer.String())
 	dhr.outOpts[dhcp.OptionVendorClassIdentifier] = []byte("AAPLBSDPC")
@@ -213,7 +220,7 @@ func (dhr *DhcpRequest) ServeAppleBSDP() string {
 	switch opts.msgtype {
 	case bsdpList:
 		// Construct a list ACK, send it back.
-		opts.defaultImage = (*bsdpBootOption)(dhr.bsdpFromBootenv())
+		opts.defaultImage = (*bsdpBootOption)(dhr.bsdpFromBootenv(srvID))
 		opts.imageList = BsdpBootOptions{opts.defaultImage}
 		opts.srvID = srvID
 		dhr.outOpts = dhcp.Options{}
