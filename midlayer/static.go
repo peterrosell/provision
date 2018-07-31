@@ -15,7 +15,7 @@ func ServeStatic(listenAt string, responder http.Handler, logger logger.Logger, 
 		return nil, err
 	}
 
-	p := utils.NewPromGin(logger, "static", nil)
+	p := utils.NewPromGin(logger, "drp_static", nil)
 	r := p.Handler(responder)
 
 	svr := &http.Server{

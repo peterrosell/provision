@@ -176,9 +176,9 @@ type DhcpMetrics struct {
 }
 
 func NewDhcpMetrics(l logger.Logger, binlOnly bool) *DhcpMetrics {
-	ss := "dhcp"
+	ss := "drp_dhcp"
 	if binlOnly {
-		ss = "binl"
+		ss = "drp_binl"
 	}
 	mets := []*utils.Metric{
 		{

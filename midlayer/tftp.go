@@ -41,7 +41,7 @@ func ServeTftp(listen string, responder func(string, net.IP) (io.Reader, error),
 		return nil, err
 	}
 
-	p := utils.NewPromGin(log, "tftp", nil)
+	p := utils.NewPromGin(log, "drp_tftp", nil)
 
 	readHandler := func(filename string, rf io.ReaderFrom) error {
 		start := time.Now()

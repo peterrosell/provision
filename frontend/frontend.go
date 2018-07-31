@@ -409,7 +409,7 @@ func NewFrontend(
 	mgmtApi := gin.New()
 	mgmtApi.Use(gzip.Gzip(gzip.BestSpeed))
 
-	p := utils.NewPromGin(lgr, "api", nil)
+	p := utils.NewPromGin(lgr, "drp_api", nil)
 	p.ReqCntURLLabelMappingFn = compressUrl
 	mgmtApi.Use(p.HandlerGinFunc())
 
