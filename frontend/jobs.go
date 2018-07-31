@@ -628,7 +628,7 @@ func (f *Frontend) InitJobApi() {
 			if !f.assureSimpleAuth(c, "jobs", "actions", j.AuthKey()) {
 				return
 			}
-			rt.Errorf("Rendering jobs for %s os %s", uuid, c.Query("os"))
+			rt.Debugf("Rendering jobs for %s os %s", uuid, c.Query("os"))
 			actions, err := j.RenderActions(rt, c.Query("os"))
 			if err != nil {
 				be, ok := err.(*models.Error)
