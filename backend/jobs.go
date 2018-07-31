@@ -541,7 +541,7 @@ func (j *Job) RenderActions(rt *RequestTracker, targetOS string) (models.JobActi
 		if !na.ValidForOS(targetOS) {
 			continue
 		}
-		rr, err1 := r.write(addr)
+		rr, err1 := writePanicSafe(r.name, r.write, addr)
 		if err1 != nil {
 			err.Code = http.StatusUnprocessableEntity
 			err.AddError(err1)
@@ -557,6 +557,17 @@ func (j *Job) RenderActions(rt *RequestTracker, targetOS string) (models.JobActi
 		}
 	}
 	return actions, err.HasError()
+}
+
+func writePanicSafe(name string, writefn func(net.IP) (io.Reader, error), addr net.IP) (rr io.Reader, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("Failed to render: %s Check containing objects\n%v", name, r)
+			rr = nil
+		}
+	}()
+	rr, err = writefn(addr)
+	return
 }
 
 func (j *Job) AfterDelete() {
