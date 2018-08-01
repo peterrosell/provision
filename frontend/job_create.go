@@ -73,7 +73,7 @@ func realCreateJob(rt *backend.RequestTracker, b *backend.Job) (int, error) {
 		taskToRun = 0
 	}
 	if cj.CurrentIndex != m.CurrentTask &&
-		!(cj.State == "complete" || cj.State == "failed") {
+		!(cj.State == "finshed" || cj.State == "failed") {
 		rt.Infof("Machine %s Task list has been reset to %d, failing current job %s",
 			cj.Machine.String(),
 			m.CurrentTask,
