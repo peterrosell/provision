@@ -23,6 +23,19 @@ case $1 in
         make util/elf2efi64
         make CROSS_COMPILE=aarch64-linux-gnu- -s -j8 bin-arm64-efi/snponly.efi
         cp bin-arm64-efi/snponly.efi ../bin/ipxe-arm64.efi;;
+    "bios_iso")
+        if [[ ! -f /src/embed.ipxe ]]; then
+            echo "Missing /src/embed.ipxe"
+            echo "Please make sure it is mounted in the Docker container by passing the arguments:"
+            echo
+            echo "-v /path/to/your.ipxe:/src/embed.ipxe:ro"
+            echo
+            echo "as part of the Docker command line."
+            exit 1
+        fi
+        cp /src/undionly/*.h config/local/
+        make -s -j8 bin/ipxe.iso EMBED=/src/embed.ipxe
+        cp bin/ipxe.iso ../bin/ipxe.iso;;
     *)
         echo "Cannot compile ipxe for $1"
         exit 1;;
