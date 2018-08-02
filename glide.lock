@@ -1,6 +1,8 @@
 hash: 26e1fa1043f1e952e09a9043e3b82a48680bdc78ee7e8c0e907d1a3380590152
-updated: 2018-06-25T18:10:34.778606-05:00
+updated: 2018-08-02T16:51:44.649917-05:00
 imports:
+- name: github.com/aokoli/goutils
+  version: 3391d3790d23d03408670993e957e8f408993c34
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
   subpackages:
@@ -61,6 +63,8 @@ imports:
   - tls
   - x509
   - x509/pkix
+- name: github.com/google/uuid
+  version: dec09d789f3dba190787f8b4454c7d3c936fed9e
 - name: github.com/gorilla/websocket
   version: a69d9f6de432e2c6b296a947d8a5ee88f68522cf
 - name: github.com/hashicorp/consul
@@ -75,6 +79,10 @@ imports:
   version: b84a66cc5575994cb672940d244a2404141688c0
   subpackages:
   - coordinate
+- name: github.com/huandu/xstrings
+  version: 7bb0250b58e5c15670406e6f93ffda43281305b1
+- name: github.com/imdario/mergo
+  version: 9f23e2d6bd2a77f959b2bf6acdbefd708a83a4a4
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/jessevdk/go-flags
@@ -85,6 +93,10 @@ imports:
   version: 4de04cc59d6e4223583ec8117238e4d57e8b176d
   subpackages:
   - conn
+- name: github.com/Masterminds/semver
+  version: 4ca3c04fd4fe2a472df0d7121b1b9462f2214c43
+- name: github.com/Masterminds/sprig
+  version: 77bb58b7f5e10889a1195c21b9e7a96ee166f199
 - name: github.com/mattn/go-isatty
   version: fc9e8d8ef48496124e79ae0df75490096eccf6fe
 - name: github.com/matttproud/golang_protobuf_extensions
@@ -203,7 +215,7 @@ imports:
 - name: gopkg.in/go-playground/validator.v8
   version: 5f1438d3fca68893a817e4a66806cea46a9e4ebf
 - name: gopkg.in/mgo.v2
-  version: 3f83fa5005286a7fe593b055f0d7771a7dce4655
+  version: 9856a29383ce1c59f308dd1cf0363a79b5bef6b5
   repo: https://github.com/go-mgo/mgo
   subpackages:
   - bson

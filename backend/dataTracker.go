@@ -828,7 +828,7 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 				tmpl := AsTemplate(thing)
 				fmt.Fprintf(buf, `{{define "%s"}}%s{{end}}`, tmpl.ID, tmpl.Contents)
 			}
-			root, err := template.New("").Parse(buf.String())
+			root, err := template.New("").Funcs(models.DrpSafeFuncMap()).Parse(buf.String())
 			if err != nil {
 				hard.Errorf("Unable to load root templates: %v", err)
 				return

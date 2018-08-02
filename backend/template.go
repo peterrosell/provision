@@ -113,7 +113,7 @@ func (t *Template) Validate() {
 	t.rt.dt.tmplMux.Lock()
 	root := t.rt.dt.rootTemplate
 	if root == nil {
-		root = template.New("")
+		root = template.New("").Funcs(models.DrpSafeFuncMap())
 	} else {
 		root, err = root.Clone()
 	}
@@ -190,7 +190,7 @@ func (t *Template) BeforeDelete() error {
 		}
 		fmt.Fprintf(buf, `{{define "%s"}}%s{{end}}\n`, tmpl.ID, tmpl.Contents)
 	}
-	root, err := template.New("").Parse(buf.String())
+	root, err := template.New("").Funcs(models.DrpSafeFuncMap()).Parse(buf.String())
 	if err != nil {
 		e.Errorf("Template %s still required: %v", t.ID, err)
 		return e

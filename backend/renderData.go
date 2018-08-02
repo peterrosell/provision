@@ -308,7 +308,7 @@ func (rd *Repo) UrlFor(component string) string {
 // for either preseed/kickstarts with parts for either
 // the core install part or updates/additional repos.
 func (rd *Repo) Install() (string, error) {
-	tmpl := template.New("installLines").Option("missingkey=error")
+	tmpl := template.New("installLines").Funcs(models.DrpSafeFuncMap()).Option("missingkey=error")
 	var err error
 	switch rd.renderStyle() {
 	case "yum":
@@ -349,7 +349,7 @@ d-i apt-setup/security_path string {{.R.ParseUrl "path" .URL}}
 // configuration file in the package manager specific format
 // based upon the repo definitions.
 func (rd *Repo) Lines() (string, error) {
-	tmpl := template.New("installLines").Option("missingkey=error")
+	tmpl := template.New("installLines").Funcs(models.DrpSafeFuncMap()).Option("missingkey=error")
 	var err error
 	switch rd.renderStyle() {
 	case "yum":

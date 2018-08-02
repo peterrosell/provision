@@ -12,6 +12,7 @@ import (
 
 const (
 	tmplIncluded = `Machine: 
+{{ "hello!" | upper | repeat 5 }}
 Name = {{.Machine.Name}}
 HexAddress = {{.Machine.HexAddress}}
 ShortName = {{.Machine.ShortName}}
@@ -36,6 +37,7 @@ ProvisionerURL = {{.ProvisionerURL}}
 ApiURL = {{.ApiURL}}
 BootParams = {{.BootParams}}`
 	tmplDefaultRenderedWithoutFred = `Machine: 
+HELLO!HELLO!HELLO!HELLO!HELLO!
 Name = Test Name
 HexAddress = C0A87C0B
 ShortName = Test Name
@@ -52,6 +54,7 @@ ProvisionerURL = http://127.0.0.1:8091
 ApiURL = https://127.0.0.1:8092
 BootParams = default`
 	tmplDefaultRenderedWithFred = `Machine: 
+HELLO!HELLO!HELLO!HELLO!HELLO!
 Name = Test Name
 HexAddress = C0A87C0B
 ShortName = Test Name
@@ -74,6 +77,11 @@ ProvisionerURL = http://127.0.0.1:8091
 ApiURL = https://127.0.0.1:8092
 BootParams = default`
 	tmplNothing = `Nothing`
+
+	tmplFail1 = `{{ ago }}`
+	tmplFail2 = `{{ now }}`
+	tmplFail3 = `{{ env }}`
+	tmplFail4 = `{{ expandenv }}`
 )
 
 func TestRenderData(t *testing.T) {
@@ -149,6 +157,10 @@ func TestRenderData(t *testing.T) {
 		{"Create included template", rt.Create, &models.Template{ID: "included", Contents: tmplIncluded}, true},
 		{"Create default template", rt.Create, &models.Template{ID: "default", Contents: tmplDefault}, true},
 		{"Create nothing template", rt.Create, &models.Template{ID: "nothing", Contents: tmplNothing}, true},
+		{"Fail to render fail1", rt.Create, &models.Template{ID: "fail1", Contents: tmplFail1}, false},
+		{"Fail to render fail2", rt.Create, &models.Template{ID: "fail2", Contents: tmplFail2}, false},
+		{"Fail to render fail3", rt.Create, &models.Template{ID: "fail3", Contents: tmplFail3}, false},
+		{"Fail to render fail4", rt.Create, &models.Template{ID: "fail4", Contents: tmplFail4}, false},
 		{"Create default bootenv", rt.Create, defaultBootEnv, true},
 		{"Create nothing bootenv", rt.Create, nothingBootEnv, true},
 		{"Create bad bootenv", rt.Create, badBootEnv, true},
