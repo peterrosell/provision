@@ -29,6 +29,7 @@ func TestExtractAssets(t *testing.T) {
 		"bootia64.efi",
 		"esxi.0",
 		"ipxe.efi",
+		"ipxe.lkrn",
 		"ipxe.pxe",
 		"ldlinux.c32",
 		"libutil.c32",

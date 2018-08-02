@@ -8,4 +8,5 @@ COPY build_ipxe.sh /bin/build_ipxe.sh
 COPY undionly /src/undionly
 COPY snponly_x86_64 /src/snponly_x86_64
 COPY snponly_arm64 /src/snponly_arm64
+COPY lkrn /src/lkrn
 #ENTRYPOINT /bin/build_ipxe.sh

@@ -81,6 +81,7 @@ func ExtractAssets(replaceRoot, fileRoot string) error {
 		"chain.c32":      "",
 		"esxi.0":         "",
 		"ipxe.efi":       "",
+		"ipxe.lkrn":      "",
 		"ipxe-arm64.efi": "",
 		"ipxe.pxe":       "",
 		"ldlinux.c32":    "",

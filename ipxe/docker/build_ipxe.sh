@@ -6,6 +6,10 @@ cd /src/ipxe/src
 git clean -f -x -d
 rm config/local/* || :
 case $1 in
+    "lkrn")
+        cp /src/lkrn/*.h config/local/
+        make -s -j8 bin/ipxe.lkrn
+        cp bin/ipxe.lkrn ../bin/ipxe.lkrn;;
     "undionly")
         cp /src/undionly/*.h config/local/
         make -s -j8 bin/undionly.kpxe
