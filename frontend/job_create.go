@@ -19,6 +19,18 @@ func saveMachineAndNoJob(rt *backend.RequestTracker, m *backend.Machine) (int, e
 	return http.StatusNoContent, nil
 }
 
+func saveMachineAndCreateJob(rt *backend.RequestTracker, m *backend.Machine, b *backend.Job) (int, error) {
+	if _, err := rt.Create(b); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	m.CurrentJob = b.Uuid
+	rt.Infof("Created job %s for task %s at index %d", b.UUID(), b.Task, b.CurrentIndex)
+	if _, err := rt.Update(m); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	return http.StatusCreated, nil
+}
+
 // This function is sort of hairy, and I do not apoligize for it.
 func realCreateJob(rt *backend.RequestTracker, b *backend.Job) (int, error) {
 	mo := rt.Find("machines", b.Machine.String())
@@ -60,6 +72,9 @@ func realCreateJob(rt *backend.RequestTracker, b *backend.Job) (int, error) {
 			// Someone deleted the Job record for our current job.  Fake it instead.
 			cj.Uuid = m.CurrentJob
 		}
+		rt.Infof("Machine %s Current Job %s couldn't be found. Using fake failed job.",
+			cj.Machine.String(),
+			cj.Uuid.String())
 	}
 	if m.CurrentTask >= len(m.Tasks) {
 		// Nothing to do here.
@@ -68,15 +83,12 @@ func realCreateJob(rt *backend.RequestTracker, b *backend.Job) (int, error) {
 	// Figure out what task to run next.  This is almost always the same as the current
 	// task
 	taskToRun := m.CurrentTask
-	if taskToRun == -1 {
-		// Someone reset the task list, and we are not in workflow mode.
-		taskToRun = 0
-	}
 	if cj.CurrentIndex != m.CurrentTask &&
-		!(cj.State == "finshed" || cj.State == "failed") {
-		rt.Infof("Machine %s Task list has been reset to %d, failing current job %s",
+		!(cj.State == "finished" || cj.State == "failed") {
+		rt.Infof("Machine %s Task list has been reset to %d from %d, failing current job %s",
 			cj.Machine.String(),
 			m.CurrentTask,
+			cj.CurrentIndex,
 			cj.Uuid.String())
 		cj.State = "failed"
 		cj.ExitState = "failed"
@@ -108,6 +120,10 @@ func realCreateJob(rt *backend.RequestTracker, b *backend.Job) (int, error) {
 			}
 			return err.Code, err
 		}
+	}
+	if taskToRun == -1 {
+		// Someone reset the task list, and we are not in workflow mode.
+		taskToRun = 0
 	}
 	// Exit early if we finished all our tasks
 	if taskToRun >= len(m.Tasks) {
@@ -165,6 +181,8 @@ func realCreateJob(rt *backend.RequestTracker, b *backend.Job) (int, error) {
 		}
 		nb.Log(rt, bytes.NewBufferString(logMsg))
 		cj = nb
+		m.CurrentJob = nb.Uuid
+		break
 	}
 	m.CurrentTask = taskToRun
 	if m.BootEnv != oldM.BootEnv || m.Stage != oldM.Stage {
@@ -180,7 +198,6 @@ func realCreateJob(rt *backend.RequestTracker, b *backend.Job) (int, error) {
 		return saveMachineAndNoJob(rt, m)
 	}
 	// Create our shiny new task.
-	thisTask := m.Tasks[m.CurrentTask]
 	b.StartTime = time.Now()
 	b.Previous = cj.Uuid
 	b.Machine = m.Uuid
@@ -189,15 +206,7 @@ func realCreateJob(rt *backend.RequestTracker, b *backend.Job) (int, error) {
 	b.Workflow = m.Workflow
 	b.CurrentIndex = m.CurrentTask
 	b.NextIndex = m.CurrentTask + 1
-	b.Task = thisTask
+	b.Task = m.Tasks[m.CurrentTask]
 	b.State = "created"
-	if _, err := rt.Create(b); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	m.CurrentJob = b.Uuid
-	rt.Infof("Created job %s for task %s at index %d", b.UUID(), b.Task, b.CurrentIndex)
-	if _, err := rt.Update(m); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return http.StatusCreated, nil
+	return saveMachineAndCreateJob(rt, m, b)
 }
