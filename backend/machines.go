@@ -931,9 +931,9 @@ func (n *Machine) OnChange(oldThing store.KeySaver) error {
 			n.CurrentTask > -1 {
 			e.Errorf("Cannot change task list and current task at the same time")
 		}
-	}
-	if n.CurrentTask == -1 && n.Runnable {
-		n.resetCurrentTask(oldm, e)
+		if n.CurrentTask == -1 && n.Runnable {
+			n.resetCurrentTask(oldm, e)
+		}
 	}
 	return e.HasError()
 }
