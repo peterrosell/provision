@@ -408,7 +408,7 @@ func (j *Job) Validate() {
 		j.Errorf("Job %s does not have a Previous job", j.UUID())
 	}
 	if j.State == "finished" || j.State == "failed" {
-		if j.oldState != j.State {
+		if j.oldState != j.State && j.EndTime.IsZero() {
 			j.EndTime = time.Now()
 		}
 		j.SetValid()
