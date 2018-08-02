@@ -228,7 +228,7 @@ func (b *BootEnv) genRoot(commonRoot *template.Template, e models.ErrorAdder) *t
 		}
 	}
 	if b.BootParams != "" {
-		tmpl, err := template.New("machine").Parse(b.BootParams)
+		tmpl, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(b.BootParams)
 		if err != nil {
 			e.Errorf("Error compiling boot parameter template: %v", err)
 		} else {
