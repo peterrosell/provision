@@ -1,16 +1,18 @@
-hash: 26e1fa1043f1e952e09a9043e3b82a48680bdc78ee7e8c0e907d1a3380590152
-updated: 2018-08-02T16:51:44.649917-05:00
+hash: fead7446b0d4bb4471f9882d64cb70a7ebf194bf35f5a942d3f1047431ffcf2a
+updated: 2018-08-03T09:20:24.668457024-05:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
+- name: github.com/armon/go-metrics
+  version: 3c58d8115a78a6879e5df75ae900846768d36895
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
   subpackages:
   - quantile
 - name: github.com/boltdb/bolt
-  version: 2f1ce7a837dcb8da3ec595b1dac9d0632f0f99e8
+  version: fd01fc79c553a8e99d512a07e8e0c63d4a3ccfc5
 - name: github.com/cloudflare/cfssl
-  version: 1e95aeec7a46dc043d099d6fb887a31cdb0a5999
+  version: 80d5f5b4cfe73f5a918b851f03d468eb28499131
   subpackages:
   - crypto/pkcs7
   - csr
@@ -19,11 +21,11 @@ imports:
   - helpers/derhelpers
   - log
 - name: github.com/cpuguy83/go-md2man
-  version: 48d8747a2ca13185e7cc8efe6e9fc196a83f71a5
+  version: 691ee98543af2f262f35fbb54bdd42f00b9b9cc5
   subpackages:
   - md2man
 - name: github.com/dgrijalva/jwt-go
-  version: a539ee1a749a2b895533f979515ac7e6e0f5b650
+  version: 0b96aaa707760d6ab28d9b9d1913ff5993328bae
 - name: github.com/digitalrebar/logger
   version: b457bcdb411872e1b719c8d9e1bf3cd669e480ee
 - name: github.com/digitalrebar/pinger
@@ -31,33 +33,33 @@ imports:
 - name: github.com/digitalrebar/store
   version: 99f93481f3bc95a3fdbcd028778c0ddc9d826932
 - name: github.com/elazarl/go-bindata-assetfs
-  version: 30f82fa23fd844bd5bb1e5f216db87fd77b5eb43
+  version: 38087fe4dafb822e541b3f7955075cc1c30bd294
 - name: github.com/elithrar/simple-scrypt
-  version: 2325946f714c95de4a6088202c402fbdfa64163b
+  version: 28a8a89db0e1201d1b61b8ee90597fd7d035c0d5
 - name: github.com/fsnotify/fsnotify
   version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
 - name: github.com/ghodss/yaml
-  version: 0ca9ea5df5451ffdf184b4428c902747c2c11cd7
+  version: e9ed3c6dfb39bb1a32197cb10d527906fe4da4b6
 - name: github.com/gin-contrib/cors
-  version: 88488351b0df049b2d3d65cab583c6bed894abb2
+  version: 6f0a820f94bea07359ec77c26855ca8cf6762739
 - name: github.com/gin-contrib/gzip
   version: 4fbfcc6122759afed2efbc762c4c41164a403951
 - name: github.com/gin-contrib/location
-  version: 3e26b9c1187f298ae3669e41d1b696d256113f66
+  version: 911ef8299476b8a48e11ec0c26f2a0810345b690
 - name: github.com/gin-contrib/sse
   version: 22d885f9ecc78bf4ee5d72b937e4bbcdc58e8cae
 - name: github.com/gin-gonic/gin
-  version: 8902826696c1dad024e1c8ba4f903aa61a25c839
+  version: 220e8d34538f5dfdcc299dda79bf83cf52e633f6
   subpackages:
   - binding
   - json
   - render
 - name: github.com/golang/protobuf
-  version: ab9f9a6dab164b7d1246e0e688b0ab7b94d8553e
+  version: f5983d50c82d70eaa88c17080245cc871558081f
   subpackages:
   - proto
 - name: github.com/google/certificate-transparency-go
-  version: 7c2badeed51ed57d7316a12fb96b2aa372ad9242
+  version: 3d9ebf85105f5bf34dc43cc6d821475356aa1645
   subpackages:
   - asn1
   - tls
@@ -66,17 +68,25 @@ imports:
 - name: github.com/google/uuid
   version: dec09d789f3dba190787f8b4454c7d3c936fed9e
 - name: github.com/gorilla/websocket
-  version: a69d9f6de432e2c6b296a947d8a5ee88f68522cf
+  version: 5ed622c449da6d44c3c8329331ff47a9e5844f71
+- name: github.com/groob/plist
+  version: dd56909aee38bb3860460e3e1ca8a4270c04ce15
 - name: github.com/hashicorp/consul
-  version: a0b974620c29ec9372fa0583b4f1d0f0315062c8
+  version: 0a25e11aa8268d11aa26ae8c908c308f88024487
   subpackages:
   - api
 - name: github.com/hashicorp/go-cleanhttp
-  version: 3573b8b52aa7b37b9358d966a898feb387f62437
+  version: d5fe4b57a186c716b0e00b8c301cbd9b4182694d
+- name: github.com/hashicorp/go-immutable-radix
+  version: 7f3cd4390caab3250a57f30efdb2a65dd7649ecf
 - name: github.com/hashicorp/go-rootcerts
   version: 6bb64b370b90e7ef1fa532be9e591a81c3493e00
+- name: github.com/hashicorp/golang-lru
+  version: 0fb14efe8c47ae851c0034ed7a448854d3d34cf3
+  subpackages:
+  - simplelru
 - name: github.com/hashicorp/serf
-  version: b84a66cc5575994cb672940d244a2404141688c0
+  version: 984a73625de3138f44deb38d00878fab39eb6447
   subpackages:
   - coordinate
 - name: github.com/huandu/xstrings
@@ -86,11 +96,21 @@ imports:
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/jessevdk/go-flags
-  version: 6cf8f02b4ae8ba723ddc64dcfd403e530c06d927
+  version: 1c38ed7ad0cc3d9e66649ac398c30e45f395c4eb
 - name: github.com/json-iterator/go
-  version: 2dc0031b26575ddf5dab09ab7795105a05575473
+  version: 10a568c51178f31e41456cedaac7838e0f4f7360
+- name: github.com/klauspost/compress
+  version: b50017755d442260d792c34c7c43216d9ba7ffc7
+  subpackages:
+  - flate
+- name: github.com/klauspost/cpuid
+  version: e7e905edc00ea8827e58662220139109efea09db
+- name: github.com/klauspost/crc32
+  version: bab58d77464aa9cf4e84200c3276da0831fe0c03
+- name: github.com/klauspost/pgzip
+  version: c4ad2ed77aece7b3270909769a30a3fcea262a66
 - name: github.com/krolaw/dhcp4
-  version: 4de04cc59d6e4223583ec8117238e4d57e8b176d
+  version: 054a8f9eea918b9693b7b24ab027788e5a6182da
   subpackages:
   - conn
 - name: github.com/Masterminds/semver
@@ -98,37 +118,43 @@ imports:
 - name: github.com/Masterminds/sprig
   version: 77bb58b7f5e10889a1195c21b9e7a96ee166f199
 - name: github.com/mattn/go-isatty
-  version: fc9e8d8ef48496124e79ae0df75490096eccf6fe
+  version: 6ca4dbf54d38eea1a992b3c722a76a5d1c4cb25c
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
   - pbutil
 - name: github.com/mitchellh/go-homedir
-  version: b8bc1bf767474819792c23f32d8286a45736f1c6
+  version: 58046073cbffe2f25d425fe1331102f55cf719de
+- name: github.com/mitchellh/mapstructure
+  version: f15292f7a699fcc1a38a80977f80a046874ba8ac
+- name: github.com/modern-go/concurrent
+  version: bacd9c7ef1dd9b15be4a9909b8ac7a4e313eec94
+- name: github.com/modern-go/reflect2
+  version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/pborman/uuid
-  version: e790cca94e6cc75c7064b1332e63811d4aae1a53
+  version: c65b2f87fee37d1c7854c9164a450713c28d50cd
 - name: github.com/pin/tftp
   version: d715325c1fc1f1a22a8272a60dc6783a5ab093ba
   subpackages:
   - netascii
 - name: github.com/prometheus/client_golang
-  version: faf4ec335fe01ae5a6a0eaa34a5a9333bfbd1a30
+  version: bcbbc08eb2ddff3af83bbf11e7ec13b4fd730b6e
   subpackages:
   - prometheus
   - prometheus/promhttp
   - promhttp
 - name: github.com/prometheus/client_model
-  version: 99fa1f4be8e564e8a6b613da7fa6f46c9edafc6c
+  version: 5c3871d89910bfb32f5fcab2aa4b9ec68e65a99f
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 7600349dcfe1abd18d72d3a1770870d9800a7801
+  version: c7de2306084e37d54b8be01f3541a8464345e9a5
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/prometheus/procfs
-  version: 7d6f385de8bea29190f15ba9931442a0eaef9af7
+  version: 05ee40e3a273f7245e8777337fc7b46e533a9a92
   subpackages:
   - internal/util
   - nfs
@@ -143,15 +169,15 @@ imports:
 - name: github.com/russross/blackfriday
   version: 11635eb403ff09dbc3a6b5a007ab5ab09151c229
 - name: github.com/spf13/cobra
-  version: ef82de70bb3f60c65fb8eebacbb2d122ef517385
+  version: 7c4570c3ebeb8129a1f7456d0908a8b676b6f9f1
   subpackages:
   - doc
 - name: github.com/spf13/pflag
-  version: 583c0c0531f06d5278b7d917446061adc344b5cd
+  version: 3ebe029320b2676d667ae88da602a5f854788a8a
 - name: github.com/tylerb/graceful
   version: d72b0151351a13d0421b763b88f791469c4f5dc7
 - name: github.com/ugorji/go
-  version: 8c0409fcbb70099c748d71f714529204975f6c3f
+  version: 0e8ffdb13c81bdb48fa80a963cf83f10a0f5a496
   subpackages:
   - codec
 - name: github.com/VictorLowther/godmi
@@ -161,19 +187,19 @@ imports:
   subpackages:
   - utils
 - name: github.com/vishvananda/netlink
-  version: f67b75edbf5e3bb7dfe70bb788610693a71be3d1
+  version: 9eab41933428cf408de91867a0719b5aa8686efa
   subpackages:
   - nl
 - name: github.com/vishvananda/netns
-  version: be1fbeda19366dea804f00efff2dd73a1642fdcc
+  version: 13995c7128ccc8e51e9a6bd2b551020a27180abd
 - name: github.com/xeipuuv/gojsonpointer
-  version: 6fe8760cad3569743d51ddbb243b26f8456742dc
+  version: 4e3ac2762d5f479393488629ee9370b50873b3a6
 - name: github.com/xeipuuv/gojsonreference
-  version: e02fc20de94c78484cd5ffb007f8af96be030a45
+  version: bd5ef7bd5415a7ac448318e64f11a24cd21e594b
 - name: github.com/xeipuuv/gojsonschema
-  version: 0c8571ac0ce161a5feb57375a9cdf148c98c0f70
+  version: b84684d0e066369f2a7a8a525f3080909ed4ea6b
 - name: golang.org/x/crypto
-  version: a49355c7e3f8fe157a85be2f77e6e269a0f89602
+  version: 56440b844dfe139a8ac053f4ecac0b20b79058f4
   subpackages:
   - cryptobyte
   - cryptobyte/asn1
@@ -194,7 +220,7 @@ imports:
   - scrypt
   - sign
 - name: golang.org/x/net
-  version: 66aacef3dd8a676686c7ae3716979581e8b03c47
+  version: f4c29de78a2a91c00474a2e689954305c350adf9
   subpackages:
   - bpf
   - context
@@ -205,11 +231,11 @@ imports:
   - ipv6
   - route
 - name: golang.org/x/sys
-  version: 2d6f6f883a06fc0d5f4b14a81e4c28705ea64c15
+  version: 0ffbfd41fbef8ffcf9b62b0b0aa3a5873ed7a4fe
   subpackages:
   - unix
 - name: golang.org/x/tools
-  version: 48418e5732e1b1e2a10207c8007a5f959e422f20
+  version: 82515cf89538b3e8a206be74377c01dee420b76d
   subpackages:
   - cover
 - name: gopkg.in/go-playground/validator.v8

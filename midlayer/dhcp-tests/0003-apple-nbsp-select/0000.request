@@ -1,0 +1,9 @@
+proto:dhcp4 iface:eno2 ifaddr:192.168.124.10:68 lport:67
+op:0x01 htype:0x01 hlen:0x06 hops:0x00 xid:0x00000000 secs:0x0000 flags:0x0000
+ci:192.168.124.10  yi:0.0.0.0 si:0.0.0.0 gi:0.0.0.0 ch:52:54:be:1e:00:00
+option:code:043 val:"1,1,1,2,2,1,1"
+option:code:053 val:"inf"
+option:code:055 val:"43,60"
+option:code:057 val:"1500"
+option:code:060 val:"AAPLBSDPC/i386/MacPro6,1"
+option:code:061 val:"1,0,62,225,205,114,239"

@@ -109,8 +109,12 @@ func TestDHCPCases(t *testing.T) {
 			if request.lPort == 4011 {
 				request.handler = binlHandler
 			}
-			r, _, _ := request.Process()
-			response := request.PrintOutgoing(r)
+			request.Process()
+			responses := make([]string, len(request.replies))
+			for i := range request.replies {
+				responses[i] = request.PrintOutgoing(request.replies[i])
+			}
+			response := strings.Join(responses, "\n")
 			if err := ioutil.WriteFile(actualResp, []byte(response), 0644); err != nil {
 				t.Errorf("FAIL: %s: Error saving response: %v", testPart, err)
 				break

@@ -2,8 +2,8 @@ FROM ubuntu:latest
 MAINTAINER Rackn Team <eng@rackn.com>
 ENV DEBIAN_FRONTEND noninteractive
 ENV LC_ALL=C
-RUN apt-get -y update
-RUN apt-get -y --no-install-recommends install build-essential gcc-aarch64-linux-gnu git liblzma-dev
+RUN apt-get -y update && \
+    apt-get -y --no-install-recommends install build-essential gcc-aarch64-linux-gnu git liblzma-dev genisoimage
 COPY build_ipxe.sh /bin/build_ipxe.sh
 COPY undionly /src/undionly
 COPY snponly_x86_64 /src/snponly_x86_64
