@@ -575,6 +575,28 @@ func (s *Subnet) Validate() {
 	s.SetAvailable()
 }
 
+func (s *Subnet) BeforeDelete() error {
+	e := &models.Error{Code: 409, Type: StillInUseError, Model: s.Prefix(), Key: s.Key()}
+	for _, i := range s.rt.stores("reservations").Items() {
+		res := AsReservation(i)
+		if res.Scoped && s.InSubnetRange(res.Addr) {
+			e.Errorf("Reservation %s is scoped for Subnet %s, cannot delete.", res.Addr.String(), s.Name)
+		}
+	}
+	return e.HasError()
+}
+
+func (s *Subnet) OnChange(old store.KeySaver) error {
+	oldSub := AsSubnet(old)
+	if s.Strategy != oldSub.Strategy {
+		s.Errorf("Strategy cannot change")
+	}
+	if s.Subnet.Subnet != oldSub.Subnet.Subnet {
+		s.Errorf("Subnet range cannot change")
+	}
+	return s.MakeError(422, ValidationError, s)
+}
+
 // BeforeSave returns an error if the subnet is not valid.  This
 // is used by the store system to avoid saving bad Subnets.
 func (s *Subnet) BeforeSave() error {
@@ -608,7 +630,7 @@ var subnetLockMap = map[string][]string{
 	"create":  {"subnets"},
 	"update":  {"subnets"},
 	"patch":   {"subnets"},
-	"delete":  {"subnets"},
+	"delete":  {"subnets", "reservations"},
 	"actions": {"subnets", "profiles", "params"},
 }
 

@@ -172,6 +172,9 @@ func (r *Reservation) OnChange(oldThing store.KeySaver) error {
 	if r.Strategy != old.Strategy {
 		r.Errorf("Strategy cannot change")
 	}
+	if r.Scoped != old.Scoped {
+		r.Errorf("Scoped cannot change")
+	}
 	return r.MakeError(422, ValidationError, r)
 }
 
@@ -180,6 +183,7 @@ func (r *Reservation) OnChange(oldThing store.KeySaver) error {
 // aborts the create.
 func (r *Reservation) OnCreate() error {
 	subnets := AsSubnets(r.rt.stores("subnets").Items())
+	subnetFound := false
 	for i := range subnets {
 		if !subnets[i].subnet().Contains(r.Addr) {
 			continue
@@ -187,7 +191,11 @@ func (r *Reservation) OnCreate() error {
 		if !subnets[i].InSubnetRange(r.Addr) {
 			r.Errorf("Address %s is a network or broadcast address for subnet %s", r.Addr.String(), subnets[i].Name)
 		}
+		subnetFound = true
 		break
+	}
+	if r.Scoped && !subnetFound {
+		r.Errorf("Address %s is not in a defined Subnet, and Scoped is true.", r.Addr.String())
 	}
 	return r.MakeError(422, ValidationError, r)
 }
