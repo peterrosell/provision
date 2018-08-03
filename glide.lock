@@ -1,5 +1,5 @@
-hash: 26e1fa1043f1e952e09a9043e3b82a48680bdc78ee7e8c0e907d1a3380590152
-updated: 2018-08-02T16:51:44.649917-05:00
+hash: fead7446b0d4bb4471f9882d64cb70a7ebf194bf35f5a942d3f1047431ffcf2a
+updated: 2018-08-03T09:20:24.668457024-05:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -55,11 +55,11 @@ imports:
   - json
   - render
 - name: github.com/golang/protobuf
-  version: 560bdb64431cc123098c2db67f16053a923a0688
+  version: f5983d50c82d70eaa88c17080245cc871558081f
   subpackages:
   - proto
 - name: github.com/google/certificate-transparency-go
-  version: 95d2963cb3a78dbb9ad900f5025b192ecaa4bebb
+  version: 3d9ebf85105f5bf34dc43cc6d821475356aa1645
   subpackages:
   - asn1
   - tls
@@ -72,7 +72,7 @@ imports:
 - name: github.com/groob/plist
   version: dd56909aee38bb3860460e3e1ca8a4270c04ce15
 - name: github.com/hashicorp/consul
-  version: ec755b4ba7cdbee391b51750238250948774e741
+  version: 0a25e11aa8268d11aa26ae8c908c308f88024487
   subpackages:
   - api
 - name: github.com/hashicorp/go-cleanhttp
@@ -100,7 +100,7 @@ imports:
 - name: github.com/json-iterator/go
   version: 10a568c51178f31e41456cedaac7838e0f4f7360
 - name: github.com/klauspost/compress
-  version: b939724e787a27c0005cabe3f78e7ed7987ac74f
+  version: b50017755d442260d792c34c7c43216d9ba7ffc7
   subpackages:
   - flate
 - name: github.com/klauspost/cpuid
@@ -110,7 +110,7 @@ imports:
 - name: github.com/klauspost/pgzip
   version: c4ad2ed77aece7b3270909769a30a3fcea262a66
 - name: github.com/krolaw/dhcp4
-  version: 4abfceffa76a675ea43d133e49aad64c821d32bf
+  version: 054a8f9eea918b9693b7b24ab027788e5a6182da
   subpackages:
   - conn
 - name: github.com/Masterminds/semver
@@ -124,7 +124,7 @@ imports:
   subpackages:
   - pbutil
 - name: github.com/mitchellh/go-homedir
-  version: 3864e76763d94a6df2f9960b16a20a33da9f9a66
+  version: 58046073cbffe2f25d425fe1331102f55cf719de
 - name: github.com/mitchellh/mapstructure
   version: f15292f7a699fcc1a38a80977f80a046874ba8ac
 - name: github.com/modern-go/concurrent
@@ -148,7 +148,7 @@ imports:
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 7600349dcfe1abd18d72d3a1770870d9800a7801
+  version: c7de2306084e37d54b8be01f3541a8464345e9a5
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
@@ -199,7 +199,7 @@ imports:
 - name: github.com/xeipuuv/gojsonschema
   version: b84684d0e066369f2a7a8a525f3080909ed4ea6b
 - name: golang.org/x/crypto
-  version: c126467f60eb25f8f27e5a981f32a87e3965053f
+  version: 56440b844dfe139a8ac053f4ecac0b20b79058f4
   subpackages:
   - cryptobyte
   - cryptobyte/asn1
@@ -220,7 +220,7 @@ imports:
   - scrypt
   - sign
 - name: golang.org/x/net
-  version: 49c15d80dfbc983ea25246ee959d970efe09ec09
+  version: f4c29de78a2a91c00474a2e689954305c350adf9
   subpackages:
   - bpf
   - context
@@ -231,11 +231,11 @@ imports:
   - ipv6
   - route
 - name: golang.org/x/sys
-  version: bd9dbc187b6e1dacfdd2722a87e83093c2d7bd6e
+  version: 0ffbfd41fbef8ffcf9b62b0b0aa3a5873ed7a4fe
   subpackages:
   - unix
 - name: golang.org/x/tools
-  version: 33176b2029f9538e722efa4a005f7aa00cf60010
+  version: 82515cf89538b3e8a206be74377c01dee420b76d
   subpackages:
   - cover
 - name: gopkg.in/go-playground/validator.v8
