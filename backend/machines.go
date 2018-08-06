@@ -449,7 +449,7 @@ func (n *Machine) Validate() {
 	validateMaybeZeroIP4(n, n.Address)
 	n.AddError(index.CheckUnique(n, n.rt.stores("machines").Items()))
 	// Validate IP address on system
-	if !n.Address.IsUnspecified() {
+	if len(n.Address) > 0 && !n.Address.IsUnspecified() {
 		others, err := index.All(
 			index.Sort(n.Indexes()["Address"]),
 			index.Eq(n.Address.String()))(n.rt.Index("machines"))
@@ -469,7 +469,7 @@ func (n *Machine) Validate() {
 		n.Errorf("Unable to get key: %v", err)
 	}
 	n.SetValid()
-	if n.Address != nil && !n.Address.IsUnspecified() {
+	if len(n.Address) > 0 && !n.Address.IsUnspecified() {
 		others, err := index.All(
 			index.Sort(n.Indexes()["Address"]),
 			index.Eq(n.Address.String()))(n.rt.Index("machines"))

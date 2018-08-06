@@ -240,7 +240,7 @@ func (dhr *DhcpRequest) checkMachine(l *backend.Lease, s *backend.Subnet) {
 			dhr.offerNetBoot = false
 			return
 		}
-		if l.Addr.IsUnspecified() {
+		if len(l.Addr) == 0 || l.Addr.IsUnspecified() {
 			// We do not have a valid lease for this mac address.
 			// DO not let it boot.
 			dhr.offerNetBoot = false

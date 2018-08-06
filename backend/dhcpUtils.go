@@ -270,9 +270,11 @@ func findViaSubnet(rt *RequestTracker,
 	for _, i := range currLeases.Items() {
 		currLease := AsLease(i)
 		// While we are iterating over leases, see if we run across a candidate.
-		if (req.IsUnspecified() || currLease.Addr.Equal(req)) &&
-			currLease.Strategy == strategy && currLease.Token == token {
-			lease = currLease
+		if currLease.Strategy == strategy &&
+			currLease.Token == token {
+			if len(req) == 0 || req.IsUnspecified() || currLease.Addr.Equal(req) {
+				lease = currLease
+			}
 		}
 		// Leases get a false in the map.
 		usedAddrs[currLease.Key()] = currLease
@@ -283,12 +285,6 @@ func findViaSubnet(rt *RequestTracker,
 		if currRes.Strategy == strategy &&
 			currRes.Token == token {
 			if lease != nil {
-				if currRes.Addr.Equal(lease.Addr) {
-					rt.Switch("dhcp").
-						Infof("Subnet %s: handing out reserved lease for %s to %s:%s",
-							subnet.Name, lease.Addr, strategy, token)
-					return
-				}
 				// If we have a matching reservation and we found a similar candidate,
 				// then the candidate cannot possibly be a lease we should use,
 				// because it would have been refreshed by the reservation code.

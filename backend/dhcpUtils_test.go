@@ -148,6 +148,18 @@ type ltc struct {
 	expected        net.IP
 }
 
+func dumpLeases(t *testing.T, rt *RequestTracker) {
+	rt.Do(func(d Stores) {
+		li := d("leases")
+		if li != nil {
+			for _, l := range li.Items() {
+				lease := AsLease(l)
+				t.Logf("Lease %s", lease.Lease.String())
+			}
+		}
+	})
+}
+
 func (l *ltc) test(t *testing.T, rt *RequestTracker) {
 	t.Helper()
 	res, _, _, _ := FindOrCreateLease(rt, l.strategy, l.token, l.req, []net.IP{l.via})
@@ -268,5 +280,6 @@ func TestDHCPCreateSubnet(t *testing.T) {
 	}
 	for _, obj := range expireTests {
 		obj.test(t, rt)
+		dumpLeases(t, rt)
 	}
 }
