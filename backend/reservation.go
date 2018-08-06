@@ -175,6 +175,9 @@ func (r *Reservation) OnChange(oldThing store.KeySaver) error {
 	if r.Scoped != old.Scoped {
 		r.Errorf("Scoped cannot change")
 	}
+	if r.Subnet != old.Subnet {
+		r.Errorf("Subnet cannot change")
+	}
 	return r.MakeError(422, ValidationError, r)
 }
 
@@ -183,7 +186,7 @@ func (r *Reservation) OnChange(oldThing store.KeySaver) error {
 // aborts the create.
 func (r *Reservation) OnCreate() error {
 	subnets := AsSubnets(r.rt.stores("subnets").Items())
-	subnetFound := false
+	var subnet *Subnet
 	for i := range subnets {
 		if !subnets[i].subnet().Contains(r.Addr) {
 			continue
@@ -191,11 +194,37 @@ func (r *Reservation) OnCreate() error {
 		if !subnets[i].InSubnetRange(r.Addr) {
 			r.Errorf("Address %s is a network or broadcast address for subnet %s", r.Addr.String(), subnets[i].Name)
 		}
-		subnetFound = true
+		subnet = subnets[i]
+		if r.Scoped {
+			r.Subnet = subnet.Name
+		}
 		break
 	}
-	if r.Scoped && !subnetFound {
+	if r.Scoped && subnet == nil {
 		r.Errorf("Address %s is not in a defined Subnet, and Scoped is true.", r.Addr.String())
+		return r.MakeError(422, ValidationError, r)
+	}
+	reservations := AsReservations(r.rt.stores("reservations").Items())
+	for i := range reservations {
+		if reservations[i].Addr.Equal(r.Addr) {
+			continue
+		}
+		if !(reservations[i].Token == r.Token &&
+			reservations[i].Strategy == r.Strategy) {
+			continue
+		}
+		if !r.Scoped {
+			r.Errorf("Reservation %s already has Strategy %s: Token %s", reservations[i].Key(), r.Strategy, r.Token)
+			continue
+		}
+		if !reservations[i].Scoped {
+			r.Errorf("Unscoped reservation %s already has Strategy %s: Token %s", reservations[i].Key(), r.Strategy, r.Token)
+			continue
+		}
+		if subnet.subnet().Contains(reservations[i].Addr) {
+			r.Errorf("Reservation %s in subnet %s already has Strategy %s: Token %s",
+				reservations[i].Key(), subnet.Name, r.Strategy, r.Token)
+		}
 	}
 	return r.MakeError(422, ValidationError, r)
 }
@@ -213,17 +242,7 @@ func (r *Reservation) Validate() {
 	if r.Strategy == "" {
 		r.Errorf("Reservation Strategy cannot be empty!")
 	}
-	reservations := AsReservations(r.rt.stores("reservations").Items())
-	for i := range reservations {
-		if reservations[i].Addr.Equal(r.Addr) {
-			continue
-		}
-		if reservations[i].Token == r.Token &&
-			reservations[i].Strategy == r.Strategy {
-			r.Errorf("Reservation %s alreay has Strategy %s: Token %s", reservations[i].Key(), r.Strategy, r.Token)
-			break
-		}
-	}
+
 	r.AddError(index.CheckUnique(r, r.rt.stores("reservations").Items()))
 	r.SetValid()
 	r.SetAvailable()
