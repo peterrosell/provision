@@ -27,7 +27,7 @@ import (
 
 type PluginController struct {
 	logger.Logger
-	lock               sync.Mutex
+	lock               *sync.Mutex
 	AvailableProviders map[string]*models.PluginProvider
 	runningPlugins     map[string]*RunningPlugin
 	dt                 *backend.DataTracker
@@ -41,7 +41,8 @@ type PluginController struct {
 }
 
 func (pc *PluginController) Request(locks ...string) *backend.RequestTracker {
-	return pc.dt.Request(pc.Logger, locks...)
+	res := pc.dt.Request(pc.Logger, locks...)
+	return res
 }
 
 /*
@@ -56,7 +57,9 @@ func InitPluginController(pluginDir, pluginCommDir string, dt *backend.DataTrack
 		dt:                 dt,
 		publishers:         pubs,
 		AvailableProviders: make(map[string]*models.PluginProvider, 0),
-		runningPlugins:     make(map[string]*RunningPlugin, 0)}
+		runningPlugins:     make(map[string]*RunningPlugin, 0),
+		lock:               &sync.Mutex{},
+	}
 
 	pc.Actions = NewActions()
 	pubs.Add(pc)

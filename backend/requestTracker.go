@@ -59,6 +59,7 @@ func (rt *RequestTracker) PublishEvent(e *models.Event) error {
 	if rt.dt.publishers == nil {
 		return nil
 	}
+	e.Principal = rt.Principal()
 	if rt.d == nil {
 		return rt.dt.publishers.publishEvent(e)
 	}
@@ -76,7 +77,7 @@ func (rt *RequestTracker) Publish(prefix, action, key string, ref interface{}) e
 		return nil
 	}
 	if rt.d == nil {
-		return rt.dt.publishers.publish(prefix, action, key, ref)
+		return rt.dt.publishers.publish(prefix, action, key, rt.Principal(), ref)
 
 	}
 	var toSend interface{}
@@ -86,7 +87,7 @@ func (rt *RequestTracker) Publish(prefix, action, key string, ref interface{}) e
 	default:
 		toSend = ref
 	}
-	rt.toPublish = append(rt.toPublish, func() { rt.dt.publishers.publish(prefix, action, key, toSend) })
+	rt.toPublish = append(rt.toPublish, func() { rt.dt.publishers.publish(prefix, action, key, rt.Principal(), toSend) })
 	return nil
 }
 
@@ -139,7 +140,7 @@ func (rt *RequestTracker) Find(prefix, key string) models.Model {
 func (rt *RequestTracker) FindByIndex(prefix string, idx index.Maker, key string) models.Model {
 	items, err := index.Sort(idx)(rt.Index(prefix))
 	if err != nil {
-		rt.Errorf("Error sorting %s: %c", prefix, err)
+		rt.Errorf("Error sorting %s: %v", prefix, err)
 		return nil
 	}
 	return items.Find(key)

@@ -51,7 +51,7 @@ func ServeTftp(listen string, responder func(string, net.IP) (io.Reader, error),
 
 		var local net.IP
 		var remote net.UDPAddr
-		l := log.Fork()
+		l := log.Fork().SetPrincipal("tftp")
 		t, outgoing := rf.(tftp.OutgoingTransfer)
 		rpi, haveRPI := rf.(tftp.RequestPacketInfo)
 		if outgoing && haveRPI {

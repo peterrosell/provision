@@ -498,9 +498,8 @@ func (s *Subnet) LeaseTimeFor(ip net.IP) time.Duration {
 		return time.Duration(s.ActiveLeaseTime) * time.Second
 	} else if s.InSubnetRange(ip) {
 		return time.Duration(s.ReservedLeaseTime) * time.Second
-	} else {
-		return 0
 	}
+	return 0
 }
 
 // AsSubnet converts a models.Model into a *Subnet.

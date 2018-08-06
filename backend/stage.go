@@ -14,10 +14,9 @@ import (
 type Stage struct {
 	*models.Stage
 	validate
-	renderers       renderers
-	stageParamsTmpl *template.Template
-	rootTemplate    *template.Template
-	tmplMux         sync.Mutex
+	renderers    renderers
+	rootTemplate *template.Template
+	tmplMux      sync.Mutex
 }
 
 // SetReadOnly interface function to set the ReadOnly flag.

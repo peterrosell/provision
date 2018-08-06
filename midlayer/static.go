@@ -26,7 +26,7 @@ func ServeStatic(listenAt string, responder http.Handler, logger logger.Logger, 
 				laddr, lok := n.LocalAddr().(*net.TCPAddr)
 				raddr, rok := n.RemoteAddr().(*net.TCPAddr)
 				if lok && rok {
-					l := logger.Fork()
+					l := logger.Fork().SetPrincipal("http")
 					backend.AddToCache(l, laddr.IP, raddr.IP)
 				}
 			}

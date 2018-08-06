@@ -113,7 +113,8 @@ func (dhr *DhcpRequest) binlOnly() bool {
 // Request is a shorthand function for creating a RequestTracker to
 // interact with the backend.
 func (dhr *DhcpRequest) Request(locks ...string) *backend.RequestTracker {
-	return dhr.handler.bk.Request(dhr.Logger, locks...)
+	res := dhr.handler.bk.Request(dhr.Logger, locks...)
+	return res
 }
 
 // listenAddrs gets all of the addresses the DHCP server is currently
@@ -834,7 +835,7 @@ type DhcpHandler struct {
 
 func (h *DhcpHandler) NewRequest(buf []byte, cm *ipv4.ControlMessage, srcAddr net.Addr, start time.Time) *DhcpRequest {
 	res := &DhcpRequest{}
-	res.Logger = h.Logger.Fork()
+	res.Logger = h.Logger.Fork().SetPrincipal("dhcp")
 	res.srcAddr = srcAddr
 	res.defaultIP = net.ParseIP(h.bk.OurAddress)
 	res.cm = cm
