@@ -426,7 +426,7 @@ func (s *Subnet) New() store.KeySaver {
 	return res
 }
 
-func (s *Subnet) sBounds() (func(string) bool, func(string) bool) {
+func (s *Subnet) sbounds() (net.IP, net.IP) {
 	sub := s.subnet()
 	first := big.NewInt(0)
 	mask := big.NewInt(0)
@@ -438,15 +438,18 @@ func (s *Subnet) sBounds() (func(string) bool, func(string) bool) {
 	}
 	mask.SetBytes(notBits)
 	last.Or(first, mask)
-	firstBytes := first.Bytes()
-	lastBytes := last.Bytes()
+	return net.IP(first.Bytes()), net.IP(last.Bytes())
+}
+
+func (s *Subnet) sBounds() (func(string) bool, func(string) bool) {
+	lb, ub := s.sbounds()
 	// first "address" in this range is the network address, which cannot be handed out.
 	lower := func(key string) bool {
-		return key > models.Hexaddr(net.IP(firstBytes))
+		return key > models.Hexaddr(lb)
 	}
 	// last "address" in this range is the broadcast address, which also cannot be handed out.
 	upper := func(key string) bool {
-		return key >= models.Hexaddr(net.IP(lastBytes))
+		return key >= models.Hexaddr(ub)
 	}
 	return lower, upper
 }
@@ -460,12 +463,12 @@ func (s *Subnet) aBounds() (func(string) bool, func(string) bool) {
 		}
 }
 
-func (s *Subnet) idxABounds() (index.Test, index.Test) {
+func (s *Subnet) idxBounds(l, u net.IP) (index.Test, index.Test) {
 	return func(o models.Model) bool {
-			return o.Key() >= models.Hexaddr(s.ActiveStart)
+			return o.Key() >= models.Hexaddr(l)
 		},
 		func(o models.Model) bool {
-			return o.Key() > models.Hexaddr(s.ActiveStart)
+			return o.Key() > models.Hexaddr(u)
 		}
 }
 
