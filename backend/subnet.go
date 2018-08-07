@@ -426,7 +426,7 @@ func (s *Subnet) New() store.KeySaver {
 	return res
 }
 
-func (s *Subnet) sBounds() (func(string) bool, func(string) bool) {
+func (s *Subnet) sbounds() (net.IP, net.IP) {
 	sub := s.subnet()
 	first := big.NewInt(0)
 	mask := big.NewInt(0)
@@ -438,15 +438,18 @@ func (s *Subnet) sBounds() (func(string) bool, func(string) bool) {
 	}
 	mask.SetBytes(notBits)
 	last.Or(first, mask)
-	firstBytes := first.Bytes()
-	lastBytes := last.Bytes()
+	return net.IP(first.Bytes()), net.IP(last.Bytes())
+}
+
+func (s *Subnet) sBounds() (func(string) bool, func(string) bool) {
+	lb, ub := s.sbounds()
 	// first "address" in this range is the network address, which cannot be handed out.
 	lower := func(key string) bool {
-		return key > models.Hexaddr(net.IP(firstBytes))
+		return key > models.Hexaddr(lb)
 	}
 	// last "address" in this range is the broadcast address, which also cannot be handed out.
 	upper := func(key string) bool {
-		return key >= models.Hexaddr(net.IP(lastBytes))
+		return key >= models.Hexaddr(ub)
 	}
 	return lower, upper
 }
@@ -460,12 +463,12 @@ func (s *Subnet) aBounds() (func(string) bool, func(string) bool) {
 		}
 }
 
-func (s *Subnet) idxABounds() (index.Test, index.Test) {
+func (s *Subnet) idxBounds(l, u net.IP) (index.Test, index.Test) {
 	return func(o models.Model) bool {
-			return o.Key() >= models.Hexaddr(s.ActiveStart)
+			return o.Key() >= models.Hexaddr(l)
 		},
 		func(o models.Model) bool {
-			return o.Key() > models.Hexaddr(s.ActiveStart)
+			return o.Key() > models.Hexaddr(u)
 		}
 }
 
@@ -575,6 +578,28 @@ func (s *Subnet) Validate() {
 	s.SetAvailable()
 }
 
+func (s *Subnet) BeforeDelete() error {
+	e := &models.Error{Code: 409, Type: StillInUseError, Model: s.Prefix(), Key: s.Key()}
+	for _, i := range s.rt.stores("reservations").Items() {
+		res := AsReservation(i)
+		if res.Scoped && s.InSubnetRange(res.Addr) {
+			e.Errorf("Reservation %s is scoped for Subnet %s, cannot delete.", res.Addr.String(), s.Name)
+		}
+	}
+	return e.HasError()
+}
+
+func (s *Subnet) OnChange(old store.KeySaver) error {
+	oldSub := AsSubnet(old)
+	if s.Strategy != oldSub.Strategy {
+		s.Errorf("Strategy cannot change")
+	}
+	if s.Subnet.Subnet != oldSub.Subnet.Subnet {
+		s.Errorf("Subnet range cannot change")
+	}
+	return s.MakeError(422, ValidationError, s)
+}
+
 // BeforeSave returns an error if the subnet is not valid.  This
 // is used by the store system to avoid saving bad Subnets.
 func (s *Subnet) BeforeSave() error {
@@ -608,7 +633,7 @@ var subnetLockMap = map[string][]string{
 	"create":  {"subnets"},
 	"update":  {"subnets"},
 	"patch":   {"subnets"},
-	"delete":  {"subnets"},
+	"delete":  {"subnets", "reservations"},
 	"actions": {"subnets", "profiles", "params"},
 }
 
