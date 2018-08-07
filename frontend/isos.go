@@ -160,7 +160,7 @@ func (f *Frontend) InitIsoApi() {
 			if !f.assureSimpleAuth(c, "isos", "post", c.Param(`name`)) {
 				return
 			}
-			uploadIso(c, f.FileRoot, c.Param(`name`), f.dt)
+			uploadIso(f, c, f.FileRoot, c.Param(`name`), f.dt)
 		})
 	// swagger:route DELETE /isos/{path} Isos deleteIso
 	//
@@ -208,7 +208,7 @@ func reloadBootenvsForIso(rt *backend.RequestTracker, name string) {
 	})
 }
 
-func uploadIso(c *gin.Context, fileRoot, name string, dt *backend.DataTracker) {
+func uploadIso(f *Frontend, c *gin.Context, fileRoot, name string, dt *backend.DataTracker) {
 	res := &models.Error{
 		Type:  c.Request.Method,
 		Model: "isos",
@@ -304,7 +304,7 @@ func uploadIso(c *gin.Context, fileRoot, name string, dt *backend.DataTracker) {
 	os.Remove(isoName)
 	os.Rename(isoTmpName, isoName)
 	ref := &backend.BootEnv{}
-	rt := dt.Request(dt.Logger.Fork().Switch("bootenv"), ref.Locks("update")...)
+	rt := f.rt(c, ref.Locks("update")...)
 	go reloadBootenvsForIso(rt, name)
 	c.JSON(http.StatusCreated, &models.BlobInfo{Path: name, Size: copied})
 }

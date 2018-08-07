@@ -241,7 +241,8 @@ func (b *BootEnv) genRoot(commonRoot *template.Template, e models.ErrorAdder) *t
 	return res
 }
 
-func explodeISO(p *DataTracker, envName, osName, fileRoot, isoFile, dest, shaSum string) {
+func explodeISO(rt *RequestTracker, envName, osName, fileRoot, isoFile, dest, shaSum string) {
+	p := rt.dt
 	explodeMux.Lock()
 	defer explodeMux.Unlock()
 	res := &models.Error{
@@ -279,8 +280,8 @@ func explodeISO(p *DataTracker, envName, osName, fileRoot, isoFile, dest, shaSum
 		}
 	}
 	ref := &BootEnv{}
-	rt := p.Request(p.Logger, ref.Locks("update")...)
-	rt.Do(func(d Stores) {
+	drt := p.Request(rt.Logger, ref.Locks("update")...)
+	drt.Do(func(d Stores) {
 		b := d("bootenvs").Find(envName)
 		if b == nil {
 			// Bootenv vanished
@@ -295,7 +296,7 @@ func explodeISO(p *DataTracker, envName, osName, fileRoot, isoFile, dest, shaSum
 			ref.AddError(res)
 		} else {
 			ref.Available = true
-			rt.Save(ref)
+			drt.Save(ref)
 		}
 	})
 }
@@ -332,7 +333,7 @@ func (b *BootEnv) explodeIso() {
 		return
 	}
 	b.Errorf("Exploding ISO: %s", b.rt.dt.reportPath(isoPath))
-	go explodeISO(b.rt.dt, b.Name, b.OS.Name, b.rt.dt.FileRoot, isoPath, b.localPathFor(""), b.OS.IsoSha256)
+	go explodeISO(b.rt, b.Name, b.OS.Name, b.rt.dt.FileRoot, isoPath, b.localPathFor(""), b.OS.IsoSha256)
 }
 
 func (b *BootEnv) Validate() {

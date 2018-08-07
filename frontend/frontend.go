@@ -96,6 +96,16 @@ func (a *authBlob) tenantSelect(scope string) index.Filter {
 	return index.Select(test)
 }
 
+func (a *authBlob) Principal() string {
+	if a.currentUser != nil {
+		return "user:" + a.currentUser.Name
+	}
+	if a.currentMachine != nil {
+		return "runner:" + a.currentMachine.Key()
+	}
+	return "unknown"
+}
+
 func (a *authBlob) Find(rt *backend.RequestTracker, prefix, key string) models.Model {
 	res := rt.Find(prefix, key)
 	if res == nil {
@@ -271,7 +281,6 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 			}
 			user := fe.authSource.GetUser(fe, c, string(userpass[0]))
 			if user == nil {
-				fe.l(c).Warnf("No such user: %s", string(userpass[0]))
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
@@ -321,6 +330,11 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 			}
 		})
 		if valid {
+			if k, ok := c.Get("logger"); ok {
+				logger := k.(logger.Logger)
+				logger.SetPrincipal(auth.Principal())
+				c.Set("logger", logger)
+			}
 			c.Set("DRP-AUTH", auth)
 			c.Next()
 			return

@@ -312,7 +312,7 @@ func (pc *PluginController) startPlugin(mp models.Model) {
 			pc.pluginCommDir,
 			plugin.Name,
 			plugin.Provider,
-			pc.Logger.Fork().SetService(plugin.Name),
+			pc.Logger.Fork().SetService(plugin.Name).SetPrincipal(plugin.Provider),
 			rt.ApiURL(net.ParseIP("0.0.0.0")),
 			rt.FileURL(net.ParseIP("0.0.0.0")),
 			token,

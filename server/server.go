@@ -391,7 +391,11 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 
 	if !cOpts.DisableTftpServer {
 		localLogger.Printf("Starting TFTP server")
-		svc, err := midlayer.ServeTftp(fmt.Sprintf(":%d", cOpts.TftpPort), dt.FS.TftpResponder(), buf.Log("static"), publishers)
+		svc, err := midlayer.ServeTftp(
+			fmt.Sprintf(":%d", cOpts.TftpPort),
+			dt.FS.TftpResponder(),
+			buf.Log("static"),
+			publishers)
 		if err != nil {
 			return fmt.Sprintf("Error starting TFTP server: %v", err)
 		}
@@ -400,7 +404,10 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 
 	if !cOpts.DisableProvisioner {
 		localLogger.Printf("Starting static file server")
-		svc, err := midlayer.ServeStatic(fmt.Sprintf(":%d", cOpts.StaticPort), dt.FS, buf.Log("static"), publishers)
+		svc, err := midlayer.ServeStatic(
+			fmt.Sprintf(":%d", cOpts.StaticPort),
+			dt.FS, buf.Log("static"),
+			publishers)
 		if err != nil {
 			return fmt.Sprintf("Error starting static file server: %v", err)
 		}
@@ -409,7 +416,14 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 
 	if !cOpts.DisableDHCP {
 		localLogger.Printf("Starting DHCP server")
-		svc, err := midlayer.StartDhcpHandler(dt, buf.Log("dhcp"), cOpts.DhcpInterfaces, cOpts.DhcpPort, publishers, false, cOpts.FakePinger)
+		svc, err := midlayer.StartDhcpHandler(
+			dt,
+			buf.Log("dhcp"),
+			cOpts.DhcpInterfaces,
+			cOpts.DhcpPort,
+			publishers,
+			false,
+			cOpts.FakePinger)
 		if err != nil {
 			return fmt.Sprintf("Error starting DHCP server: %v", err)
 		}
@@ -417,7 +431,14 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 
 		if !cOpts.DisableBINL {
 			localLogger.Printf("Starting PXE/BINL server")
-			svc, err := midlayer.StartDhcpHandler(dt, buf.Log("dhcp"), cOpts.DhcpInterfaces, cOpts.BinlPort, publishers, true, cOpts.FakePinger)
+			svc, err := midlayer.StartDhcpHandler(
+				dt,
+				buf.Log("dhcp"),
+				cOpts.DhcpInterfaces,
+				cOpts.BinlPort,
+				publishers,
+				true,
+				cOpts.FakePinger)
 			if err != nil {
 				return fmt.Sprintf("Error starting PXE/BINL server: %v", err)
 			}
@@ -456,7 +477,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		Handler:   fe.MgmtApi,
 		ConnState: func(n net.Conn, cs http.ConnState) {
 			if cs == http.StateActive {
-				l := fe.Logger.Fork()
+				l := fe.Logger.Fork().SetPrincipal("cacher")
 				laddr, lok := n.LocalAddr().(*net.TCPAddr)
 				raddr, rok := n.RemoteAddr().(*net.TCPAddr)
 				if lok && rok && cs == http.StateActive {
