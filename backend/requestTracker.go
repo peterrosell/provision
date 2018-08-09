@@ -77,7 +77,7 @@ func (rt *RequestTracker) Publish(prefix, action, key string, ref interface{}) e
 		return nil
 	}
 	if rt.d == nil {
-		return rt.dt.publishers.publish(prefix, action, key, rt.Principal(), ref)
+		return rt.dt.publishers.Publish(prefix, action, key, rt.Principal(), ref)
 
 	}
 	var toSend interface{}
@@ -87,7 +87,7 @@ func (rt *RequestTracker) Publish(prefix, action, key string, ref interface{}) e
 	default:
 		toSend = ref
 	}
-	rt.toPublish = append(rt.toPublish, func() { rt.dt.publishers.publish(prefix, action, key, rt.Principal(), toSend) })
+	rt.toPublish = append(rt.toPublish, func() { rt.dt.publishers.Publish(prefix, action, key, rt.Principal(), toSend) })
 	return nil
 }
 
