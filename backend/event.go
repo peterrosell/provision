@@ -23,7 +23,7 @@ type Publisher interface {
 
 func SetLogPublisher(l *logger.Buffer, pubs *Publishers) {
 	l.SetPublisher(func(l *logger.Line) {
-		pubs.publish("log", l.Level.String(), l.Service, l.Principal, l)
+		pubs.Publish("log", l.Level.String(), l.Service, l.Principal, l)
 	})
 }
 
@@ -69,7 +69,7 @@ func (p *Publishers) List() []Publisher {
 	return newPubs
 }
 
-func (p *Publishers) publish(t, a, k, pr string, o interface{}) error {
+func (p *Publishers) Publish(t, a, k, pr string, o interface{}) error {
 	e := &models.Event{
 		Time:      time.Now(),
 		Type:      t,

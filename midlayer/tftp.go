@@ -112,6 +112,19 @@ func ServeTftp(listen string, responder func(string, net.IP) (io.Reader, error),
 		p.Observe("resSz", float64(size))
 		p.CounterWithLabelValues("reqCnt", status, method, remote.IP.String(), filename).Inc()
 
+		data := &fileData{
+			Start:        start,
+			End:          time.Now(),
+			RequestSize:  0,
+			ResponseSize: size,
+			Status:       status,
+			Requestor:    remote.IP.String(),
+			Url:          filename,
+		}
+		if err := pubs.Publish("tftp", "serve", filename, "tftp", data); err != nil {
+			l.Errorf("Failed to publish event: %v", err)
+		}
+
 		return err
 	}
 	svr := tftp.NewServer(readHandler, nil)
