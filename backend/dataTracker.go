@@ -826,7 +826,17 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 			buf := &bytes.Buffer{}
 			for _, thing := range p.objs[prefix].Items() {
 				tmpl := AsTemplate(thing)
+
+				// This could be annoying performance wise because we double compile
+				// all templates.  For now, we are ignoring the potential perf issue.
+				_, err := template.New("").Funcs(models.DrpSafeFuncMap()).Parse(tmpl.Contents)
+				if err != nil {
+					hard.Errorf("Unable to load %s templates: %v", tmpl.ID, err)
+				}
 				fmt.Fprintf(buf, `{{define "%s"}}%s{{end}}`, tmpl.ID, tmpl.Contents)
+			}
+			if hard.ContainsError() {
+				return
 			}
 			root, err := template.New("").Funcs(models.DrpSafeFuncMap()).Parse(buf.String())
 			if err != nil {
