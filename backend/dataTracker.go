@@ -41,6 +41,7 @@ is at https://www.syslinux.org/wiki/index.php?title=Comboot/chain.c32`,
 			Description: "The boot environment you should use to have unknown machines boot off their local hard drive",
 			OS: models.OsInfo{
 				Name: `ignore`,
+				Arch: []string{"any"},
 			},
 			OnlyUnknown: true,
 			Templates: []models.TemplateInfo{
@@ -77,6 +78,7 @@ chain tftp://{{.ProvisionerAddress}}/${netX/ip}.ipxe || exit
 			Description: "The boot environment you should use to have known machines boot off their local hard drive",
 			OS: models.OsInfo{
 				Name: "local",
+				Arch: []string{"any"},
 			},
 			OnlyUnknown: false,
 			Templates: []models.TemplateInfo{
@@ -574,6 +576,7 @@ type DataTracker struct {
 	LogRoot             string
 	OurAddress          string
 	ForceOurAddress     bool
+	Cleanup             bool
 	StaticPort, ApiPort int
 	FS                  *FileSystem
 	Backend, Secrets    store.Store
@@ -777,7 +780,28 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 			// Make fake index to keep others from failing and exploding.
 			res := make([]models.Model, 0)
 			p.objs[prefix].Index = *index.Create(res)
-			hard.Errorf("Unable to load %s: %v", prefix, err)
+			hard.Errorf("Unable to load store %s: %v", prefix, err)
+			storeKeys, err := bk.Keys()
+			if err != nil {
+				hard.Errorf("Error fetching keys for %s: %v", prefix, err)
+				hard.Errorf("This is likely not recoverable, and you should restore from backup.")
+				continue
+			}
+			if !p.Cleanup {
+				hard.Errorf("If you do not have a backup for the writable datastore, restore it now.")
+				hard.Errorf("Otherwise, run with --cleanup to erase corrupted data.")
+			}
+			sort.Strings(storeKeys)
+			for _, key := range storeKeys {
+				if err := bk.Load(key, obj); err != nil {
+					if !p.Cleanup {
+						hard.Errorf("Store %s item %s failed to load: %v", prefix, key, err)
+					} else {
+						hard.Errorf("Removing corrupt item %s:%s", prefix, key)
+						bk.Remove(key)
+					}
+				}
+			}
 			continue
 		}
 		res := make([]models.Model, len(storeObjs))

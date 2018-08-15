@@ -116,8 +116,9 @@ type ProgOpts struct {
 	HaAddress   string `long:"ha-address" description:"IP address to advertise as our HA address" default:""`
 	HaInterface string `long:"ha-interface" description:"Interface to put the VIP on for HA" default:""`
 
-	PromGwUrl    string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:""`
-	PromInterval int    `long:"prometheus-interval" description:"Duration in seconds to push metrics" default:"5"`
+	PromGwUrl      string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:""`
+	PromInterval   int    `long:"prometheus-interval" description:"Duration in seconds to push metrics" default:"5"`
+	CleanupCorrupt bool   `long:"cleanup" description:"Clean up corrupted writable data.  Only use when directed."`
 }
 
 func mkdir(d string) error {
@@ -340,6 +341,9 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		},
 		publishers)
 
+	if cOpts.CleanupCorrupt {
+		dt.Cleanup = true
+	}
 	// No DrpId - get a mac address
 	if cOpts.DrpId == "" {
 		intfs, err := net.Interfaces()
