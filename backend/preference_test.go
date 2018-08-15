@@ -3,7 +3,7 @@ package backend
 import "testing"
 
 func TestPreferences(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger, "preferences", "bootenvs", "stages", "workflows")
 	rt.Do(func(d Stores) {
 		if be, err := dt.Pref("defaultBootEnv"); err != nil {

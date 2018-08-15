@@ -7,7 +7,7 @@ import (
 )
 
 func TestWorkflowCrud(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger, "stages", "bootenvs", "templates", "tasks", "machines", "profiles", "workflows")
 	tests := []crudTest{
 		{"Create Workflow with nonexistent Name", rt.Create, &models.Workflow{}, false},

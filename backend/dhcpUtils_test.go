@@ -53,7 +53,7 @@ func (l *ltf) find(t *testing.T, rt *RequestTracker) {
 }
 
 func TestDHCPRenew(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger, "subnets", "reservations", "leases")
 	startObjs := []crudTest{
 		{
@@ -181,7 +181,7 @@ func (l *ltc) test(t *testing.T, rt *RequestTracker) {
 }
 
 func TestDHCPCreateReservationOnly(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger, "subnets", "reservations", "leases")
 	startObjs := []crudTest{
 		{"Res1", rt.Create, &models.Reservation{Addr: net.ParseIP("192.168.123.10"), Token: "res1", Strategy: "mac"}, true},
@@ -223,7 +223,7 @@ func TestDHCPCreateReservationOnly(t *testing.T) {
 }
 
 func TestDHCPCreateSubnet(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger, "subnets", "leases", "reservations")
 	var subnet *Subnet
 	// A subnet with 3 active addresses

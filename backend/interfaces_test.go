@@ -3,7 +3,7 @@ package backend
 import "testing"
 
 func TestGetInterfaces(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 
 	ifs, err := dt.GetInterfaces()
 	if err != nil {

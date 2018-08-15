@@ -8,7 +8,7 @@ import (
 )
 
 func TestReservationCrud(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger, "reservations", "subnets")
 	tests := []crudTest{
 		{"Test Invalid Reservation Create", rt.Create, &models.Reservation{}, false},

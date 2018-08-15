@@ -296,7 +296,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	}
 
 	// Make data store
-	dtStore, err := midlayer.DefaultDataStack(cOpts.DataRoot, cOpts.BackEndType,
+	dtStore, err := backend.DefaultDataStack(cOpts.DataRoot, cOpts.BackEndType,
 		cOpts.LocalContent, cOpts.DefaultContent, cOpts.SaasContentRoot, cOpts.FileRoot,
 		buf.Log("backend"))
 	if err != nil {
@@ -539,7 +539,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 			case syscall.SIGHUP:
 				localLogger.Println("Reloading data stores...")
 				// Make data store - THIS IS BAD if datastore is memory.
-				dtStore, err := midlayer.DefaultDataStack(cOpts.DataRoot, cOpts.BackEndType,
+				dtStore, err := backend.DefaultDataStack(cOpts.DataRoot, cOpts.BackEndType,
 					cOpts.LocalContent, cOpts.DefaultContent, cOpts.SaasContentRoot, cOpts.FileRoot,
 					buf.Log("backend"))
 				if err != nil {

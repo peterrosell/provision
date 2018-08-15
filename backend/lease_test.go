@@ -9,7 +9,7 @@ import (
 )
 
 func TestLeaseCrud(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger, "leases", "reservations", "subnets")
 	tests := []crudTest{
 		{"Test Invalid Lease Create", rt.Create, &models.Lease{}, false},
