@@ -35,16 +35,13 @@ func makeHandler(dt *backend.DataTracker, proxy bool) *DhcpHandler {
 }
 
 func fakeServer() error {
+	baseLog := log.New(os.Stdout, "dt", 0)
+	l := logger.New(baseLog).Log("backend")
 	ss, _ := store.Open("memory:///")
-	s, _ := store.Open("stack:///")
-	bs := &store.Directory{Path: tmpDir}
-	if err := bs.Open(nil); err != nil {
-		return fmt.Errorf("Could not create directory: %v", err)
+	s, err := backend.DefaultDataStack("", "memory:///", "", "", "", tmpDir, l)
+	if err != nil {
+		panic("Cannot happen")
 	}
-	s.(*store.StackedStore).Push(bs, false, true)
-	s.(*store.StackedStore).Push(backend.BasicContent(), false, false)
-	locallogger := log.New(os.Stdout, "dt", 0)
-	l := logger.New(locallogger).Log("dhcp")
 	dataTracker = backend.NewDataTracker(s,
 		ss,
 		tmpDir,
@@ -54,8 +51,8 @@ func fakeServer() error {
 		8091,
 		8092,
 		l,
-		map[string]string{"defaultBootEnv": "default", "unknownBootEnv": "ignore"},
-		backend.NewPublishers(locallogger))
+		map[string]string{"systemGrantorSecret": "itisfred", "defaultStage": "none", "defaultBootEnv": "local", "unknownBootEnv": "ignore"},
+		backend.NewPublishers(baseLog))
 	dhcpHandler = makeHandler(dataTracker, false)
 	binlHandler = makeHandler(dataTracker, true)
 	rt := dataTracker.Request(l, "subnets")

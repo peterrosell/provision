@@ -626,17 +626,18 @@ func (p *DataTracker) reportErrors(prefix string, obj models.Model, hard *models
 		}
 		sort.Strings(storeKeys)
 		for _, key := range storeKeys {
-			if err := bk.Load(key, obj); err == nil {
+			err := bk.Load(key, obj)
+			if err == nil {
 				continue
 			}
+			if p.Cleanup && idx == 0 {
+				hard.Errorf("Removing corrupt item %s:%s", prefix, key)
+				bk.Remove(key)
+				continue
+			}
+			hard.Errorf("Store %s item %s failed to load from layer %s: %v", prefix, key, layerName, err)
 			if idx == 0 {
-				if !p.Cleanup {
-					hard.Errorf("Store %s item %s failed to load from layer %s: %v", prefix, key, layerName, err)
-					hard.Errorf("Passing --cleanup as a start option to dr-provision will delete the corrupt item")
-				} else {
-					hard.Errorf("Removing corrupt item %s:%s", prefix, key)
-					bk.Remove(key)
-				}
+				hard.Errorf("Passing --cleanup as a start option to dr-provision will delete the corrupt item")
 			} else if strings.HasPrefix(layerName, "content-") {
 				hard.Errorf("Try manually replacing content layer %s", strings.TrimPrefix(layerName, "content-"))
 			} else if strings.HasPrefix(layerName, "plugin-") {
