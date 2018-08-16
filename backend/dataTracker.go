@@ -664,6 +664,7 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 			res := make([]models.Model, 0)
 			p.objs[prefix].Index = *index.Create(res)
 			p.reportErrors(prefix, obj, hard)
+			continue
 		}
 		res := make([]models.Model, len(storeObjs))
 		for i := range storeObjs {
