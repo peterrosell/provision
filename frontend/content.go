@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/digitalrebar/provision/backend"
-	"github.com/digitalrebar/provision/midlayer"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
 	"github.com/gin-gonic/gin"
@@ -83,26 +82,15 @@ func (f *Frontend) buildContent(st store.Store) (*models.Content, *models.Error)
 }
 
 func (f *Frontend) findContent(name string) (cst store.Store) {
-	if stack, ok := f.dt.Backend.(*midlayer.DataStack); !ok {
-		mst, ok := f.dt.Backend.(store.MetaSaver)
+	for _, st := range f.dt.Backend.Layers() {
+		mst, ok := st.(store.MetaSaver)
 		if !ok {
-			return nil
+			continue
 		}
 		metaData := mst.MetaData()
 		if metaData["Name"] == name {
-			cst = f.dt.Backend
-		}
-	} else {
-		for _, st := range stack.Layers() {
-			mst, ok := st.(store.MetaSaver)
-			if !ok {
-				continue
-			}
-			metaData := mst.MetaData()
-			if metaData["Name"] == name {
-				cst = st
-				break
-			}
+			cst = st
+			break
 		}
 	}
 	return
@@ -130,17 +118,10 @@ func (f *Frontend) InitContentApi() {
 			contents := []*models.ContentSummary{}
 			rt := f.rt(c)
 			rt.AllLocked(func(d backend.Stores) {
-				if stack, ok := f.dt.Backend.(*midlayer.DataStack); !ok {
-					cs := buildSummary(f.dt.Backend)
+				for _, st := range f.dt.Backend.Layers() {
+					cs := buildSummary(st)
 					if cs != nil {
 						contents = append(contents, cs)
-					}
-				} else {
-					for _, st := range stack.Layers() {
-						cs := buildSummary(st)
-						if cs != nil {
-							contents = append(contents, cs)
-						}
 					}
 				}
 			})
@@ -236,10 +217,10 @@ func (f *Frontend) InitContentApi() {
 					return
 				}
 				cs = buildSummary(newStore)
-				ds := f.dt.Backend.(*midlayer.DataStack)
+				ds := f.dt.Backend
 				nbs, hard, soft := ds.AddReplaceSAAS(name, newStore, f.dt.Secrets, f.Logger, nil)
 				if hard != nil {
-					midlayer.CleanUpStore(newStore)
+					backend.CleanUpStore(newStore)
 					res = hard.(*models.Error)
 					return
 				}
@@ -312,10 +293,10 @@ func (f *Frontend) InitContentApi() {
 					return
 				}
 				cs = buildSummary(newStore)
-				ds := f.dt.Backend.(*midlayer.DataStack)
+				ds := f.dt.Backend
 				nbs, hard, soft := ds.AddReplaceSAAS(name, newStore, f.dt.Secrets, f.Logger, nil)
 				if hard != nil {
-					midlayer.CleanUpStore(newStore)
+					backend.CleanUpStore(newStore)
 					res.Code = http.StatusInternalServerError
 					res.AddError(hard)
 					res.AddError(soft)
@@ -369,7 +350,7 @@ func (f *Frontend) InitContentApi() {
 					return
 				}
 				cs := buildSummary(cst)
-				ds := f.dt.Backend.(*midlayer.DataStack)
+				ds := f.dt.Backend
 				nbs, hard, _ := ds.RemoveSAAS(name, f.Logger, f.dt.Secrets)
 				if hard != nil {
 					res.AddError(hard)

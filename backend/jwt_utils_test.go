@@ -16,7 +16,7 @@ func TestRandString(t *testing.T) {
 }
 
 func TestJWTUtils(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger, "roles")
 	testkey := "testhashkey01234testhashkey01234"
 	jwtManager := NewJwtManager([]byte(testkey))

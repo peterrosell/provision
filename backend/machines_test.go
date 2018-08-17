@@ -47,7 +47,7 @@ func (p *patchTest) test(t *testing.T, target models.Model) {
 }
 
 func TestMachineCrud(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger, "stages", "templates", "machines", "tasks", "bootenvs", "profiles", "jobs", "workflows")
 	okUUID := uuid.NewRandom()
 	tests := []crudTest{

@@ -7,7 +7,7 @@ import (
 )
 
 func TestParamsCrud(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger, "profiles", "params")
 	tests := []crudTest{
 		{"Create empty profile", rt.Create, &models.Param{}, false},

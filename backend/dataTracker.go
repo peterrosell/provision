@@ -19,161 +19,6 @@ import (
 	"github.com/digitalrebar/store"
 )
 
-func BasicContent() store.Store {
-	var (
-		localBootParam = &models.Param{
-			Name:        `pxelinux-local-boot`,
-			Description: `The method pxelinux should use to try to boot to the local disk`,
-			Documentation: `
-On most systems, using 'localboot 0' is the proper thing to do to have
-pxelinux try to boot off the first hard drive.  However, some systems
-do not behave properlydoing that, either due to firmware bugs or
-malconfigured hard drives.  This param allows you to override 'localboot 0'
-with another pxelinux command.  A useful reference for alternate boot methods
-is at https://www.syslinux.org/wiki/index.php?title=Comboot/chain.c32`,
-			Schema: map[string]string{
-				"type":    "string",
-				"default": "localboot 0",
-			},
-		}
-		ignoreBoot = &models.BootEnv{
-			Name:        `ignore`,
-			Description: "The boot environment you should use to have unknown machines boot off their local hard drive",
-			OS: models.OsInfo{
-				Name: `ignore`,
-			},
-			OnlyUnknown: true,
-			Templates: []models.TemplateInfo{
-				{
-					Name: "pxelinux",
-					Path: `pxelinux.cfg/default`,
-					Contents: `DEFAULT local
-PROMPT 0
-TIMEOUT 10
-LABEL local
-{{.Param "pxelinux-local-boot"}}
-`,
-				},
-				{
-					Name: `ipxe`,
-					Path: `default.ipxe`,
-					Contents: `#!ipxe
-chain {{.ProvisionerURL}}/${netX/mac}.ipxe && exit || goto chainip
-:chainip
-chain tftp://{{.ProvisionerAddress}}/${netX/ip}.ipxe || exit
-`,
-				},
-			},
-			Meta: map[string]string{
-				"feature-flags": "change-stage-v2",
-				"icon":          "circle thin",
-				"color":         "green",
-				"title":         "Digital Rebar Provision",
-			},
-		}
-
-		localBoot = &models.BootEnv{
-			Name:        "local",
-			Description: "The boot environment you should use to have known machines boot off their local hard drive",
-			OS: models.OsInfo{
-				Name: "local",
-			},
-			OnlyUnknown: false,
-			Templates: []models.TemplateInfo{
-				{
-					Name: "pxelinux",
-					Path: "pxelinux.cfg/{{.Machine.HexAddress}}",
-					Contents: `DEFAULT local
-PROMPT 0
-TIMEOUT 10
-LABEL local
-{{.Param "pxelinux-local-boot"}}
-`,
-				},
-				{
-					Name: "ipxe",
-					Path: "{{.Machine.Address}}.ipxe",
-					Contents: `#!ipxe
-exit
-`,
-				},
-				{
-					Name: "pxelinux-mac",
-					Path: "pxelinux.cfg/{{.Machine.MacAddr \"pxelinux\"}}",
-					Contents: `DEFAULT local
-PROMPT 0
-TIMEOUT 10
-LABEL local
-{{.Param "pxelinux-local-boot"}}
-`,
-				},
-				{
-					Name: "ipxe-mac",
-					Path: "{{.Machine.MacAddr \"ipxe\"}}.ipxe",
-					Contents: `#!ipxe
-exit
-`,
-				},
-			},
-			Meta: map[string]string{
-				"feature-flags": "change-stage-v2",
-				"icon":          "radio",
-				"color":         "green",
-				"title":         "Digital Rebar Provision",
-			},
-		}
-		noneStage = &models.Stage{
-			Name:        "none",
-			Description: "Noop / Nothing stage",
-			Meta: map[string]string{
-				"icon":  "circle thin",
-				"color": "green",
-				"title": "Digital Rebar Provision",
-			},
-		}
-		localStage = &models.Stage{
-			Name:        "local",
-			BootEnv:     "local",
-			Description: "Stage to boot into the local BootEnv.",
-			Meta: map[string]string{
-				"icon":  "radio",
-				"color": "green",
-				"title": "Digital Rebar Provision",
-			},
-		}
-		superUser = models.MakeRole("superuser", "*", "*", "*")
-	)
-	res, _ := store.Open("memory:///")
-	bootEnvs, _ := res.MakeSub("bootenvs")
-	stages, _ := res.MakeSub("stages")
-	roles, _ := res.MakeSub("roles")
-	params, _ := res.MakeSub("params")
-	localBoot.ClearValidation()
-	ignoreBoot.ClearValidation()
-	noneStage.ClearValidation()
-	localStage.ClearValidation()
-	superUser.ClearValidation()
-	localBoot.Fill()
-	ignoreBoot.Fill()
-	noneStage.Fill()
-	localStage.Fill()
-	superUser.Fill()
-	localBootParam.Fill()
-	params.Save("pxelinux-local-boot", localBootParam)
-	bootEnvs.Save("local", localBoot)
-	bootEnvs.Save("ignore", ignoreBoot)
-	stages.Save("none", noneStage)
-	stages.Save("local", localStage)
-	roles.Save("superuser", superUser)
-	res.(*store.Memory).SetMetaData(map[string]string{
-		"Name":        "BasicStore",
-		"Description": "Default objects that must be present",
-		"Version":     "Unversioned",
-		"Type":        "default",
-	})
-	return res
-}
-
 type followUpSaver interface {
 	followUpSave()
 }
@@ -574,9 +419,11 @@ type DataTracker struct {
 	LogRoot             string
 	OurAddress          string
 	ForceOurAddress     bool
+	Cleanup             bool
 	StaticPort, ApiPort int
 	FS                  *FileSystem
-	Backend, Secrets    store.Store
+	Backend             *DataStack
+	Secrets             store.Store
 	secretsMux          *sync.Mutex
 	objs                map[string]*Store
 	defaultPrefs        map[string]string
@@ -763,6 +610,45 @@ func (p *DataTracker) regenSecureParams(
 	}
 }
 
+func (p *DataTracker) reportErrors(prefix string, obj models.Model, hard *models.Error) {
+	layers := p.Backend.Layers()
+	for idx, layerName := range p.Backend.LayerIndex {
+		layer := layers[idx]
+		bk := layer.GetSub(prefix)
+		if bk == nil {
+			continue
+		}
+		storeKeys, err := bk.Keys()
+		if err != nil {
+			hard.Errorf("Error fetching keys for %s: %v", prefix, err)
+			hard.Errorf("This is likely not recoverable, and you should restore from backup.")
+			continue
+		}
+		sort.Strings(storeKeys)
+		for _, key := range storeKeys {
+			err := bk.Load(key, obj)
+			if err == nil {
+				continue
+			}
+			if p.Cleanup && idx == 0 {
+				hard.Errorf("Removing corrupt item %s:%s", prefix, key)
+				bk.Remove(key)
+				continue
+			}
+			hard.Errorf("Store %s item %s failed to load from layer %s: %v", prefix, key, layerName, err)
+			if idx == 0 {
+				hard.Errorf("Passing --cleanup as a start option to dr-provision will delete the corrupt item")
+			} else if strings.HasPrefix(layerName, "content-") {
+				hard.Errorf("Try manually replacing content layer %s", strings.TrimPrefix(layerName, "content-"))
+			} else if strings.HasPrefix(layerName, "plugin-") {
+				hard.Errorf("Try manually replacing plugin %s", strings.TrimPrefix(layerName, "plugin-"))
+			} else {
+				hard.Errorf("Corrupt item is in %s", layerName)
+			}
+		}
+	}
+}
+
 func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.Error) {
 	hard = &models.Error{Code: 500, Type: "Failed to load backing objects from cache"}
 	soft = &models.Error{Code: 422, Type: ValidationError}
@@ -777,7 +663,7 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 			// Make fake index to keep others from failing and exploding.
 			res := make([]models.Model, 0)
 			p.objs[prefix].Index = *index.Create(res)
-			hard.Errorf("Unable to load %s: %v", prefix, err)
+			p.reportErrors(prefix, obj, hard)
 			continue
 		}
 		res := make([]models.Model, len(storeObjs))
@@ -853,7 +739,10 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 }
 
 // This must be locked with ALL locks on the source datatracker from the caller.
-func ValidateDataTrackerStore(fileRoot string, backend, secrets store.Store, logger logger.Logger) (hard, soft error) {
+func ValidateDataTrackerStore(fileRoot string,
+	backend *DataStack,
+	secrets store.Store,
+	logger logger.Logger) (hard, soft error) {
 	res := &DataTracker{
 		Backend:           backend,
 		Secrets:           secrets,
@@ -888,7 +777,8 @@ func ValidateDataTrackerStore(fileRoot string, backend, secrets store.Store, log
 }
 
 // Create a new DataTracker that will use passed store to save all operational data
-func NewDataTracker(backend, secrets store.Store,
+func NewDataTracker(backend *DataStack,
+	secrets store.Store,
 	fileRoot, logRoot, addr string, forceAddr bool,
 	staticPort, apiPort int,
 	logger logger.Logger,
@@ -1241,7 +1131,7 @@ func (p *DataTracker) Backup() ([]byte, error) {
 }
 
 // Assumes that all locks are held
-func (p *DataTracker) ReplaceBackend(rt *RequestTracker, st store.Store) (hard, soft error) {
+func (p *DataTracker) ReplaceBackend(rt *RequestTracker, st *DataStack) (hard, soft error) {
 	p.Debugf("Replacing backend data store")
 	p.Backend = st
 	return p.rebuildCache(rt)

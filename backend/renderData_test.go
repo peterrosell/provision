@@ -85,7 +85,7 @@ BootParams = default`
 )
 
 func TestRenderData(t *testing.T) {
-	dt := mkDT(nil)
+	dt := mkDT()
 	rt := dt.Request(dt.Logger,
 		"stages",
 		"bootenvs",

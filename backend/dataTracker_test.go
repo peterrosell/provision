@@ -66,16 +66,14 @@ func loadExample(rt *RequestTracker, kind, p string) (ok bool, err error) {
 	return
 }
 
-func mkDT(bs store.Store) *DataTracker {
-	s, _ := store.Open("stack:///")
-	if bs == nil {
-		bs, _ = store.Open("memory:///")
-	}
-	ss, _ := store.Open("memory:///")
-	s.(*store.StackedStore).Push(bs, false, true)
-	s.(*store.StackedStore).Push(BasicContent(), false, false)
+func mkDT() *DataTracker {
 	baseLog := log.New(os.Stdout, "dt", 0)
 	l := logger.New(baseLog).Log("backend")
+	ss, _ := store.Open("memory:///")
+	s, err := DefaultDataStack("", "memory:///", "", "", "", tmpDir, l)
+	if err != nil {
+		panic("Cannot happen")
+	}
 	dt := NewDataTracker(s,
 		ss,
 		tmpDir,
