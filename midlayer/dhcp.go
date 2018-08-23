@@ -189,7 +189,7 @@ func (dhr *DhcpRequest) listenOn(testAddr net.IP) bool {
 	return false
 }
 
-func (dhr *DhcpRequest) checkMachine(l *backend.Lease, s *backend.Subnet) {
+func (dhr *DhcpRequest) checkMachine(l *backend.Lease) {
 	// If the incoming packet does not want a filename, it does not want
 	// to net boot.
 	if vals, ok := dhr.pktOpts[dhcp.OptionParameterRequestList]; !ok ||
@@ -204,7 +204,7 @@ func (dhr *DhcpRequest) checkMachine(l *backend.Lease, s *backend.Subnet) {
 		return
 	}
 	// If the subnet is unmanaged, we never want machines to PXE boot from it.
-	if s != nil && s.Unmanaged {
+	if l.SkipBoot {
 		dhr.offerNetBoot = false
 		return
 	}
@@ -282,10 +282,7 @@ func (dhr *DhcpRequest) checkMachine(l *backend.Lease, s *backend.Subnet) {
 // coalesceOptions is responsible for building the options we will
 // reply with, as well as figuring out whether or not we should offer
 // PXE and TFTP file name options in the outgoing packet.
-func (dhr *DhcpRequest) coalesceOptions(
-	l *backend.Lease,
-	s *backend.Subnet,
-	r *backend.Reservation) {
+func (dhr *DhcpRequest) coalesceOptions(l *backend.Lease) {
 	dhr.outOpts = dhcp.Options{}
 	// Compile and render options from the subnet and the reservation first.
 	srcOpts := map[int]string{}
@@ -294,44 +291,16 @@ func (dhr *DhcpRequest) coalesceOptions(
 		opt.FillFromPacketOpt(v)
 		srcOpts[int(c)] = opt.Value
 	}
-	if r != nil {
-		for _, opt := range r.Options {
-			if opt.Value == "" {
-				if dhcp.OptionCode(opt.Code) != dhcp.OptionBootFileName {
-					dhr.Debugf("Ignoring DHCP option %d with zero-length value", opt.Code)
-					continue
-				}
-			}
-			c, v, err := opt.RenderToDHCP(srcOpts)
-			if err != nil {
-				dhr.Errorf("Failed to render option %v: %v, %v", opt.Code, opt.Value, err)
-				continue
-			}
-			dhr.outOpts[dhcp.OptionCode(c)] = v
+	for _, opt := range l.Options {
+		c, v, err := opt.RenderToDHCP(srcOpts)
+		if err != nil {
+			dhr.Errorf("Failed to render option %v: %v, %v", opt.Code, opt.Value, err)
+			continue
 		}
+		dhr.outOpts[dhcp.OptionCode(c)] = v
 	}
-	if s != nil {
-		for _, opt := range s.Options {
-			if dhr.outOpts[dhcp.OptionCode(opt.Code)] != nil {
-				continue
-			}
-			if opt.Value == "" {
-				dhr.Debugf("Ignoring DHCP option %d with zero-length value", opt.Code)
-				continue
-			}
-			c, v, err := opt.RenderToDHCP(srcOpts)
-			if err != nil {
-				dhr.Errorf("Failed to render option %v: %v, %v", opt.Code, opt.Value, err)
-				continue
-			}
-			dhr.outOpts[dhcp.OptionCode(c)] = v
-		}
-		if s.NextServer != nil && s.NextServer.IsGlobalUnicast() {
-			dhr.nextServer = s.NextServer
-		}
-	}
-	if r != nil && r.NextServer != nil && r.NextServer.IsGlobalUnicast() {
-		dhr.nextServer = r.NextServer
+	if l.NextServer.IsGlobalUnicast() {
+		dhr.nextServer = l.NextServer
 	}
 	if nextServer := dhr.nextServer.To4(); nextServer != nil && !nextServer.IsUnspecified() {
 		dhr.nextServer = nextServer
@@ -339,9 +308,9 @@ func (dhr *DhcpRequest) coalesceOptions(
 	} else {
 		dhr.nextServer = nil
 	}
-	dhr.checkMachine(l, s)
+	dhr.checkMachine(l)
 	if dhr.offerNetBoot && dhr.offerPXE() {
-		dhr.fillForPXE(l, s)
+		dhr.fillForPXE(l)
 		return
 	}
 }
@@ -420,18 +389,10 @@ func (dhr *DhcpRequest) buildReply(
 // just throw file and sname fields at them, though.  Packets we are
 // handling as a ProxyDHCP server or a straight up binl server do not
 // use this method.
-func (dhr *DhcpRequest) buildDhcpOptions(
-	l *backend.Lease,
-	s *backend.Subnet,
-	r *backend.Reservation,
-	serverID net.IP) {
-	var leaseTime uint32 = 7200
-	if s != nil {
-		leaseTime = uint32(s.LeaseTimeFor(l.Addr) / time.Second)
-	}
+func (dhr *DhcpRequest) buildDhcpOptions(l *backend.Lease, serverID net.IP) {
 	dhr.nextServer = serverID
-	dhr.duration = time.Duration(leaseTime) * time.Second
-	dhr.coalesceOptions(l, s, r)
+	dhr.duration = time.Duration(l.Duration) * time.Second
+	dhr.coalesceOptions(l)
 }
 
 func (dhr *DhcpRequest) Strategy(name string) StrategyFunc {
@@ -483,7 +444,7 @@ func (dhr *DhcpRequest) reqAddr(msgType dhcp.MessageType) (addr net.IP, state in
 // backend.  We use fake leases when handling ProxyDHCP and binl
 // requests, as we don't actually want to allocate an IP address or
 // anything crazy like that.
-func (dhr *DhcpRequest) FakeLease(req net.IP) (*backend.Lease, *backend.Subnet, *backend.Reservation) {
+func (dhr *DhcpRequest) FakeLease(req net.IP) *backend.Lease {
 	rt := dhr.Request("leases", "reservations", "subnets")
 	for _, s := range dhr.handler.strats {
 		strategy := s.Name
@@ -492,16 +453,14 @@ func (dhr *DhcpRequest) FakeLease(req net.IP) (*backend.Lease, *backend.Subnet, 
 		if via[0] == nil || via[0].IsUnspecified() {
 			via = dhr.listenIPs()
 		}
-		lease, sub, res := backend.FakeLeaseFor(rt, strategy, token, via)
-		if sub == nil && res == nil {
+		lease := backend.FakeLeaseFor(rt, strategy, token, via)
+		if lease == nil {
 			continue
 		}
-		if lease != nil {
-			lease.Addr = req
-		}
-		return lease, sub, res
+		lease.Addr = req
+		return lease
 	}
-	return nil, nil, nil
+	return nil
 }
 
 // ServeDHCP is responsible for handling regular DHCP traffic as well
@@ -622,7 +581,7 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 			return "ProxySubnet"
 		}
 		serverID := dhr.respondFrom(lease.Addr)
-		dhr.buildDhcpOptions(lease, subnet, reservation, serverID)
+		dhr.buildDhcpOptions(lease, serverID)
 		reply := dhr.buildReply(dhcp.ACK, serverID, lease.Addr)
 		rt.Infof("%s: Request handing out: %s to %s via %s",
 			dhr.xid(),
@@ -640,14 +599,12 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 				via = dhr.listenIPs()
 			}
 			var (
-				lease       *backend.Lease
-				subnet      *backend.Subnet
-				reservation *backend.Reservation
+				lease *backend.Lease
 			)
 			rt := dhr.Request("leases", "reservations", "subnets")
 			for {
 				var fresh bool
-				lease, subnet, reservation, fresh = backend.FindOrCreateLease(rt, strategy, token, req, via)
+				lease, fresh = backend.FindOrCreateLease(rt, strategy, token, req, via)
 				if lease == nil {
 					break
 				}
@@ -694,7 +651,7 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 				lease.Addr = net.IPv4(0, 0, 0, 0)
 				serverID := dhr.respondFrom(lease.Addr)
 				// This is a proxy DHCP response
-				dhr.buildBinlOptions(lease, subnet, reservation, serverID)
+				dhr.buildBinlOptions(lease, serverID)
 				if !dhr.offerNetBoot {
 					return "NoPXE"
 				}
@@ -706,7 +663,7 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 				return "Offer"
 			}
 			serverID := dhr.respondFrom(lease.Addr)
-			dhr.buildDhcpOptions(lease, subnet, reservation, serverID)
+			dhr.buildDhcpOptions(lease, serverID)
 			if dhr.offerAppleBoot() {
 				// Apple's net boot protocol requires that we send a second Offer packet.
 				dhr.offerNetBoot = false

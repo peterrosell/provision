@@ -210,7 +210,7 @@ func (dhr *DhcpRequest) offerPXE() bool {
 // fillForPXE is responsible for determining whether we should handle
 // this options as a PXE request, and adding any required out options
 // based
-func (dhr *DhcpRequest) fillForPXE(l *backend.Lease, s *backend.Subnet) {
+func (dhr *DhcpRequest) fillForPXE(l *backend.Lease) {
 	// The reservation already populated a BootFileName, use it.
 	if _, ok := dhr.outOpts[dhcp.OptionBootFileName]; ok {
 		return
@@ -258,13 +258,9 @@ func (dhr *DhcpRequest) fillForPXE(l *backend.Lease, s *backend.Subnet) {
 // buildBinlOptions builds appropriate DHCP options for use in
 // ProxyDHCP and binl handling.  These responses only include PXE
 // specific options.
-func (dhr *DhcpRequest) buildBinlOptions(
-	l *backend.Lease,
-	s *backend.Subnet,
-	r *backend.Reservation,
-	serverID net.IP) {
+func (dhr *DhcpRequest) buildBinlOptions(l *backend.Lease, serverID net.IP) {
 	dhr.nextServer = serverID
-	dhr.coalesceOptions(l, s, r)
+	dhr.coalesceOptions(l)
 	if !dhr.offerNetBoot {
 		return
 	}
@@ -303,13 +299,13 @@ func (dhr *DhcpRequest) ServeBinl() string {
 		dhr.nak(dhr.respondFrom(req))
 		return "NAK"
 	}
-	lease, subnet, reservation := dhr.FakeLease(req)
+	lease := dhr.FakeLease(req)
 	if lease == nil {
 		return "NoInfo"
 	}
 	lease.Addr = req
 	serverID := dhr.respondFrom(req)
-	dhr.buildBinlOptions(lease, subnet, reservation, serverID)
+	dhr.buildBinlOptions(lease, serverID)
 	if !dhr.offerNetBoot {
 		dhr.Infof("%s: BINL directed to not offer PXE response to %s", dhr.xid(), req)
 		return "NoPXE"

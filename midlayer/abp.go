@@ -209,8 +209,8 @@ func (dhr *DhcpRequest) ServeAppleBSDP() string {
 	}
 	opts := &bsdpOpts{}
 	opts.Parse(dhr)
-	l, s, _ := dhr.FakeLease(req)
-	dhr.checkMachine(l, s)
+	l := dhr.FakeLease(req)
+	dhr.checkMachine(l)
 	if dhr.bootEnv != nil && !dhr.bootEnv.NetBoot() {
 		dhr.Infof("%s: BootEnv says to ignore NetBoot request from %s", dhr.xid(), req)
 		return "Ignored"
