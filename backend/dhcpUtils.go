@@ -3,10 +3,12 @@ package backend
 import (
 	"fmt"
 	"net"
+	"sort"
 	"time"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
+	dhcp "github.com/krolaw/dhcp4"
 )
 
 // LeaseNAK is the error that shall be returned when we cannot give a
@@ -15,8 +17,71 @@ import (
 // midlayer must NAK the request.
 type LeaseNAK error
 
-func findSubnetsForVias(rt *RequestTracker, vias []net.IP) []*Subnet {
-	res := []*Subnet{}
+func mergeOptions(rt *RequestTracker, l *Lease, r *Reservation, s *Subnet) {
+	l.NextServer = nil
+	l.Options = nil
+	l.Duration = 0
+	mergedOpts := map[dhcp.OptionCode]models.DhcpOption{}
+	if r != nil {
+		for _, opt := range r.Options {
+			if opt.Value == "" {
+				if dhcp.OptionCode(opt.Code) != dhcp.OptionBootFileName {
+					rt.Debugf("Ignoring DHCP option %d with zero-length value", opt.Code)
+					continue
+				}
+			}
+			mergedOpts[dhcp.OptionCode(opt.Code)] = opt
+		}
+		if r.Duration > 0 {
+			l.Duration = r.Duration
+		}
+	}
+	if s != nil {
+		for _, opt := range s.Options {
+			if _, ok := mergedOpts[dhcp.OptionCode(opt.Code)]; ok {
+				continue
+			}
+			if opt.Value == "" {
+				rt.Debugf("Ignoring DHCP option %d with zero-length value", opt.Code)
+				continue
+			}
+			mergedOpts[dhcp.OptionCode(opt.Code)] = opt
+		}
+		if s.NextServer.IsGlobalUnicast() {
+			l.NextServer = s.NextServer
+		}
+		l.SkipBoot = s.Unmanaged
+		if l.Duration < 1 {
+			if r != nil {
+				l.Duration = s.ReservedLeaseTime
+			} else {
+				l.Duration = s.ActiveLeaseTime
+			}
+		}
+		if s.Pickers[0] == "point2point" {
+			mergedOpts[dhcp.OptionRouter] = models.DhcpOption{
+				Code:  byte(dhcp.OptionRouter),
+				Value: l.Via.String(),
+			}
+		}
+	}
+
+	if l.Duration < 1 {
+		l.Duration = 7200
+	}
+	if r != nil && r.NextServer.IsGlobalUnicast() {
+		l.NextServer = s.NextServer
+	}
+	l.Options = make([]models.DhcpOption, 0, len(mergedOpts))
+	for _, v := range mergedOpts {
+		l.Options = append(l.Options, v)
+	}
+	sort.Slice(l.Options, func(i, j int) bool {
+		return l.Options[i].Code < l.Options[j].Code
+	})
+}
+
+func findSubnetForVias(rt *RequestTracker, vias []net.IP) (*Subnet, net.IP) {
 	for _, idx := range rt.d("subnets").Items() {
 		candidate := AsSubnet(idx)
 		for _, via := range vias {
@@ -24,15 +89,15 @@ func findSubnetsForVias(rt *RequestTracker, vias []net.IP) []*Subnet {
 				continue
 			}
 			if candidate.subnet().Contains(via) {
-				res = append(res, candidate)
+				return candidate, via
 			}
 		}
 	}
-	return res
+	return nil, nil
 }
 
 func findReservation(rt *RequestTracker,
-	subnets []*Subnet,
+	subnet *Subnet,
 	strategy, token string,
 	req net.IP) *Reservation {
 	reservations := rt.d("reservations")
@@ -50,18 +115,16 @@ func findReservation(rt *RequestTracker,
 		if res.Token == token && res.Strategy == strategy {
 			if !res.Scoped {
 				globalCandidates = append(globalCandidates, res)
-			} else if len(subnets) > 0 {
+			} else if subnet != nil {
 				scopedCandidates = append(scopedCandidates, res)
 			}
 		}
 	}
 	if len(scopedCandidates) > 0 {
-		for i := range subnets {
-			for j := range scopedCandidates {
-				res := scopedCandidates[j]
-				if subnets[i].InSubnetRange(res.Addr) {
-					return res
-				}
+		for j := range scopedCandidates {
+			res := scopedCandidates[j]
+			if subnet.InSubnetRange(res.Addr) {
+				return res
 			}
 		}
 	}
@@ -72,10 +135,10 @@ func findReservation(rt *RequestTracker,
 }
 
 func findViaReservation(rt *RequestTracker,
-	subnets []*Subnet,
+	subnet *Subnet,
 	strategy, token string,
 	req net.IP, fake bool) (lease *Lease, reservation *Reservation, ok bool) {
-	reservation = findReservation(rt, subnets, strategy, token, req)
+	reservation = findReservation(rt, subnet, strategy, token, req)
 	if reservation == nil {
 		return
 	}
@@ -128,8 +191,8 @@ func findViaReservation(rt *RequestTracker,
 }
 
 func findLease(rt *RequestTracker,
-	subnets []*Subnet,
-	strategy, token string, req net.IP) (lease *Lease, err error) {
+	subnet *Subnet,
+	strategy, token string, req, via net.IP) (lease *Lease, err error) {
 	reservations, leases := rt.d("reservations"), rt.d("leases")
 	hexreq := models.Hexaddr(req.To4())
 	found := leases.Find(hexreq)
@@ -145,7 +208,7 @@ func findLease(rt *RequestTracker,
 		lease = nil
 		return
 	}
-	reservation := findReservation(rt, subnets, strategy, token, req)
+	reservation := findReservation(rt, subnet, strategy, token, req)
 	if reservation == nil {
 		// This is the lease we want, but if there is a conflicting reservation we
 		// may force the client to give it up.
@@ -193,17 +256,17 @@ func findLease(rt *RequestTracker,
 // This function should be called in response to a DHCPREQUEST.
 func FindLease(rt *RequestTracker,
 	strategy, token string,
-	req net.IP) (lease *Lease, subnet *Subnet, reservation *Reservation, err error) {
+	req net.IP,
+	vias []net.IP) (lease *Lease, subnet *Subnet, reservation *Reservation, err error) {
 	rt.Do(func(d Stores) {
-		subnets := findSubnetsForVias(rt, []net.IP{req})
-		lease, err = findLease(rt, subnets, strategy, token, req)
+		subnet, via := findSubnetForVias(rt, vias)
+		lease, err = findLease(rt, subnet, strategy, token, req, via)
 		if err != nil {
 			return
 		}
 		if lease == nil {
-			fake := &Lease{Lease: &models.Lease{Addr: req}}
+			fake := &Lease{Lease: &models.Lease{Addr: req, Via: via}}
 			reservation = fake.Reservation(rt)
-			subnet = fake.Subnet(rt)
 			if reservation != nil {
 				err = LeaseNAK(fmt.Errorf("No lease for %s, convered by reservation %s", req, reservation.Addr))
 			}
@@ -212,7 +275,18 @@ func FindLease(rt *RequestTracker,
 			}
 			return
 		}
-		subnet = lease.Subnet(rt)
+		if via == nil {
+			for _, via = range vias {
+				if via.Equal(lease.Via) {
+					break
+				}
+				via = nil
+			}
+		}
+		if !lease.Via.Equal(via) {
+			err = LeaseNAK(fmt.Errorf("Cannot change via from %s to %s for lease %s", lease.Via, via, lease.Addr))
+			return
+		}
 		reservation = lease.Reservation(rt)
 		if reservation == nil && subnet == nil {
 			rt.Remove(lease)
@@ -231,26 +305,19 @@ func FindLease(rt *RequestTracker,
 			}
 		}
 		lease.State = "ACK"
+		lease.Via = via
+		mergeOptions(rt, lease, reservation, subnet)
 		rt.Save(lease)
 	})
 	return
 }
 
 func findViaSubnet(rt *RequestTracker,
-	subnets []*Subnet,
+	subnet *Subnet,
 	strategy, token string,
-	req net.IP,
-	fake bool) (lease *Lease, subnet *Subnet, fresh bool) {
+	req, via net.IP,
+	fake bool) (lease *Lease, fresh bool) {
 	leases, reservations := rt.d("leases"), rt.d("reservations")
-	if len(subnets) == 0 {
-		return
-	}
-	for idx := range subnets {
-		if subnets[idx].Strategy == strategy {
-			subnet = subnets[idx]
-			break
-		}
-	}
 	if subnet == nil || !subnet.Enabled {
 		// Subnet not found or isn't enabled, don't give out leases.
 		return
@@ -262,7 +329,8 @@ func findViaSubnet(rt *RequestTracker,
 		lease.Strategy = strategy
 		lease.Token = token
 		lease.State = "FAKE"
-		return lease, subnet, true
+		lease.Via = via
+		return lease, true
 	}
 	currLeases, _ := index.Subset(subnet.idxBounds(subnet.sbounds()))(&leases.Index)
 	currReservations, _ := index.Subset(subnet.idxBounds(subnet.sbounds()))(&reservations.Index)
@@ -295,11 +363,12 @@ func findViaSubnet(rt *RequestTracker,
 		usedAddrs[currRes.Key()] = currRes
 	}
 	if lease != nil {
+		lease.Via = via
 		rt.Switch("dhcp").Infof("Subnet %s: handing out existing lease for %s to %s:%s", subnet.Name, lease.Addr, strategy, token)
 		return
 	}
 	rt.Switch("dhcp").Infof("Subnet %s: %s:%s is in my range, attempting lease creation.", subnet.Name, strategy, token)
-	lease, _ = subnet.next(usedAddrs, token, req)
+	lease, _ = subnet.next(usedAddrs, token, req, via)
 	if lease != nil {
 		lease.State = "PROBE"
 		if leases.Find(lease.Key()) == nil {
@@ -309,7 +378,7 @@ func findViaSubnet(rt *RequestTracker,
 		return
 	}
 	rt.Switch("dhcp").Infof("Subnet %s: No lease for %s:%s, it gets no IP from us", subnet.Name, strategy, token)
-	return nil, nil, false
+	return nil, false
 }
 
 // FakeLeaseFor returns a lease that has zero duration and that should not be saved.
@@ -317,11 +386,13 @@ func findViaSubnet(rt *RequestTracker,
 // as a BINL server.
 func FakeLeaseFor(rt *RequestTracker,
 	strategy, token string,
-	via []net.IP) (lease *Lease, subnet *Subnet, reservation *Reservation) {
+	vias []net.IP) (lease *Lease) {
 	rt.Do(func(d Stores) {
-		subnets := findSubnetsForVias(rt, via)
-		_, reservation, _ = findViaReservation(rt, subnets, strategy, token, nil, true)
-		lease, subnet, _ = findViaSubnet(rt, subnets, strategy, token, nil, true)
+		var reservation *Reservation
+		subnet, via := findSubnetForVias(rt, vias)
+		_, reservation, _ = findViaReservation(rt, subnet, strategy, token, nil, true)
+		lease, _ = findViaSubnet(rt, subnet, strategy, token, nil, via, true)
+		mergeOptions(rt, lease, reservation, subnet)
 	})
 	return
 }
@@ -334,20 +405,20 @@ func FakeLeaseFor(rt *RequestTracker,
 func FindOrCreateLease(rt *RequestTracker,
 	strategy, token string,
 	req net.IP,
-	via []net.IP) (lease *Lease, subnet *Subnet, reservation *Reservation, fresh bool) {
+	vias []net.IP) (lease *Lease, fresh bool) {
 	rt.Do(func(d Stores) {
-		subnets := findSubnetsForVias(rt, via)
+		subnet, via := findSubnetForVias(rt, vias)
 		leases := d("leases")
 		var ok bool
+		var reservation *Reservation
 		// If a lease is found in findViaReservation, it is found via a global reservation.
 		//
-		lease, reservation, ok = findViaReservation(rt, subnets, strategy, token, req, false)
+		lease, reservation, ok = findViaReservation(rt, subnet, strategy, token, req, false)
 		if lease == nil {
-			lease, subnet, fresh = findViaSubnet(rt, subnets, strategy, token, req, false)
-		} else {
-			subnet = lease.Subnet(rt)
+			lease, fresh = findViaSubnet(rt, subnet, strategy, token, req, via, false)
 		}
 		if lease != nil {
+			mergeOptions(rt, lease, reservation, subnet)
 			// If ViaReservation created it, then add it
 			if !ok && (subnet == nil || !subnet.Proxy) {
 				leases.Add(lease)
