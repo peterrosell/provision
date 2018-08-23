@@ -15,14 +15,14 @@ import (
 	dhcp "github.com/krolaw/dhcp4"
 )
 
-type picker func(*Subnet, map[string]models.Model, string, net.IP) (*Lease, bool)
+type picker func(*Subnet, map[string]models.Model, string, net.IP, net.IP) (*Lease, bool)
 
-func pickNone(s *Subnet, usedAddrs map[string]models.Model, token string, hint net.IP) (*Lease, bool) {
+func pickNone(s *Subnet, usedAddrs map[string]models.Model, token string, hint, via net.IP) (*Lease, bool) {
 	// There are no free addresses, and don't fall through to using the most expired one.
 	return nil, false
 }
 
-func pickMostExpired(s *Subnet, usedAddrs map[string]models.Model, token string, hint net.IP) (*Lease, bool) {
+func pickMostExpired(s *Subnet, usedAddrs map[string]models.Model, token string, hint, via net.IP) (*Lease, bool) {
 	currLeases := []*Lease{}
 	for _, obj := range usedAddrs {
 		lease, ok := obj.(*Lease)
@@ -48,7 +48,7 @@ func pickMostExpired(s *Subnet, usedAddrs map[string]models.Model, token string,
 	return nil, true
 }
 
-func pickHint(s *Subnet, usedAddrs map[string]models.Model, token string, hint net.IP) (*Lease, bool) {
+func pickHint(s *Subnet, usedAddrs map[string]models.Model, token string, hint, via net.IP) (*Lease, bool) {
 	if hint == nil || !s.InActiveRange(hint) {
 		return nil, true
 	}
@@ -76,7 +76,7 @@ func pickHint(s *Subnet, usedAddrs map[string]models.Model, token string, hint n
 	return nil, false
 }
 
-func pickNextFree(s *Subnet, usedAddrs map[string]models.Model, token string, hint net.IP) (*Lease, bool) {
+func pickNextFree(s *Subnet, usedAddrs map[string]models.Model, token string, hint, via net.IP) (*Lease, bool) {
 	if s.nextLeasableIP == nil {
 		s.nextLeasableIP = net.IP(make([]byte, 4))
 		copy(s.nextLeasableIP, s.ActiveStart.To4())
@@ -118,6 +118,27 @@ func pickNextFree(s *Subnet, usedAddrs map[string]models.Model, token string, hi
 	return nil, true
 }
 
+func pickPoint2Point(s *Subnet, usedAddrs map[string]models.Model, token string, hint, via net.IP) (*Lease, bool) {
+	mask := big.NewInt(1)
+	other := &big.Int{}
+	if v2 := via.To4(); v2 == nil {
+		other.SetBytes(via)
+	} else {
+		other.SetBytes(v2)
+	}
+	other = other.Xor(mask, other)
+	addr := net.IP(other.Bytes())
+	if !s.InActiveRange(addr) {
+		return nil, true
+	}
+	lease := &Lease{}
+	Fill(lease)
+	lease.Addr = addr
+	lease.Token = token
+	lease.Strategy = s.Strategy
+	return lease, false
+}
+
 var (
 	pickStrategies = map[string]picker{}
 )
@@ -127,6 +148,7 @@ func init() {
 	pickStrategies["hint"] = pickHint
 	pickStrategies["nextFree"] = pickNextFree
 	pickStrategies["mostExpired"] = pickMostExpired
+	pickStrategies["point2point"] = pickPoint2Point
 }
 
 // Subnet represents a DHCP Subnet
@@ -528,13 +550,34 @@ func (s *Subnet) Validate() {
 		return
 	}
 	validateIP4(s, subnet.IP)
-
+	for _, p := range s.Pickers {
+		_, ok := pickStrategies[p]
+		if !ok {
+			s.Errorf("Picker %s is not a valid lease picking strategy", p)
+		}
+	}
+	if s.Pickers[0] == "point2point" {
+		newOpts := []models.DhcpOption{}
+		for i := range s.Options {
+			switch dhcp.OptionCode(s.Options[i].Code) {
+			case dhcp.OptionBroadcastAddress, dhcp.OptionSubnetMask:
+				continue
+			default:
+				newOpts = append(newOpts, s.Options[i])
+			}
+		}
+		mask := net.CIDRMask(31, 32)
+		newOpts = append(newOpts, models.DhcpOption{
+			Code:  byte(dhcp.OptionSubnetMask),
+			Value: mask.String(),
+		})
+		s.Options = newOpts
+	}
 	// Build mask and broadcast for always
 	mask := net.IP([]byte(net.IP(subnet.Mask).To4()))
 	bcastBits := binary.BigEndian.Uint32(subnet.IP) | ^binary.BigEndian.Uint32(mask)
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, bcastBits)
-
 	// Make sure that options have the correct netmask and broadcast options enabled
 	needMask := true
 	needBCast := true
@@ -553,12 +596,6 @@ func (s *Subnet) Validate() {
 	}
 	if needBCast {
 		s.Options = append(s.Options, models.DhcpOption{byte(dhcp.OptionBroadcastAddress), net.IP(buf).String()})
-	}
-	for _, p := range s.Pickers {
-		_, ok := pickStrategies[p]
-		if !ok {
-			s.Errorf("Picker %s is not a valid lease picking strategy", p)
-		}
 	}
 	s.AddError(index.CheckUnique(s, s.rt.stores("subnets").Items()))
 	s.SetValid()
@@ -617,10 +654,13 @@ func (s *Subnet) OnLoad() error {
 	return s.BeforeSave()
 }
 
-func (s *Subnet) next(used map[string]models.Model, token string, hint net.IP) (*Lease, bool) {
+func (s *Subnet) next(used map[string]models.Model, token string, hint, via net.IP) (*Lease, bool) {
 	for _, p := range s.Pickers {
-		l, f := pickStrategies[p](s, used, token, hint)
+		l, f := pickStrategies[p](s, used, token, hint, via)
 		if !f {
+			if l != nil {
+				l.Via = via
+			}
 			return l, f
 		}
 	}

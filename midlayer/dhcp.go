@@ -528,12 +528,16 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 			dhr.nak(dhr.respondFrom(req))
 			return "NAK"
 		}
+		via := []net.IP{dhr.request.GIAddr()}
+		if via[0] == nil || via[0].IsUnspecified() {
+			via = dhr.listenIPs()
+		}
 		var lease *backend.Lease
 		var reservation *backend.Reservation
 		var subnet *backend.Subnet
 		rt := dhr.Request("leases", "reservations", "subnets")
 		for _, s := range dhr.handler.strats {
-			lease, subnet, reservation, err = backend.FindLease(rt, s.Name, s.GenToken(dhr.request, dhr.pktOpts), req)
+			lease, subnet, reservation, err = backend.FindLease(rt, s.Name, s.GenToken(dhr.request, dhr.pktOpts), req, via)
 			if lease == nil &&
 				subnet == nil &&
 				reservation == nil &&

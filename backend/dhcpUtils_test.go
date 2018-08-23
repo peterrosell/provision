@@ -11,13 +11,13 @@ import (
 type ltf struct {
 	msg             string
 	strategy, token string
-	req             net.IP
+	req, via        net.IP
 	found, err      bool
 }
 
 func (l *ltf) find(t *testing.T, rt *RequestTracker) {
 	t.Helper()
-	res, _, _, err := FindLease(rt, l.strategy, l.token, l.req)
+	res, _, _, err := FindLease(rt, l.strategy, l.token, l.req, []net.IP{l.via})
 	if l.found {
 		if res == nil {
 			t.Errorf("%s: Expected a lease for %s:%s, failed to get one", l.msg, l.strategy, l.token)
@@ -80,25 +80,49 @@ func TestDHCPRenew(t *testing.T) {
 		{
 			"Valid Subnet Lease",
 			rt.Create,
-			&models.Lease{Addr: net.ParseIP("192.168.124.80"), Strategy: "mac", Token: "subn1", ExpireTime: time.Now().Add(60 * time.Second)},
+			&models.Lease{
+				Addr:       net.ParseIP("192.168.124.80"),
+				Via:        net.ParseIP("192.168.124.1"),
+				Strategy:   "mac",
+				Token:      "subn1",
+				ExpireTime: time.Now().Add(60 * time.Second),
+			},
 			true,
 		},
 		{
 			"Valid Reservation Lease",
 			rt.Create,
-			&models.Lease{Addr: net.ParseIP("192.168.123.10"), Strategy: "mac", Token: "res1", ExpireTime: time.Now().Add(2 * time.Hour)},
+			&models.Lease{
+				Addr:       net.ParseIP("192.168.123.10"),
+				Via:        net.ParseIP("192.168.123.1"),
+				Strategy:   "mac",
+				Token:      "res1",
+				ExpireTime: time.Now().Add(2 * time.Hour),
+			},
 			true,
 		},
 		{
 			"Conflicting Reservation Lease",
 			rt.Create,
-			&models.Lease{Addr: net.ParseIP("192.168.124.81"), Strategy: "mac", Token: "subn2", ExpireTime: time.Now().Add(2 * time.Hour)},
+			&models.Lease{
+				Addr:       net.ParseIP("192.168.124.81"),
+				Via:        net.ParseIP("192.168.124.1"),
+				Strategy:   "mac",
+				Token:      "subn2",
+				ExpireTime: time.Now().Add(2 * time.Hour),
+			},
 			true,
 		},
 		{
 			"Overridden Reservation Lease",
 			rt.Create,
-			&models.Lease{Addr: net.ParseIP("192.168.124.82"), Strategy: "mac", Token: "res3", ExpireTime: time.Now().Add(60 * time.Second)},
+			&models.Lease{
+				Addr:       net.ParseIP("192.168.124.82"),
+				Via:        net.ParseIP("192.168.124.1"),
+				Strategy:   "mac",
+				Token:      "res3",
+				ExpireTime: time.Now().Add(60 * time.Second),
+			},
 			true,
 		},
 		{
@@ -118,12 +142,12 @@ func TestDHCPRenew(t *testing.T) {
 		obj.Test(t, rt)
 	}
 	ltfs := []ltf{
-		{"Renew subnet lease using IP address", "mac", "subn1", net.ParseIP("192.168.124.80"), true, false},
-		{"Renew reservation lease using IP address", "mac", "res1", net.ParseIP("192.168.123.10"), true, false},
-		{"Fail to renew unknown lease using IP address in subnet", "mac", "res1", net.ParseIP("192.168.124.90"), false, true},
-		{"Fail to renew known lease from wrong token", "mac", "subn8", net.ParseIP("192.168.124.80"), false, true},
-		{"Fail to renew known lease from wrong address", "mac", "subn2", net.ParseIP("192.168.124.81"), false, true},
-		{"Fail to renew lease overridden by new reserved address", "mac", "res3", net.ParseIP("192.168.124.82"), false, true},
+		{"Renew subnet lease using IP address", "mac", "subn1", net.ParseIP("192.168.124.80"), net.ParseIP("192.168.124.1"), true, false},
+		{"Renew reservation lease using IP address", "mac", "res1", net.ParseIP("192.168.123.10"), net.ParseIP("192.168.123.1"), true, false},
+		{"Fail to renew unknown lease using IP address in subnet", "mac", "res1", net.ParseIP("192.168.124.90"), net.ParseIP("192.168.124.1"), false, true},
+		{"Fail to renew known lease from wrong token", "mac", "subn8", net.ParseIP("192.168.124.80"), net.ParseIP("192.168.124.1"), false, true},
+		{"Fail to renew known lease from wrong address", "mac", "subn2", net.ParseIP("192.168.124.81"), net.ParseIP("192.168.124.1"), false, true},
+		{"Fail to renew lease overridden by new reserved address", "mac", "res3", net.ParseIP("192.168.124.82"), net.ParseIP("192.168.124.1"), false, true},
 	}
 	for _, l := range ltfs {
 		l.find(t, rt)
@@ -133,7 +157,13 @@ func TestDHCPRenew(t *testing.T) {
 			t.Errorf("Failed to remove reservation for 192.168.123.10: %v", err)
 		}
 	})
-	if l, _, _, err := FindLease(rt, "mac", "res1", net.ParseIP("192.168.123.10")); err == nil {
+	if l, _, _, err := FindLease(
+		rt,
+		"mac",
+		"res1",
+		net.ParseIP("192.168.123.10"),
+		[]net.IP{net.ParseIP("192.168.123.1")},
+	); err == nil {
 		t.Errorf("Should have removed lease for %s:%s, as its backing reservation is gone!", l.Strategy, l.Token)
 	} else {
 		t.Logf("Removed lease that no longer has a Subnet or Reservation covering it: %v", err)
@@ -162,7 +192,7 @@ func dumpLeases(t *testing.T, rt *RequestTracker) {
 
 func (l *ltc) test(t *testing.T, rt *RequestTracker) {
 	t.Helper()
-	res, _, _, _ := FindOrCreateLease(rt, l.strategy, l.token, l.req, []net.IP{l.via})
+	res, _ := FindOrCreateLease(rt, l.strategy, l.token, l.req, []net.IP{l.via})
 	if l.created {
 		if res == nil {
 			t.Errorf("%s: Expected to create a lease with %s:%s, but did not!", l.msg, l.strategy, l.token)
@@ -281,5 +311,43 @@ func TestDHCPCreateSubnet(t *testing.T) {
 	for _, obj := range expireTests {
 		obj.test(t, rt)
 		dumpLeases(t, rt)
+	}
+}
+
+func TestDHCPP2P(t *testing.T) {
+	dt := mkDT()
+	rt := dt.Request(dt.Logger, "subnets", "leases", "reservations")
+	// A subnet with 3 active addresses
+	startObjs := []crudTest{
+		{
+			"Create Subnet",
+			rt.Create,
+			&models.Subnet{
+				Enabled:           true,
+				Name:              "test",
+				Subnet:            "192.168.124.0/24",
+				ActiveStart:       net.ParseIP("192.168.124.80"),
+				ActiveEnd:         net.ParseIP("192.168.124.83"),
+				ActiveLeaseTime:   60,
+				ReservedLeaseTime: 7200,
+				Strategy:          "mac",
+				Pickers:           []string{"point2point"},
+			},
+			true,
+		},
+	}
+	for _, obj := range startObjs {
+		obj.Test(t, rt)
+	}
+	createTests := []ltc{
+		{"Attemt to create .11", "mac", "res1", nil, net.ParseIP("192.168.124.10"), false, nil},
+		{"Create .81", "mac", "res2", nil, net.ParseIP("192.168.124.80"), true, net.ParseIP("192.168.124.81")},
+		{"Create .80", "mac", "res3", nil, net.ParseIP("192.168.124.81"), true, net.ParseIP("192.168.124.80")},
+		{"Create .83", "mac", "res4", nil, net.ParseIP("192.168.124.82"), true, net.ParseIP("192.168.124.83")},
+		{"Create .82", "mac", "res5", nil, net.ParseIP("192.168.124.83"), true, net.ParseIP("192.168.124.82")},
+		{"Attemt to create .84", "mac", "res6", nil, net.ParseIP("192.168.124.85"), false, nil},
+	}
+	for _, obj := range createTests {
+		obj.test(t, rt)
 	}
 }
