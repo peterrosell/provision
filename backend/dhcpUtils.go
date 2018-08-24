@@ -69,6 +69,7 @@ func mergeOptions(rt *RequestTracker, l *Lease, r *Reservation, s *Subnet) {
 	if l.Duration < 1 {
 		l.Duration = 7200
 	}
+	l.ExpireTime = time.Now().Add(time.Duration(int64(l.Duration)) * time.Second)
 	if r != nil && r.NextServer.IsGlobalUnicast() {
 		l.NextServer = s.NextServer
 	}
@@ -79,6 +80,15 @@ func mergeOptions(rt *RequestTracker, l *Lease, r *Reservation, s *Subnet) {
 	sort.Slice(l.Options, func(i, j int) bool {
 		return l.Options[i].Code < l.Options[j].Code
 	})
+}
+
+func fillViaFromLease(lease *Lease, vias []net.IP) net.IP {
+	for _, via := range vias {
+		if via.Equal(lease.Via) {
+			return via
+		}
+	}
+	return nil
 }
 
 func findSubnetForVias(rt *RequestTracker, vias []net.IP) (*Subnet, net.IP) {
@@ -243,7 +253,6 @@ func findLease(rt *RequestTracker,
 
 	lease.Strategy = strategy
 	lease.Token = token
-	lease.ExpireTime = time.Now().Add(2 * time.Second)
 	rt.Switch("dhcp").Infof("Found our lease for strategy: %s token %s, will use it", strategy, token)
 	return
 }
@@ -276,14 +285,9 @@ func FindLease(rt *RequestTracker,
 			return
 		}
 		if via == nil {
-			for _, via = range vias {
-				if via.Equal(lease.Via) {
-					break
-				}
-				via = nil
-			}
+			via = fillViaFromLease(lease, vias)
 		}
-		if !lease.Via.Equal(via) {
+		if len(lease.Via) > 0 && !lease.Via.Equal(via) {
 			err = LeaseNAK(fmt.Errorf("Cannot change via from %s to %s for lease %s", lease.Via, via, lease.Addr))
 			return
 		}
@@ -292,17 +296,6 @@ func FindLease(rt *RequestTracker,
 			rt.Remove(lease)
 			err = LeaseNAK(fmt.Errorf("Lease %s has no reservation or subnet, it is dead to us.", lease.Addr))
 			return
-		}
-		if reservation != nil {
-			lease.ExpireTime = time.Now().Add(2 * time.Hour)
-		}
-		if subnet != nil {
-			lease.ExpireTime = time.Now().Add(subnet.LeaseTimeFor(lease.Addr))
-			if !subnet.Enabled && reservation == nil {
-				// We aren't enabled, so act like we are silent.
-				lease = nil
-				return
-			}
 		}
 		lease.State = "ACK"
 		lease.Via = via
@@ -418,6 +411,9 @@ func FindOrCreateLease(rt *RequestTracker,
 			lease, fresh = findViaSubnet(rt, subnet, strategy, token, req, via, false)
 		}
 		if lease != nil {
+			if via == nil {
+				via = fillViaFromLease(lease, vias)
+			}
 			mergeOptions(rt, lease, reservation, subnet)
 			// If ViaReservation created it, then add it
 			if !ok && (subnet == nil || !subnet.Proxy) {
