@@ -1019,7 +1019,7 @@ func (f *Frontend) Patch(c *gin.Context, ref store.KeySaver, key string) {
 	var res models.Model
 	rt.Do(func(d backend.Stores) {
 		// This will fail with notfound as well.
-		a, b := rt.Patch(ref, key, patch)
+		a, b := rt.Patch(ref, tref.Key(), patch)
 		res, err = models.Clone(a), b
 	})
 	if err == nil {
