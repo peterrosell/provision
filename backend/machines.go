@@ -460,6 +460,10 @@ func (n *Machine) Validate() {
 				n.Errorf("BootEnv %s is not available", n.BootEnv)
 			}
 			if n.oldBootEnv != n.BootEnv && !n.inCreate {
+				if bootErr := env.CanArchBoot(n.rt, n.Arch); bootErr != nil {
+					n.AddError(bootErr)
+					n.Errorf("BootEnv %s cannot boot Arch %s", env.Name, n.Arch)
+				}
 				n.Runnable = false
 			}
 			if obFound := bootenvs.Find(n.oldBootEnv); obFound != nil {

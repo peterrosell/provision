@@ -197,7 +197,7 @@ type rBootEnv struct {
 //    tftp: Will expand to the path the file can be accessed at via TFTP.
 //    disk: Will expand to the path of the file inside the provisioner container.
 func (b *rBootEnv) PathFor(proto, f string) string {
-	tail := b.BootEnv.PathFor(f)
+	tail := b.BootEnv.PathFor(f, b.renderData.Machine.Arch)
 	switch proto {
 	case "tftp":
 		return strings.TrimPrefix(tail, "/")
@@ -234,6 +234,7 @@ type rStage struct {
 type Repo struct {
 	Tag            string   `json:"tag"`
 	OS             []string `json:"os"`
+	Arch           string   `json:"arch"`
 	URL            string   `json:"url"`
 	PackageType    string   `json:"packageType"`
 	RepoType       string   `json:"repoType"`
@@ -437,29 +438,26 @@ func (r *RenderData) Repos(tags ...string) []*Repo {
 func (r *RenderData) localInstallRepo() *Repo {
 	for _, obj := range r.rt.d("bootenvs").Items() {
 		env := obj.(*BootEnv)
-		if env.OS.Name == r.Machine.OS {
-			fi, err := os.Stat(path.Join(r.rt.dt.FileRoot, r.Machine.OS, "install", env.Kernel))
-			if err == nil && fi.Mode().IsRegular() {
-				res := &Repo{
-					Tag:           env.Name,
-					InstallSource: true,
-					OS:            []string{r.Machine.OS},
-					URL:           r.rt.FileURL(r.remoteIP) + "/" + path.Join(r.Machine.OS, "install"),
-					r:             r,
-					targetOS:      r.Machine.OS,
-				}
-
-				switch res.renderStyle() {
-				case "apt":
-					if _, err := os.Stat(path.Join(r.rt.dt.FileRoot, r.Machine.OS, "install", "dists", "stable", "Release")); err == nil {
-						res.Distribution = "stable"
-						res.Components = []string{"main", "restricted"}
-					} else {
-						continue
-					}
-				}
-				return res
+		if env.OS.Name == r.Machine.OS && env.CanArchBoot(r.rt, r.Machine.Arch) == nil {
+			res := &Repo{
+				Tag:           env.Name,
+				InstallSource: true,
+				OS:            []string{r.Machine.OS},
+				URL:           r.rt.FileURL(r.remoteIP) + "/" + path.Join(r.Machine.OS, "install"),
+				r:             r,
+				targetOS:      r.Machine.OS,
 			}
+
+			switch res.renderStyle() {
+			case "apt":
+				if _, err := os.Stat(path.Join(r.rt.dt.FileRoot, r.Machine.OS, "install", "dists", "stable", "Release")); err == nil {
+					res.Distribution = "stable"
+					res.Components = []string{"main", "restricted"}
+				} else {
+					continue
+				}
+			}
+			return res
 		}
 	}
 	return nil
@@ -475,6 +473,18 @@ func (r *RenderData) MachineRepos() []*Repo {
 		found = append(found, li)
 	}
 	found = append(found, r.fetchRepos(func(rd *Repo) bool {
+		ok := rd.Arch == "any" && !rd.InstallSource
+		if !ok {
+			a1, a1ok := models.SupportedArch(rd.Arch)
+			if !a1ok {
+				return false
+			}
+			a2, _ := models.SupportedArch(r.Machine.Arch)
+			ok = a1 == a2
+		}
+		if !ok {
+			return false
+		}
 		for _, os := range rd.OS {
 			if os == r.Machine.OS {
 				rd.targetOS = r.Machine.OS
