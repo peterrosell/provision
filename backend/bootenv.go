@@ -142,7 +142,8 @@ func (b *BootEnv) regenArches() {
 	}
 	if len(b.OS.SupportedArchitectures) > 0 {
 		for k, v := range b.OS.SupportedArchitectures {
-			arches[k] = v
+			k2, _ := models.SupportedArch(k)
+			arches[k2] = v
 		}
 	}
 	b.realArches = arches
@@ -153,17 +154,15 @@ func (b *BootEnv) Backend() store.Store {
 }
 
 func (b *BootEnv) ArchFor(arch string) string {
-	s1, _ := models.SupportedArch(arch)
 	for k := range b.realArches {
-		s2, _ := models.SupportedArch(k)
-		if s1 == s2 {
+		if models.ArchEqual(arch, k) {
 			return k
 		}
 	}
 	return ""
 }
 
-func (b *BootEnv) CanArchBoot(rt *RequestTracker, arch string) error {
+func (b *BootEnv) canLocalBoot(rt *RequestTracker, arch string) error {
 	if !b.NetBoot() {
 		return nil
 	}
@@ -178,9 +177,6 @@ func (b *BootEnv) CanArchBoot(rt *RequestTracker, arch string) error {
 		return ret
 	}
 	archInfo := b.realArches[ourArch]
-	if _, ok := b.installRepos[ourArch]; ok {
-		return nil
-	}
 	kPath := b.localPathFor(rt, archInfo.Kernel, ourArch)
 	kernelStat, err := os.Stat(kPath)
 	if err != nil {
@@ -217,6 +213,17 @@ func (b *BootEnv) CanArchBoot(rt *RequestTracker, arch string) error {
 		}
 	}
 	return ret.HasError()
+}
+
+func (b *BootEnv) CanArchBoot(rt *RequestTracker, arch string) error {
+	if !b.NetBoot() {
+		return nil
+	}
+	ourArch := b.ArchFor(arch)
+	if _, ok := b.installRepos[ourArch]; ok {
+		return nil
+	}
+	return b.canLocalBoot(rt, arch)
 }
 
 func (b *BootEnv) PathFor(f, arch string) string {
@@ -269,29 +276,30 @@ func (b *BootEnv) fillInstallRepos() {
 			continue
 		}
 		arch := r.Arch
-		archInfo, ok := b.realArches[arch]
+		realArch := b.ArchFor(arch)
+		archInfo, ok := b.realArches[realArch]
 		if !ok {
 			continue
 		}
 		b.rt.Infof("BootEnv %s: Using repo %s as an install source", b.Name, r.Tag)
 		b.kernelVerified = true
-		b.installRepos[arch] = r
+		b.installRepos[realArch] = r
 		pf := b.PathFor("", arch)
 		fileRoot := b.rt.dt.FileRoot
 		l := b.rt.Logger
-		b.pathLookasides[arch] = func(p string) (io.Reader, error) {
+		b.pathLookasides[realArch] = func(p string) (io.Reader, error) {
 			// Always use local copy if available
-			if _, err := os.Stat(path.Join(fileRoot, b.PathFor("", arch))); err == nil || b.installRepos[arch] == nil {
+			if _, err := os.Stat(path.Join(fileRoot, b.PathFor("", arch))); err == nil || b.installRepos[realArch] == nil {
 				return nil, nil
 			}
-			tgtUri := strings.TrimSuffix(b.installRepos[arch].URL, "/") + strings.TrimPrefix(p, pf)
-			if b.installRepos[arch].BootLoc != "" {
+			tgtUri := strings.TrimSuffix(b.installRepos[realArch].URL, "/") + strings.TrimPrefix(p, pf)
+			if b.installRepos[realArch].BootLoc != "" {
 				if strings.HasSuffix(p, b.Kernel) {
-					tgtUri = strings.TrimSuffix(b.installRepos[arch].BootLoc, "/") + "/" + path.Base(archInfo.Kernel)
+					tgtUri = strings.TrimSuffix(b.installRepos[realArch].BootLoc, "/") + "/" + path.Base(archInfo.Kernel)
 				} else {
 					for _, i := range archInfo.Initrds {
 						if strings.HasSuffix(p, i) {
-							tgtUri = strings.TrimSuffix(b.installRepos[arch].BootLoc, "/") + "/" + path.Base(i)
+							tgtUri = strings.TrimSuffix(b.installRepos[realArch].BootLoc, "/") + "/" + path.Base(i)
 							break
 						}
 					}

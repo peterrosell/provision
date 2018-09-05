@@ -438,7 +438,7 @@ func (r *RenderData) Repos(tags ...string) []*Repo {
 func (r *RenderData) localInstallRepo() *Repo {
 	for _, obj := range r.rt.d("bootenvs").Items() {
 		env := obj.(*BootEnv)
-		if env.OS.Name == r.Machine.OS && env.CanArchBoot(r.rt, r.Machine.Arch) == nil {
+		if env.OS.Name == r.Machine.OS && env.canLocalBoot(r.rt, r.Machine.Arch) == nil {
 			res := &Repo{
 				Tag:           env.Name,
 				InstallSource: true,
