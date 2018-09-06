@@ -55,10 +55,19 @@ func TestUserPassword(t *testing.T) {
 		} else {
 			t.Logf("Checking password failed, as expected.")
 		}
+		// store original secret and change password
+		curSecret := u.Secret
 		if err := u.ChangePassword(rt, "password"); err != nil {
 			t.Errorf("Changing password failed: %v", err)
 		} else {
 			t.Logf("Changing password passed.")
+		}
+		// store new secret and check secret was regenerated
+		newSecret := u.Secret
+		if curSecret == newSecret {
+			t.Errorf("Changing password did not regenerate Secret!")
+		} else {
+			t.Logf("Changing password regenerated Secret")
 		}
 		// reload the user, then check the password again.
 		buf := rt.find("users", "test user")
@@ -71,7 +80,13 @@ func TestUserPassword(t *testing.T) {
 		if !newU.CheckPassword("password") {
 			t.Errorf("Checking password should have succeeded.")
 		} else {
-			t.Logf("CHecking password passed, as expected.")
+			t.Logf("Checking password passed, as expected.")
+		}
+		// check secret was changed and persisted by ChangePassword above
+		if newU.Secret != newSecret {
+			t.Errorf("Changing password did not persist new Secret")
+		} else {
+			t.Logf("Changing password persisted new Secret")
 		}
 		// Make sure sanitizing the user works as expected
 		sanitizedU := newU.Sanitize().(*models.User)
@@ -82,3 +97,4 @@ func TestUserPassword(t *testing.T) {
 		}
 	})
 }
+

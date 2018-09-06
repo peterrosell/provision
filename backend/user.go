@@ -95,9 +95,9 @@ func (u *User) ChangePassword(rt *RequestTracker, newPass string) error {
 		return err
 	}
 	u.PasswordHash = ph
-	_, err = rt.Save(u)
 	// When a user changes their password, invalidate any previous cached auth tokens.
 	u.Secret = randString(16)
+	_, err = rt.Save(u)
 	return err
 }
 
