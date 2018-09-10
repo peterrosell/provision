@@ -189,6 +189,37 @@ type rBootEnv struct {
 	renderData *RenderData
 }
 
+func (b *rBootEnv) arch() string {
+	if b.renderData.Machine == nil {
+		return "amd64"
+	}
+	return b.renderData.Machine.Arch
+}
+
+func (b *rBootEnv) KernelFor(arch string) string {
+	return b.BootEnv.realArches[arch].Kernel
+}
+
+func (b *rBootEnv) Kernel() string {
+	return b.KernelFor(b.arch())
+}
+
+func (b *rBootEnv) InitrdsFor(arch string) []string {
+	return b.BootEnv.realArches[arch].Initrds
+}
+
+func (b *rBootEnv) Initrds() []string {
+	return b.InitrdsFor(b.arch())
+}
+
+func (b *rBootEnv) BootParamsFor(arch string) string {
+	return b.BootEnv.realArches[arch].BootParams
+}
+
+func (b *rBootEnv) BootParams() string {
+	return b.BootParamsFor(b.arch())
+}
+
 // PathFor expands the partial paths for kernels and initrds into full
 // paths appropriate for specific protocols.
 //
@@ -196,15 +227,8 @@ type rBootEnv struct {
 //    http: Will expand to the URL the file can be accessed over.
 //    tftp: Will expand to the path the file can be accessed at via TFTP.
 //    disk: Will expand to the path of the file inside the provisioner container.
-func (b *rBootEnv) PathFor(proto, f string) string {
-	var tail string
-	if !b.OnlyUnknown {
-		tail = b.BootEnv.PathFor(f, b.renderData.Machine.Arch)
-	} else {
-		// OnlyUnknown has no Machine rference, and no good way to determine the
-		// arch.  Therefore, lie.
-		tail = b.BootEnv.PathFor(f, "amd64")
-	}
+func (b *rBootEnv) PathForArch(proto, f, arch string) string {
+	tail := b.BootEnv.PathFor(f, arch)
 	switch proto {
 	case "tftp":
 		return strings.TrimPrefix(tail, "/")
@@ -216,13 +240,21 @@ func (b *rBootEnv) PathFor(proto, f string) string {
 	return ""
 }
 
+func (b *rBootEnv) PathFor(proto, f string) string {
+	return b.PathForArch(proto, f, b.arch())
+}
+
 // JoinInitrds joins the fully expanded initrd paths into a comma-separated string.
-func (b *rBootEnv) JoinInitrds(proto string) string {
-	fullInitrds := make([]string, len(b.Initrds))
-	for i, initrd := range b.Initrds {
-		fullInitrds[i] = b.PathFor(proto, initrd)
+func (b *rBootEnv) JoinInitrdsFor(proto, arch string) string {
+	fullInitrds := []string{}
+	for i, initrd := range b.InitrdsFor(arch) {
+		fullInitrds[i] = b.PathForArch(proto, initrd, arch)
 	}
 	return strings.Join(fullInitrds, " ")
+}
+
+func (b *rBootEnv) JoinInitrds(proto string) string {
+	return b.JoinInitrdsFor(proto, b.arch())
 }
 
 type rTask struct {
@@ -450,7 +482,7 @@ func (r *RenderData) localInstallRepo() *Repo {
 				Tag:           env.Name,
 				InstallSource: true,
 				OS:            []string{r.Machine.OS},
-				URL:           r.rt.FileURL(r.remoteIP) + "/" + path.Join(r.Machine.OS, "install"),
+				URL:           r.rt.FileURL(r.remoteIP) + env.PathFor("", r.Machine.Arch),
 				r:             r,
 				targetOS:      r.Machine.OS,
 			}
@@ -714,24 +746,36 @@ func (r *RenderData) GenerateProfileToken(profile string, duration int) string {
 
 // BootParams is a helper function that expands the BootParams
 // template from the boot environment.
-func (r *RenderData) BootParams() (string, error) {
+func (r *RenderData) BootParamsFor(arch string) (string, error) {
 	if r.Env == nil {
 		return "", fmt.Errorf("Missing bootenv")
 	}
+	params := r.Env.BootParamsFor(arch)
 	res := &bytes.Buffer{}
-	if r.Env.bootParamsTmpl == nil {
-		return "", nil
+	tmpl, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(params)
+	if err != nil {
+		return "", fmt.Errorf("Error compiling boot parameter template: %v", err)
 	}
-	if err := r.Env.bootParamsTmpl.Execute(res, r); err != nil {
+	tmpl = tmpl.Option("missingkey=error")
+	if err := tmpl.Execute(res, r); err != nil {
 		return "", err
 	}
 	str := res.String()
 	// ipxe in uefi mode requires an initrd stanza in the boot params.
 	// I have no idea why.
-	if strings.HasSuffix(r.tmplPath, ".ipxe") && len(r.Env.Initrds) > 0 {
-		str = fmt.Sprintf("initrd=%s %s", path.Base(r.Env.Initrds[0]), str)
+	if strings.HasSuffix(r.tmplPath, ".ipxe") {
+		initrds := r.Env.Initrds()
+		if len(initrds) > 0 {
+			str = fmt.Sprintf("initrd=%s %s", path.Base(initrds[0]), str)
+		}
 	}
 	return str, nil
+}
+func (r *RenderData) BootParams() (string, error) {
+	if r.Env == nil {
+		return "", fmt.Errorf("Missing bootenv")
+	}
+	return r.BootParamsFor(r.Env.arch())
 }
 
 // ParseUrl is a template function that return the section

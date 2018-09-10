@@ -65,8 +65,8 @@ func ExtractAssets(replaceRoot, fileRoot string) error {
 		"ALL-LICENSE": "",
 
 		// CLI things
-		"drpcli.amd64.linux":   "files",
-		"drpcli.amd64.windows": "files",
+		"drpcli.amd64.linux": "files",
+		//"drpcli.amd64.windows": "files",
 
 		// General ISO things
 		"explode_iso.sh": "",
@@ -90,6 +90,8 @@ func ExtractAssets(replaceRoot, fileRoot string) error {
 		"pxechn.c32":     "",
 		"libcom32.c32":   "",
 		"wimboot":        "",
+		"grubarm64.efi":  "",
+		"grubamd64.efi":  "",
 	}
 
 	for src, dest := range assets {

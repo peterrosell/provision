@@ -35,13 +35,12 @@ type BootEnv struct {
 	realArches     map[string]models.ArchInfo
 	installRepos   map[string]*Repo
 	kernelVerified bool
-	bootParamsTmpl *template.Template
 	rootTemplate   *template.Template
 	tmplMux        sync.Mutex
 }
 
 func (b *BootEnv) NetBoot() bool {
-	return b.OnlyUnknown || b.Kernel != ""
+	return b.OnlyUnknown || len(b.realArches) > 0
 }
 
 func (b *BootEnv) SetReadOnly(nb bool) {
@@ -144,6 +143,11 @@ func (b *BootEnv) regenArches() {
 		for k, v := range b.OS.SupportedArchitectures {
 			k2, _ := models.SupportedArch(k)
 			arches[k2] = v
+		}
+	}
+	for k := range arches {
+		if arches[k].Kernel == "" {
+			b.Errorf("Arch %s is missing a kernel!", k)
 		}
 	}
 	b.realArches = arches
@@ -338,12 +342,12 @@ func (b *BootEnv) genRoot(commonRoot *template.Template, e models.ErrorAdder) *t
 			e.Errorf("Template[%d] needs a Path", i)
 		}
 	}
-	if b.BootParams != "" {
-		tmpl, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(b.BootParams)
-		if err != nil {
-			e.Errorf("Error compiling boot parameter template: %v", err)
-		} else {
-			b.bootParamsTmpl = tmpl.Option("missingkey=error")
+	for k, archInfo := range b.realArches {
+		if archInfo.BootParams != "" {
+			_, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(archInfo.BootParams)
+			if err != nil {
+				e.Errorf("Error compiling boot parameter template for arch %s: %v", k, err)
+			}
 		}
 	}
 	if b.HasError() != nil {
@@ -386,34 +390,60 @@ func explodeISO(rt *RequestTracker, envName, osName, fileRoot, isoFile, dest, sh
 	}
 }
 
-func (b *BootEnv) explodeIsos() {
+func (b *BootEnv) IsoExploders(rt *RequestTracker) []func(*RequestTracker) {
+	res := []func(*RequestTracker){}
 	if b.OS.Name == "" {
-		b.rt.Errorf("Explode ISO: Skipping because BootEnv %s is missing OS.Name", b.Name)
-		return
+		rt.Errorf("Explode ISO: Skipping because BootEnv %s is missing OS.Name", b.Name)
+		return res
 	}
 	for arch, archInfo := range b.realArches {
 		// Only work on things that are requested.
 		if archInfo.IsoFile == "" {
-			b.rt.Infof("Explode ISO: Skipping %s becausing no iso image specified\n", b.Name)
+			rt.Infof("Explode ISO: Skipping %s becausing no iso image specified\n", b.Name)
 			continue
 		}
 		// Have we already exploded this?  If file exists, then good!
-		canaryPath := b.localPathFor(b.rt, "."+strings.Replace(b.OS.Name, "/", "_", -1)+".rebar_canary", arch)
+		canaryPath := b.localPathFor(rt, "."+strings.Replace(b.OS.Name, "/", "_", -1)+".rebar_canary", arch)
 		buf, err := ioutil.ReadFile(canaryPath)
 		if err == nil && string(bytes.TrimSpace(buf)) == archInfo.Sha256 {
-			b.rt.Infof("Explode ISO: canary file %s, in place and has proper SHA256\n", b.rt.dt.reportPath(canaryPath))
+			rt.Infof("Explode ISO: canary file %s, in place and has proper SHA256\n", rt.dt.reportPath(canaryPath))
 			continue
 		}
-		isoPath := filepath.Join(b.rt.dt.FileRoot, "isos", archInfo.IsoFile)
+		isoPath := filepath.Join(rt.dt.FileRoot, "isos", archInfo.IsoFile)
 		if _, err := os.Stat(isoPath); os.IsNotExist(err) {
 			if b.installRepos[arch] != nil {
-				b.rt.Infof("BootEnv: Explode ISO: ISO does not exist, falling back to install repo at %s", b.installRepos[arch].URL)
+				rt.Infof("BootEnv: Explode ISO: ISO does not exist, falling back to install repo at %s", b.installRepos[arch].URL)
 			}
 			continue
 		}
-		b.rt.Infof("Exploding ISO: %s", b.rt.dt.reportPath(isoPath))
-		go explodeISO(b.rt, b.Name, b.OS.Name, b.rt.dt.FileRoot, isoPath, b.localPathFor(b.rt, "", arch), archInfo.Sha256)
+		lPath := b.localPathFor(rt, "", arch)
+		res = append(res, func(rt *RequestTracker) {
+			name := b.Name
+			osName := b.OS.Name
+			iPath := isoPath
+			localPath := lPath
+			sha256 := archInfo.Sha256
+			explodeISO(rt, name, osName, rt.dt.FileRoot, iPath, localPath, sha256)
+		})
 	}
+	return res
+}
+
+func (b *BootEnv) ExplodeIsos(rt *RequestTracker) {
+	newRT := rt.dt.Request(rt.Logger)
+	exploders := b.IsoExploders(newRT)
+	for i := range exploders {
+		go exploders[i](newRT)
+	}
+}
+
+func (b *BootEnv) IsoFor(name string) bool {
+	for _, archInfo := range b.realArches {
+		if name == archInfo.IsoFile {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *BootEnv) Validate() {
@@ -456,7 +486,7 @@ func (b *BootEnv) Validate() {
 	// Make sure the ISO for this bootenv has been exploded locally so that
 	// the boot env can use its contents.
 	b.fillInstallRepos()
-	b.explodeIsos()
+	b.ExplodeIsos(b.rt)
 	if b.OnlyUnknown {
 		b.renderers = append(b.renderers, b.render(b.rt, nil, b)...)
 	} else {

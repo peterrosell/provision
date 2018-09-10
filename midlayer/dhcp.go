@@ -194,17 +194,20 @@ func (dhr *DhcpRequest) checkMachine(l *backend.Lease) {
 	// to net boot.
 	if vals, ok := dhr.pktOpts[dhcp.OptionParameterRequestList]; !ok ||
 		bytes.IndexByte(vals, byte(dhcp.OptionBootFileName)) == -1 {
+		dhr.Tracef("Refusing netboot, no boot file name option requested")
 		dhr.offerNetBoot = false
 		return
 	}
 	// If we have a dhcp.OptionBootFileName set to "", a reservation told us
 	// to not net boot.
 	if val, ok := dhr.outOpts[dhcp.OptionBootFileName]; ok && len(val) == 0 {
+		dhr.Tracef("Refusing netboot, no boot file name option set")
 		dhr.offerNetBoot = false
 		return
 	}
 	// If the subnet is unmanaged, we never want machines to PXE boot from it.
 	if l.SkipBoot {
+		dhr.Tracef("Refusing netboot, subnet does not allow it")
 		dhr.offerNetBoot = false
 		return
 	}
@@ -223,8 +226,8 @@ func (dhr *DhcpRequest) checkMachine(l *backend.Lease) {
 			dhr.offerNetBoot = true
 			return
 		}
-		if bk := rt.Find("bootenvs", dhr.machine.BootEnv); bk != nil {
-			dhr.bootEnv = backend.AsBootEnv(bk)
+		if bk := rt.RawFind("bootenvs", dhr.machine.BootEnv); bk != nil {
+			dhr.bootEnv = &(*backend.AsBootEnv(bk))
 		} else {
 			// This should never happen, but if it does then Something Bad
 			// happened, and we will allow it to PXE boot if it wants.
@@ -238,12 +241,14 @@ func (dhr *DhcpRequest) checkMachine(l *backend.Lease) {
 		if !dhr.bootEnv.NetBoot() {
 			// We found a machine, and the bootenv it is set to does not
 			// want to net boot.  We should not let it PXE boot from us.
+			dhr.Tracef("Refusing netboot, bootenv %s does not allow it", dhr.bootEnv.Name)
 			dhr.offerNetBoot = false
 			return
 		}
 		if len(l.Addr) == 0 || l.Addr.IsUnspecified() {
 			// We do not have a valid lease for this mac address.
 			// DO not let it boot.
+			dhr.Tracef("Refusing netboot, bad lease")
 			dhr.offerNetBoot = false
 			return
 		}
