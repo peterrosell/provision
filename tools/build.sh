@@ -49,6 +49,8 @@ set +e
 . tools/version.sh
 set -e
 
+export CGO_ENABLED=0
+
 echo "Version = $Prepart$MajorV.$MinorV.$PatchV$Extra-$GITHASH"
 
 export VERFLAGS="-s -w \
