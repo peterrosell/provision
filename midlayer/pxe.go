@@ -228,7 +228,19 @@ func (dhr *DhcpRequest) fillForPXE(l *backend.Lease) {
 	}
 	if inIPxe && dhr.ipxeIsSane(arch) {
 		fname = "default.ipxe"
-	} else {
+	} else if dhr.bootEnv != nil {
+		var archInfo models.ArchInfo
+		switch arch {
+		case 7, 9:
+			archInfo = dhr.bootEnv.RealArch("amd64")
+		case 11:
+			archInfo = dhr.bootEnv.RealArch("arm64")
+		}
+		if archInfo.Loader != "" {
+			fname = archInfo.Loader
+		}
+	}
+	if fname == "" {
 		switch arch {
 		case 0:
 			if inIPxe {

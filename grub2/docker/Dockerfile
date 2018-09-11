@@ -9,4 +9,5 @@ ADD http://mirror.centos.org/centos/7/os/x86_64/Packages/grub2-efi-x64-modules-2
 RUN yum -y install rpm2cpio grub2-tools-extra
 RUN for r in *.rpm; do rpm2cpio < "$r" |(cd /; cpio -idum); done
 COPY build_grub.sh /bin/build_grub.sh
+COPY grub.cfg grub.cfg
 RUN chmod 755 /bin/build_grub.sh

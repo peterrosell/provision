@@ -212,11 +212,30 @@ func (b *rBootEnv) Initrds() []string {
 	return b.InitrdsFor(b.arch())
 }
 
-func (b *rBootEnv) BootParamsFor(arch string) string {
-	return b.BootEnv.realArches[arch].BootParams
+func (b *rBootEnv) BootParamsFor(arch string) (string, error) {
+	params := b.BootEnv.realArches[arch].BootParams
+	res := &bytes.Buffer{}
+	tmpl, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(params)
+	if err != nil {
+		return "", fmt.Errorf("Error compiling boot parameter template: %v", err)
+	}
+	tmpl = tmpl.Option("missingkey=error")
+	if err := tmpl.Execute(res, b.renderData); err != nil {
+		return "", err
+	}
+	str := res.String()
+	// ipxe in uefi mode requires an initrd stanza in the boot params.
+	// I have no idea why.
+	if strings.HasSuffix(b.renderData.tmplPath, ".ipxe") {
+		initrds := b.Initrds()
+		if len(initrds) > 0 {
+			str = fmt.Sprintf("initrd=%s %s", path.Base(initrds[0]), str)
+		}
+	}
+	return str, nil
 }
 
-func (b *rBootEnv) BootParams() string {
+func (b *rBootEnv) BootParams() (string, error) {
 	return b.BootParamsFor(b.arch())
 }
 
@@ -750,26 +769,7 @@ func (r *RenderData) BootParamsFor(arch string) (string, error) {
 	if r.Env == nil {
 		return "", fmt.Errorf("Missing bootenv")
 	}
-	params := r.Env.BootParamsFor(arch)
-	res := &bytes.Buffer{}
-	tmpl, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(params)
-	if err != nil {
-		return "", fmt.Errorf("Error compiling boot parameter template: %v", err)
-	}
-	tmpl = tmpl.Option("missingkey=error")
-	if err := tmpl.Execute(res, r); err != nil {
-		return "", err
-	}
-	str := res.String()
-	// ipxe in uefi mode requires an initrd stanza in the boot params.
-	// I have no idea why.
-	if strings.HasSuffix(r.tmplPath, ".ipxe") {
-		initrds := r.Env.Initrds()
-		if len(initrds) > 0 {
-			str = fmt.Sprintf("initrd=%s %s", path.Base(initrds[0]), str)
-		}
-	}
-	return str, nil
+	return r.Env.BootParamsFor(arch)
 }
 func (r *RenderData) BootParams() (string, error) {
 	if r.Env == nil {

@@ -223,6 +223,12 @@ func (dhr *DhcpRequest) checkMachine(l *backend.Lease) {
 		if dhr.machine == nil {
 			// No machine known for this MAC address or IP address.  It can
 			// PXE boot if it wants.
+			if pref, found := rt.Prefs()["unknownBootEnv"]; found {
+				envIsh := rt.RawFind("bootenvs", pref)
+				if envIsh != nil {
+					dhr.bootEnv = backend.AsBootEnv(envIsh)
+				}
+			}
 			dhr.offerNetBoot = true
 			return
 		}

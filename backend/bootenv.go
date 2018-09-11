@@ -149,12 +149,22 @@ func (b *BootEnv) regenArches() {
 		if arches[k].Kernel == "" {
 			b.Errorf("Arch %s is missing a kernel!", k)
 		}
+		if arches[k].BootParams != "" {
+			_, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(arches[k].BootParams)
+			if err != nil {
+				b.Errorf("Error compiling boot parameter template for arch %s: %v", k, err)
+			}
+		}
 	}
 	b.realArches = arches
 }
 
 func (b *BootEnv) Backend() store.Store {
 	return b.rt.backend(b)
+}
+
+func (b *BootEnv) RealArch(arch string) models.ArchInfo {
+	return b.realArches[b.ArchFor(arch)]
 }
 
 func (b *BootEnv) ArchFor(arch string) string {
@@ -342,14 +352,6 @@ func (b *BootEnv) genRoot(commonRoot *template.Template, e models.ErrorAdder) *t
 			e.Errorf("Template[%d] needs a Path", i)
 		}
 	}
-	for k, archInfo := range b.realArches {
-		if archInfo.BootParams != "" {
-			_, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(archInfo.BootParams)
-			if err != nil {
-				e.Errorf("Error compiling boot parameter template for arch %s: %v", k, err)
-			}
-		}
-	}
 	if b.HasError() != nil {
 		return nil
 	}
@@ -450,6 +452,7 @@ func (b *BootEnv) Validate() {
 	b.renderers = renderers{}
 	b.pathLookasides = map[string]func(string) (io.Reader, error){}
 	b.installRepos = map[string]*Repo{}
+	b.regenArches()
 	b.BootEnv.Validate()
 	// First, the stuff that must be correct in order for
 	b.AddError(index.CheckUnique(b, b.rt.stores("bootenvs").Items()))
@@ -486,7 +489,6 @@ func (b *BootEnv) Validate() {
 	// Make sure the ISO for this bootenv has been exploded locally so that
 	// the boot env can use its contents.
 	b.fillInstallRepos()
-	b.ExplodeIsos(b.rt)
 	if b.OnlyUnknown {
 		b.renderers = append(b.renderers, b.render(b.rt, nil, b)...)
 	} else {
@@ -502,21 +504,6 @@ func (b *BootEnv) Validate() {
 		}
 	}
 	b.SetAvailable()
-	stages := b.rt.stores("stages")
-	if stages != nil {
-		for _, i := range stages.Items() {
-			stage := AsStage(i)
-			if stage.BootEnv != b.Name {
-				continue
-			}
-			func() {
-				stage.rt = b.rt
-				defer func() { stage.rt = nil }()
-				stage.ClearValidation()
-				stage.Validate()
-			}()
-		}
-	}
 }
 
 func (b *BootEnv) OnLoad() error {
@@ -535,7 +522,6 @@ func (b *BootEnv) New() store.KeySaver {
 }
 
 func (b *BootEnv) BeforeSave() error {
-	b.regenArches()
 	b.Validate()
 	if !b.Validated {
 		return b.MakeError(422, ValidationError, b)
@@ -640,6 +626,25 @@ func (b *BootEnv) render(rt *RequestTracker, m *Machine, e models.ErrorAdder) re
 }
 
 func (b *BootEnv) AfterSave() {
+	stages := b.rt.stores("stages")
+	if stages != nil {
+		for _, i := range stages.Items() {
+			stage := AsStage(i)
+			if stage.BootEnv != b.Name {
+				continue
+			}
+			b.rt.Errorf("BootEnv %s: Revalidating stage %s", b.Name, stage.Name)
+			func() {
+				b.rt.Errorf(" Stage: %#v", stage.Stage)
+				stage.rt = b.rt
+				defer func() { stage.rt = nil }()
+				stage.ClearValidation()
+				stage.Validate()
+				b.rt.Errorf(" Stage: %#v", stage.Stage)
+			}()
+		}
+	}
+	b.ExplodeIsos(b.rt)
 	if b.Available && b.renderers != nil {
 		b.renderers.register(b.rt.dt.FS)
 	}
