@@ -21,6 +21,7 @@ import (
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
+	"github.com/mholt/archiver"
 )
 
 var explodeMux = &sync.Mutex{}
@@ -392,41 +393,85 @@ func explodeISO(rt *RequestTracker, envName, osName, fileRoot, isoFile, dest, sh
 	}
 }
 
+func (b *BootEnv) sledgeExploder(rt *RequestTracker, arch string, archInfo models.ArchInfo) func(*RequestTracker) {
+	lp := b.localPathFor(rt, "", arch)
+	isoPath := filepath.Join(rt.dt.FileRoot, "isos", archInfo.IsoFile)
+	if archiver.MatchingFormat(isoPath) == nil {
+		rt.Errorf("Sledgehammer image %s not a tarball, exiting to usual extract path.", isoPath)
+		return nil
+	}
+	return func(rt *RequestTracker) {
+		explodeMux.Lock()
+		defer explodeMux.Unlock()
+		sPath := filepath.Join(lp, path.Dir(archInfo.Kernel))
+		if _, err := os.Stat(b.localPathFor(rt, archInfo.Kernel, arch)); err == nil {
+			rt.Errorf("BootEnv %s: %s slready exists", b.Name, sPath)
+			return
+		}
+		opener := archiver.MatchingFormat(isoPath)
+		rt.Errorf("Sledgehammer: Extracting %s to %s", archInfo.IsoFile, lp)
+		if err := opener.Open(isoPath, lp); err != nil {
+			os.RemoveAll(sPath)
+			rt.Errorf("Error extracting sledgehammer archive %s: %v", isoPath, err)
+		} else {
+			rt.Errorf("Sledgehammer arch %s archive %s extracted to %s", arch, isoPath, sPath)
+		}
+	}
+}
+
+func (b *BootEnv) realExploder(rt *RequestTracker, arch string, archInfo models.ArchInfo) func(*RequestTracker) {
+	// Have we already exploded this?  If file exists, then good!
+	canaryPath := b.localPathFor(rt, "."+strings.Replace(b.OS.Name, "/", "_", -1)+".rebar_canary", arch)
+	buf, err := ioutil.ReadFile(canaryPath)
+	if err == nil && string(bytes.TrimSpace(buf)) == archInfo.Sha256 {
+		rt.Infof("Explode ISO: canary file %s, in place and has proper SHA256\n", rt.dt.reportPath(canaryPath))
+		return nil
+	}
+	isoPath := filepath.Join(rt.dt.FileRoot, "isos", archInfo.IsoFile)
+	lPath := b.localPathFor(rt, "", arch)
+	return func(rt *RequestTracker) {
+		name := b.Name
+		osName := b.OS.Name
+		iPath := isoPath
+		localPath := lPath
+		sha256 := archInfo.Sha256
+		explodeISO(rt, name, osName, rt.dt.FileRoot, iPath, localPath, sha256)
+	}
+}
+
 func (b *BootEnv) IsoExploders(rt *RequestTracker) []func(*RequestTracker) {
 	res := []func(*RequestTracker){}
 	if b.OS.Name == "" {
 		rt.Errorf("Explode ISO: Skipping because BootEnv %s is missing OS.Name", b.Name)
 		return res
 	}
-	for arch, archInfo := range b.realArches {
+	for arch := range b.realArches {
+		archInfo := b.realArches[arch]
 		// Only work on things that are requested.
-		if archInfo.IsoFile == "" {
+		isoFile := archInfo.IsoFile
+		if isoFile == "" {
 			rt.Infof("Explode ISO: Skipping %s becausing no iso image specified\n", b.Name)
 			continue
 		}
-		// Have we already exploded this?  If file exists, then good!
-		canaryPath := b.localPathFor(rt, "."+strings.Replace(b.OS.Name, "/", "_", -1)+".rebar_canary", arch)
-		buf, err := ioutil.ReadFile(canaryPath)
-		if err == nil && string(bytes.TrimSpace(buf)) == archInfo.Sha256 {
-			rt.Infof("Explode ISO: canary file %s, in place and has proper SHA256\n", rt.dt.reportPath(canaryPath))
-			continue
-		}
-		isoPath := filepath.Join(rt.dt.FileRoot, "isos", archInfo.IsoFile)
-		if _, err := os.Stat(isoPath); os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(rt.dt.FileRoot, "isos", isoFile)); err != nil {
 			if b.installRepos[arch] != nil {
 				rt.Infof("BootEnv: Explode ISO: ISO does not exist, falling back to install repo at %s", b.installRepos[arch].URL)
+			} else {
+				rt.Errorf("BootEnv %s : Explode ISO: Iso %s does not exist. Will not be able to PXE boot arch %s",
+					b.Name, isoFile, arch)
 			}
 			continue
 		}
-		lPath := b.localPathFor(rt, "", arch)
-		res = append(res, func(rt *RequestTracker) {
-			name := b.Name
-			osName := b.OS.Name
-			iPath := isoPath
-			localPath := lPath
-			sha256 := archInfo.Sha256
-			explodeISO(rt, name, osName, rt.dt.FileRoot, iPath, localPath, sha256)
-		})
+		var exploder func(*RequestTracker)
+		if b.OS.Name == "sledgehammer" {
+			exploder = b.sledgeExploder(rt, arch, archInfo)
+		}
+		if exploder == nil {
+			exploder = b.realExploder(rt, arch, archInfo)
+		}
+		if exploder != nil {
+			res = append(res, exploder)
+		}
 	}
 	return res
 }
@@ -504,6 +549,7 @@ func (b *BootEnv) Validate() {
 		}
 	}
 	b.SetAvailable()
+	b.ExplodeIsos(b.rt)
 }
 
 func (b *BootEnv) OnLoad() error {
@@ -644,7 +690,6 @@ func (b *BootEnv) AfterSave() {
 			}()
 		}
 	}
-	b.ExplodeIsos(b.rt)
 	if b.Available && b.renderers != nil {
 		b.renderers.register(b.rt.dt.FS)
 	}

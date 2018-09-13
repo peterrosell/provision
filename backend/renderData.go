@@ -369,24 +369,33 @@ func (rd *Repo) UrlFor(component string) string {
 func (rd *Repo) Install() (string, error) {
 	tmpl := template.New("installLines").Funcs(models.DrpSafeFuncMap()).Option("missingkey=error")
 	var err error
+	toExec := &bytes.Buffer{}
 	switch rd.renderStyle() {
 	case "yum":
 		if rd.InstallSource {
-			tmpl, err = tmpl.Parse(`install
-url --url {{.URL}}
-repo --name="{{.Tag}}" --baseurl={{.URL}} --cost=100{{if .R.ParamExists "proxy-servers"}} --proxy="{{index (.R.Param "proxy-servers") 0}}"{{end}}`)
+			fmt.Fprintf(toExec, `install
+url --url %s
+repo --name="{{.Tag}}" --baseurl=%s --cost=100{{if .R.ParamExists "proxy-servers"}} --proxy="{{index (.R.Param "proxy-servers") 0}}"{{end}}
+`,
+				rd.URL, rd.URL)
+		} else if len(rd.Components) == 0 {
+			fmt.Fprintf(toExec, `repo --name="{{.Tag}}" --baseurl=%s --cost=200{{if .R.ParamExists "proxy-servers"}} --proxy="{{index (.R.Param "proxy-servers") 0}}"{{end}}
+`,
+				rd.URL)
 		} else {
-			tmpl, err = tmpl.Parse(`
-repo --name="{{.Tag}}" --baseurl={{.URL}} --cost=100{{if .R.ParamExists "proxy-servers"}} --proxy="{{index (.R.Param "proxy-servers") 0}}"{{end}}`)
+			for _, component := range rd.Components {
+				fmt.Fprintf(toExec, `repo --name="{{.Tag}}-%s" --baseurl=%s --cost=200{{if .R.ParamExists "proxy-servers"}} --proxy="{{index (.R.Param "proxy-servers") 0}}"{{end}}
+`,
+					component, rd.UrlFor(component))
+			}
 		}
 	case "apt":
 		if rd.InstallSource {
-			tmpl, err = tmpl.Parse(`d-i mirror/protocol string {{.R.ParseUrl "scheme" .URL}}
+			fmt.Fprintln(toExec, `d-i mirror/protocol string {{.R.ParseUrl "scheme" .URL}}
 d-i mirror/http/hostname string {{.R.ParseUrl "host" .URL}}
-d-i mirror/http/directory string {{.R.ParseUrl "path" .URL}}
-`)
+d-i mirror/http/directory string {{.R.ParseUrl "path" .URL}}`)
 		} else {
-			tmpl, err = tmpl.Parse(`{{if (eq "debian" .R.Env.OS.Family)}}
+			fmt.Fprintln(toExec, `{{if (eq "debian" .R.Env.OS.Family)}}
 d-i apt-setup/security_host string {{.URL}}
 {{else}}
 d-i apt-setup/security_host string {{.R.ParseUrl "host" .URL}}
@@ -396,6 +405,7 @@ d-i apt-setup/security_path string {{.R.ParseUrl "path" .URL}}
 	default:
 		return "", fmt.Errorf("No idea how to handle repos for %s", rd.targetOS)
 	}
+	tmpl, err = tmpl.Parse(toExec.String())
 	if err != nil {
 		return "", err
 	}
@@ -527,10 +537,14 @@ func (r *RenderData) MachineRepos() []*Repo {
 	found := []*Repo{}
 	// Sigh, current ubuntus do not have metadata good enough for things besides
 	// OS installation.
-	if li := r.localInstallRepo(); li != nil && li.renderStyle() != "apt" {
+	li := r.localInstallRepo()
+	if li != nil && li.renderStyle() != "apt" {
 		found = append(found, li)
 	}
 	found = append(found, r.fetchRepos(func(rd *Repo) bool {
+		if li != nil && rd.InstallSource {
+			return false
+		}
 		ok := rd.Arch == "any" && !rd.InstallSource
 		if !ok {
 			a1, a1ok := models.SupportedArch(rd.Arch)

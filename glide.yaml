@@ -2,7 +2,7 @@ package: github.com/digitalrebar/provision
 import:
 - package: github.com/gin-gonic/gin
   subpackages:
-    - binding
+  - binding
 - package: github.com/gin-contrib/location
 - package: github.com/gin-contrib/gzip
 - package: github.com/gin-contrib/cors
@@ -10,7 +10,7 @@ import:
   version: v2
   repo: https://github.com/go-mgo/mgo
   subpackages:
-    - bson
+  - bson
 - package: gopkg.in/yaml.v2
   version: v2
   repo: https://github.com/go-yaml/yaml
@@ -23,7 +23,9 @@ import:
 - package: github.com/hashicorp/consul
   subpackages:
   - api
-- package: github.com/spf13/cobra/doc
+- package: github.com/spf13/cobra
+  subpackages:
+  - doc
 - package: github.com/jessevdk/go-flags
 - package: github.com/dgrijalva/jwt-go
 - package: github.com/pin/tftp
@@ -35,18 +37,21 @@ import:
 - package: gopkg.in/olahol/melody.v1
 - package: github.com/fsnotify/fsnotify
 - package: github.com/vishvananda/netlink
-- package: golang.org/x/crypto/nacl
+- package: golang.org/x/crypto
   subpackages:
   - sign
+  - nacl
 - package: golang.org/x/tools
   subpackages:
   - cover
 - package: golang.org/x/net
   subpackages:
   - context
-- package: github.com/prometheus/client_golang/prometheus
+- package: github.com/prometheus/client_golang
   subpackages:
   - promhttp
+  - prometheus
 - package: github.com/groob/plist
 - package: github.com/klauspost/pgzip
-
+- package: github.com/mholt/archiver
+  version: ^2.1.0

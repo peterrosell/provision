@@ -1,5 +1,5 @@
-hash: fead7446b0d4bb4471f9882d64cb70a7ebf194bf35f5a942d3f1047431ffcf2a
-updated: 2018-08-03T09:20:24.668457024-05:00
+hash: 941279448eb1214fab93c4d8238d9c5ed1473d77aa569dcd7d1f57dc431da545
+updated: 2018-09-12T16:25:41.244177561-05:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -66,7 +66,7 @@ imports:
   - x509
   - x509/pkix
 - name: github.com/google/uuid
-  version: dec09d789f3dba190787f8b4454c7d3c936fed9e
+  version: 064e2069ce9c359c118179501254f67d7d37ba24
 - name: github.com/gorilla/websocket
   version: 5ed622c449da6d44c3c8329331ff47a9e5844f71
 - name: github.com/groob/plist
@@ -92,7 +92,7 @@ imports:
 - name: github.com/huandu/xstrings
   version: 7bb0250b58e5c15670406e6f93ffda43281305b1
 - name: github.com/imdario/mergo
-  version: 9f23e2d6bd2a77f959b2bf6acdbefd708a83a4a4
+  version: 7fe0c75c13abdee74b09fcacef5ea1c6bba6a874
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/jessevdk/go-flags
@@ -114,7 +114,7 @@ imports:
   subpackages:
   - conn
 - name: github.com/Masterminds/semver
-  version: 4ca3c04fd4fe2a472df0d7121b1b9462f2214c43
+  version: 59c29afe1a994eacb71c833025ca7acf874bb1da
 - name: github.com/Masterminds/sprig
   version: 77bb58b7f5e10889a1195c21b9e7a96ee166f199
 - name: github.com/mattn/go-isatty
@@ -123,6 +123,8 @@ imports:
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
   - pbutil
+- name: github.com/mholt/archiver
+  version: de0d89e255e17c8d75a40122055763e743ab0593
 - name: github.com/mitchellh/go-homedir
   version: 58046073cbffe2f25d425fe1331102f55cf719de
 - name: github.com/mitchellh/mapstructure
