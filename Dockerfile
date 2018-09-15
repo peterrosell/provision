@@ -24,7 +24,8 @@ FROM debian:stable-slim
 ENV LANG=C.UTF-8
 RUN apt-get update && \
     apt-get install --no-install-recommends -y iproute2 ipmitool libarchive-tools p7zip && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /provision/drp-data
 
 COPY --from=builder /provision/binaries/ /usr/bin/
 
@@ -32,6 +33,6 @@ COPY --from=builder /provision/binaries/ /usr/bin/
 RUN dr-provision --version || true
 
 EXPOSE 8091 8092 69 67 4011
-VOLUME ["/drp-data"]
+VOLUME ["/provision/drp-data"]
 
-ENTRYPOINT dr-provision --base-root=/drp-data --local-content= --default-content=
+ENTRYPOINT dr-provision --base-root=/provision/drp-data --local-content= --default-content=
