@@ -348,7 +348,7 @@ func (rd *Repo) renderStyle() string {
 
 // UrlFor returns a Url for the requested component part of the repo.
 func (rd *Repo) UrlFor(component string) string {
-	if rd.InstallSource || rd.Distribution == "" {
+	if rd.InstallSource || rd.Distribution == "" || component == "" {
 		return rd.URL
 	}
 	osName, _ := rd.osParts()
