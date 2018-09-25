@@ -888,7 +888,7 @@ var machineLockMap = map[string][]string{
 	"create":  {"stages", "bootenvs", "machines", "tasks", "profiles", "templates", "params", "workflows"},
 	"update":  {"stages", "bootenvs", "machines", "tasks", "profiles", "templates", "params", "workflows"},
 	"patch":   {"stages", "bootenvs", "machines", "tasks", "profiles", "templates", "params", "workflows"},
-	"delete":  {"stages", "bootenvs", "machines", "jobs", "tasks"},
+	"delete":  {"stages", "bootenvs", "machines", "jobs", "tasks", "profiles", "params"},
 	"actions": {"stages", "bootenvs", "machines", "profiles", "params"},
 }
 
