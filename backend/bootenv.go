@@ -397,7 +397,7 @@ func (b *BootEnv) sledgeExploder(rt *RequestTracker, arch string, archInfo model
 	lp := b.localPathFor(rt, "", arch)
 	isoPath := filepath.Join(rt.dt.FileRoot, "isos", archInfo.IsoFile)
 	if archiver.MatchingFormat(isoPath) == nil {
-		rt.Errorf("Sledgehammer image %s not a tarball, exiting to usual extract path.", isoPath)
+		rt.Infof("Sledgehammer image %s not a tarball, exiting to usual extract path.", isoPath)
 		return nil
 	}
 	return func(rt *RequestTracker) {
@@ -405,7 +405,7 @@ func (b *BootEnv) sledgeExploder(rt *RequestTracker, arch string, archInfo model
 		defer explodeMux.Unlock()
 		sPath := filepath.Join(lp, path.Dir(archInfo.Kernel))
 		if _, err := os.Stat(b.localPathFor(rt, archInfo.Kernel, arch)); err == nil {
-			rt.Errorf("BootEnv %s: %s slready exists", b.Name, sPath)
+			rt.Infof("BootEnv %s: %s slready exists", b.Name, sPath)
 			return
 		}
 		opener := archiver.MatchingFormat(isoPath)
@@ -414,7 +414,7 @@ func (b *BootEnv) sledgeExploder(rt *RequestTracker, arch string, archInfo model
 			os.RemoveAll(sPath)
 			rt.Errorf("Error extracting sledgehammer archive %s: %v", isoPath, err)
 		} else {
-			rt.Errorf("Sledgehammer arch %s archive %s extracted to %s", arch, isoPath, sPath)
+			rt.Infof("Sledgehammer arch %s archive %s extracted to %s", arch, isoPath, sPath)
 		}
 	}
 }
@@ -648,10 +648,6 @@ func (b *BootEnv) templates() *template.Template {
 }
 
 func (b *BootEnv) render(rt *RequestTracker, m *Machine, e models.ErrorAdder) renderers {
-	if len(b.RequiredParams) > 0 && m == nil {
-		e.Errorf("Machine is nil or does not have params")
-		return nil
-	}
 	r := newRenderData(rt, m, b)
 	if m == nil {
 		return r.makeRenderers(e)
