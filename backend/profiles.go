@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"fmt"
+
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
@@ -50,6 +52,46 @@ func (p *Profile) Indexes() map[string]index.Maker {
 			return profile, nil
 		})
 	return res
+}
+
+func (p *Profile) ParameterMaker(rt *RequestTracker, parameter string) (index.Maker, error) {
+	fix := AsProfile
+	pobj := rt.find("params", parameter)
+	if pobj == nil {
+		return index.Maker{}, fmt.Errorf("Filter not found: %s", parameter)
+	}
+	param := AsParam(pobj)
+
+	return index.Make(
+		false,
+		"parameter",
+		func(i, j models.Model) bool {
+			ip, _ := rt.GetParam(fix(i), parameter, true, false)
+			jp, _ := rt.GetParam(fix(j), parameter, true, false)
+			return generalLessThan(ip, jp)
+		},
+		func(ref models.Model) (gte, gt index.Test) {
+			jp, _ := rt.GetParam(fix(ref), parameter, true, false)
+			return func(s models.Model) bool {
+					ip, _ := rt.GetParam(fix(s), parameter, true, false)
+					return generalGreaterThanEqual(ip, jp)
+				},
+				func(s models.Model) bool {
+					ip, _ := rt.GetParam(fix(s), parameter, true, false)
+					return generalGreaterThan(ip, jp)
+				}
+		},
+		func(s string) (models.Model, error) {
+			obj, err := generalValidateParam(param, s)
+			if err != nil {
+				return nil, err
+			}
+			res := fix(p.New())
+			res.Params = map[string]interface{}{}
+			res.Params[parameter] = obj
+			return res, nil
+		}), nil
+
 }
 
 func (p *Profile) New() store.KeySaver {
