@@ -668,24 +668,29 @@ func (b *BootEnv) render(rt *RequestTracker, m *Machine, e models.ErrorAdder) re
 }
 
 func (b *BootEnv) AfterSave() {
-	stages := b.rt.stores("stages")
-	if stages != nil {
-		for _, i := range stages.Items() {
-			stage := AsStage(i)
-			if stage.BootEnv != b.Name {
-				continue
+	rt := b.rt
+	rt.RunAfter(func() {
+		stages := rt.stores("stages")
+		if stages != nil {
+			rt.Debugf("BootEnv %s: Revalidating stages", b.Name)
+			for _, i := range stages.Items() {
+				stage := AsStage(i)
+				rt.Tracef("BootEnv %s: Stage %s(%s)", b.Name, stage.Name, stage.BootEnv)
+				if stage.BootEnv != b.Name {
+					continue
+				}
+				rt.Debugf("BootEnv %s: Revalidating stage %s", b.Name, stage.Name)
+				func() {
+					rt.Tracef("Before: %#v", stage.Stage)
+					stage.rt = rt
+					defer func() { stage.rt = nil }()
+					stage.ClearValidation()
+					stage.Validate()
+					rt.Tracef("After: %#v", stage.Stage)
+				}()
 			}
-			b.rt.Errorf("BootEnv %s: Revalidating stage %s", b.Name, stage.Name)
-			func() {
-				b.rt.Errorf(" Stage: %#v", stage.Stage)
-				stage.rt = b.rt
-				defer func() { stage.rt = nil }()
-				stage.ClearValidation()
-				stage.Validate()
-				b.rt.Errorf(" Stage: %#v", stage.Stage)
-			}()
 		}
-	}
+	})
 	if b.Available && b.renderers != nil {
 		b.renderers.register(b.rt.dt.FS)
 	}

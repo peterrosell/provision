@@ -171,7 +171,9 @@ func (s *Stage) Validate() {
 		}
 	}
 	if s.BootEnv != "" {
+		s.rt.Tracef("Stage %s: Looking for bootenv %s", s.Name, s.BootEnv)
 		if nbFound := s.rt.find("bootenvs", s.BootEnv); nbFound == nil {
+			s.rt.Errorf("Stage %s: Cannot validate bootenv %s, does not exist", s.Name, s.BootEnv)
 			s.Errorf("BootEnv %s does not exist", s.BootEnv)
 		} else {
 			env := AsBootEnv(nbFound)

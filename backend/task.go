@@ -114,11 +114,12 @@ func (t *Task) Validate() {
 				if taskName != t.Name {
 					continue
 				}
-				func() {
-					stage.rt = t.rt
+				rt := t.rt
+				rt.RunAfter(func() {
+					stage.rt = rt
 					defer func() { stage.rt = nil }()
 					stage.Validate()
-				}()
+				})
 				break
 			}
 		}
