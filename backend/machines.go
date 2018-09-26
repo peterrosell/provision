@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -230,120 +229,26 @@ func (n *Machine) ParameterMaker(rt *RequestTracker, parameter string) (index.Ma
 		func(i, j models.Model) bool {
 			ip, _ := rt.GetParam(fix(i), parameter, true, false)
 			jp, _ := rt.GetParam(fix(j), parameter, true, false)
-
-			// If both are nil, the Less is i < j == false
-			if ip == nil && jp == nil {
-				return false
-			}
-			// If ip is nil, the Less is i < j == true
-			if ip == nil {
-				if _, ok := jp.(bool); ok {
-					return jp.(bool)
-				}
-				return true
-			}
-			// If jp is nil, the Less is i < j == false
-			if jp == nil {
-				return false
-			}
-
-			if _, ok := ip.(string); ok {
-				return ip.(string) < jp.(string)
-			}
-			if _, ok := ip.(bool); ok {
-				return jp.(bool) && !ip.(bool)
-			}
-			if _, ok := ip.(int); ok {
-				return ip.(int) < jp.(int)
-			}
-
-			return false
+			return generalLessThan(ip, jp)
 		},
 		func(ref models.Model) (gte, gt index.Test) {
 			jp, _ := rt.GetParam(fix(ref), parameter, true, false)
 			return func(s models.Model) bool {
 					ip, _ := rt.GetParam(fix(s), parameter, true, false)
-
-					// If both are nil, the Less is i >= j == true
-					if ip == nil && jp == nil {
-						return true
-					}
-					// If ip is nil, the Less is i >= j == false
-					if ip == nil {
-						if _, ok := jp.(bool); ok {
-							return !jp.(bool)
-						}
-						return false
-					}
-					// If jp is nil, the Less is i >= j == true
-					if jp == nil {
-						return true
-					}
-
-					if _, ok := ip.(string); ok {
-						return ip.(string) >= jp.(string)
-					}
-					if _, ok := ip.(bool); ok {
-						return ip.(bool) || ip.(bool) == jp.(bool)
-					}
-					if _, ok := ip.(int); ok {
-						return ip.(int) >= jp.(int)
-					}
-					return false
+					return generalGreaterThanEqual(ip, jp)
 				},
 				func(s models.Model) bool {
 					ip, _ := rt.GetParam(fix(s), parameter, true, false)
-
-					// If both are nil, the Less is i > j == false
-					if ip == nil && jp == nil {
-						return false
-					}
-					// If ip is nil, the Less is i > j == false
-					if ip == nil {
-						return false
-					}
-					// If jp is nil, the Less is i > j == true
-					if jp == nil {
-						if _, ok := ip.(bool); ok {
-							return ip.(bool)
-						}
-						return true
-					}
-
-					if _, ok := ip.(string); ok {
-						return ip.(string) > jp.(string)
-					}
-					if _, ok := ip.(bool); ok {
-						return ip.(bool) && !jp.(bool)
-					}
-					if _, ok := ip.(int); ok {
-						return ip.(int) > jp.(int)
-					}
-					return false
+					return generalGreaterThan(ip, jp)
 				}
 		},
 		func(s string) (models.Model, error) {
-			res := fix(n.New())
-			res.Params = map[string]interface{}{}
-
-			var obj interface{}
-			err := json.Unmarshal([]byte(s), &obj)
+			obj, err := generalValidateParam(param, s)
 			if err != nil {
-				// If type is string, then just use the value
-				// we leave the json parsing so that we can test quoted strings.
-				if tv, ok := param.TypeValue(); ok {
-					if is, ok := tv.(string); ok && is == "string" {
-						obj = s
-					} else {
-						return nil, err
-					}
-				} else {
-					return nil, err
-				}
-			}
-			if err := param.ValidateValue(obj, nil); err != nil {
 				return nil, err
 			}
+			res := fix(n.New())
+			res.Params = map[string]interface{}{}
 			res.Params[parameter] = obj
 			return res, nil
 		}), nil
