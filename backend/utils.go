@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 )
 
-func generalLessThan(ip, jp interface{}) bool {
+func GeneralLessThan(ip, jp interface{}) bool {
 	// If both are nil, the Less is i < j == false
 	if ip == nil && jp == nil {
 		return false
@@ -34,7 +34,7 @@ func generalLessThan(ip, jp interface{}) bool {
 	return false
 }
 
-func generalGreaterThanEqual(ip, jp interface{}) bool {
+func GeneralGreaterThanEqual(ip, jp interface{}) bool {
 	// If both are nil, the Less is i >= j == true
 	if ip == nil && jp == nil {
 		return true
@@ -63,7 +63,7 @@ func generalGreaterThanEqual(ip, jp interface{}) bool {
 	return false
 }
 
-func generalGreaterThan(ip, jp interface{}) bool {
+func GeneralGreaterThan(ip, jp interface{}) bool {
 	// If both are nil, the Less is i > j == false
 	if ip == nil && jp == nil {
 		return false
@@ -92,7 +92,7 @@ func generalGreaterThan(ip, jp interface{}) bool {
 	return false
 }
 
-func generalValidateParam(param *Param, s string) (interface{}, error) {
+func GeneralValidateParam(param *Param, s string) (interface{}, error) {
 	var obj interface{}
 	err := json.Unmarshal([]byte(s), &obj)
 	if err != nil {

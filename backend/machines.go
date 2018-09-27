@@ -229,21 +229,21 @@ func (n *Machine) ParameterMaker(rt *RequestTracker, parameter string) (index.Ma
 		func(i, j models.Model) bool {
 			ip, _ := rt.GetParam(fix(i), parameter, true, false)
 			jp, _ := rt.GetParam(fix(j), parameter, true, false)
-			return generalLessThan(ip, jp)
+			return GeneralLessThan(ip, jp)
 		},
 		func(ref models.Model) (gte, gt index.Test) {
 			jp, _ := rt.GetParam(fix(ref), parameter, true, false)
 			return func(s models.Model) bool {
 					ip, _ := rt.GetParam(fix(s), parameter, true, false)
-					return generalGreaterThanEqual(ip, jp)
+					return GeneralGreaterThanEqual(ip, jp)
 				},
 				func(s models.Model) bool {
 					ip, _ := rt.GetParam(fix(s), parameter, true, false)
-					return generalGreaterThan(ip, jp)
+					return GeneralGreaterThan(ip, jp)
 				}
 		},
 		func(s string) (models.Model, error) {
-			obj, err := generalValidateParam(param, s)
+			obj, err := GeneralValidateParam(param, s)
 			if err != nil {
 				return nil, err
 			}
