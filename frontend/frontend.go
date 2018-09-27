@@ -747,17 +747,76 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 		if k == "offset" || k == "limit" || k == "sort" || k == "reverse" || k == "slim" {
 			continue
 		}
+		// Did we find an existing index?
 		maker, ok := indexes[k]
-		pMaker, found := ref.(dynParameter)
 		if !ok {
-			if !found {
+			// Did we find an parameter-based object and does it match a parameter
+			pMaker, found := ref.(dynParameter)
+			if found {
+				maker, err = pMaker.ParameterMaker(rt, k)
+				if err == nil {
+					ok = true
+				}
+			}
+			if !ok {
+				fmt.Printf("GREG: HERE1: %s\n", k)
+				// Did we find an meta-based object?
+				if _, found := ref.(models.MetaHaver); found && strings.HasPrefix(k, "Meta.") {
+					fmt.Printf("GREG: HERE2: %s\n", k)
+					parameter := strings.TrimPrefix(k, "Meta.")
+					maker = index.Make(
+						false,
+						"meta",
+						func(i, j models.Model) bool {
+							var ip, jp interface{}
+							if im, iok := i.(models.MetaHaver); iok {
+								m := im.GetMeta()
+								ip, _ = m[parameter]
+							}
+							if jm, jok := j.(models.MetaHaver); jok {
+								m := jm.GetMeta()
+								jp, _ = m[parameter]
+							}
+							return backend.GeneralLessThan(ip, jp)
+						},
+						func(ref models.Model) (gte, gt index.Test) {
+							var jp interface{}
+							if jm, jok := ref.(models.MetaHaver); jok {
+								m := jm.GetMeta()
+								jp, _ = m[parameter]
+							}
+							return func(s models.Model) bool {
+									var ip interface{}
+									if im, iok := s.(models.MetaHaver); iok {
+										m := im.GetMeta()
+										ip, _ = m[parameter]
+									}
+									return backend.GeneralGreaterThanEqual(ip, jp)
+								},
+								func(s models.Model) bool {
+									var ip interface{}
+									if im, iok := s.(models.MetaHaver); iok {
+										m := im.GetMeta()
+										ip, _ = m[parameter]
+									}
+									return backend.GeneralGreaterThan(ip, jp)
+								}
+						},
+						func(s string) (models.Model, error) {
+							res, _ := models.New(ref.Prefix())
+							if jm, jok := res.(models.MetaHaver); jok {
+								m := models.Meta{}
+								m[parameter] = s
+								jm.SetMeta(m)
+							}
+							return res, nil
+						})
+					ok = true
+				}
+			}
+			if !ok {
 				return nil, fmt.Errorf("Filter not found: %s", k)
 			}
-			maker, err = pMaker.ParameterMaker(rt, k)
-			if err != nil {
-				return nil, err
-			}
-			ok = true
 		}
 		if ok {
 			filters = append(filters, index.Sort(maker))
