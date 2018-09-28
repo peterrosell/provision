@@ -183,7 +183,17 @@ func (ma *Actions) GetSpecific(ob, name, plugin string) (*AvailableAction, bool)
 }
 
 func (ma *Actions) Run(rt *backend.RequestTracker, ob string, maa *models.Action) (interface{}, error) {
-	aa, ok := ma.GetSpecific(ob, maa.Command, maa.Plugin)
+	var aa *AvailableAction
+	var ok bool
+	if maa.Plugin == "" {
+		var aas AvailableActions
+		aas, ok = ma.Get(ob, maa.Command)
+		if ok {
+			aa = aas[0]
+		}
+	} else {
+		aa, ok = ma.GetSpecific(ob, maa.Command, maa.Plugin)
+	}
 	if !ok {
 		return nil, fmt.Errorf("Action no longer available: %s", aa.Command)
 	}
