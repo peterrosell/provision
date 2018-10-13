@@ -23,8 +23,6 @@ func TestBootEnvCrud(t *testing.T) {
 	crudTest{"Create Bootenv with no templates", rt.Create, &models.BootEnv{Name: "test 1"}, true}.Test(t, rt)
 	crudTest{"Create Bootenv with invalid Name /", rt.Create, &models.BootEnv{Name: "test/greg"}, false}.Test(t, rt)
 	crudTest{"Create Bootenv with invalid Name \\", rt.Create, &models.BootEnv{Name: "test\\greg"}, false}.Test(t, rt)
-	crudTest{"Create Bootenv with invalid BootParams tmpl", rt.Create, &models.BootEnv{Name: "test 2", BootParams: "{{ }"}, false}.Test(t, rt)
-	crudTest{"Create Bootenv with valid BootParams tmpl", rt.Create, &models.BootEnv{Name: "test 2", BootParams: "{{ .Env.Name }}"}, true}.Test(t, rt)
 	crudTest{"Create Bootenv with invalid models.TemplateInfo (missing Name)", rt.Create, &models.BootEnv{Name: "test 3", Templates: []models.TemplateInfo{{Path: "{{ .Env.Name }}", ID: "ok"}}}, false}.Test(t, rt)
 	crudTest{"Create Bootenv with invalid models.TemplateInfo (missing ID)", rt.Create, &models.BootEnv{Name: "test 3", Templates: []models.TemplateInfo{{Name: "test 3", Path: "{{ .Env.Name }}"}}}, false}.Test(t, rt)
 	crudTest{"Create Bootenv with invalid models.TemplateInfo (missing Path)", rt.Create, &models.BootEnv{Name: "test 3", Templates: []models.TemplateInfo{{Name: "test 3", ID: "ok"}}}, false}.Test(t, rt)
@@ -37,8 +35,8 @@ func TestBootEnvCrud(t *testing.T) {
 	rt.Do(func(d Stores) {
 		bes := d("bootenvs").Items()
 		if bes != nil {
-			if len(bes) != 6 {
-				t.Errorf("List function should have returned: 6, but got %d\n", len(bes))
+			if len(bes) != 5 {
+				t.Errorf("List function should have returned: 5, but got %d\n", len(bes))
 			}
 		} else {
 			t.Errorf("List function returned nil!!")

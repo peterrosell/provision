@@ -34,8 +34,7 @@ Name = {{.Env.Name}}
 RenderData:
 ProvisionerAddress = {{.ProvisionerAddress}}
 ProvisionerURL = {{.ProvisionerURL}}
-ApiURL = {{.ApiURL}}
-BootParams = {{.BootParams}}`
+ApiURL = {{.ApiURL}}`
 	tmplDefaultRenderedWithoutFred = `Machine: 
 HELLO!HELLO!HELLO!HELLO!HELLO!
 Name = Test Name
@@ -51,8 +50,7 @@ Name = default
 RenderData:
 ProvisionerAddress = 127.0.0.1
 ProvisionerURL = http://127.0.0.1:8091
-ApiURL = https://127.0.0.1:8092
-BootParams = default`
+ApiURL = https://127.0.0.1:8092`
 	tmplDefaultRenderedWithFred = `Machine: 
 HELLO!HELLO!HELLO!HELLO!HELLO!
 Name = Test Name
@@ -74,8 +72,7 @@ Value: 40
 RenderData:
 ProvisionerAddress = 127.0.0.1
 ProvisionerURL = http://127.0.0.1:8091
-ApiURL = https://127.0.0.1:8092
-BootParams = default`
+ApiURL = https://127.0.0.1:8092`
 	tmplNothing = `Nothing`
 
 	tmplFail1 = `{{ ago }}`
@@ -123,7 +120,6 @@ func TestRenderData(t *testing.T) {
 						ID:   "default",
 					},
 				},
-				BootParams: "{{.Env.Name}}",
 			},
 			rt))
 		nothingBootEnv = AsBootEnv(toBackend(&models.BootEnv{
@@ -135,7 +131,6 @@ func TestRenderData(t *testing.T) {
 					ID:   "nothing",
 				},
 			},
-			BootParams: "{{.Env.Name}}",
 		},
 			rt))
 		badBootEnv = AsBootEnv(toBackend(&models.BootEnv{
@@ -147,7 +142,6 @@ func TestRenderData(t *testing.T) {
 					ID:   "nothing",
 				},
 			},
-			BootParams: "{{.Param \"cow\"}}",
 		}, rt))
 	})
 	objs := []crudTest{
@@ -499,14 +493,6 @@ func TestRenderData(t *testing.T) {
 		ok = rd.ParamExists("test")
 		if !ok {
 			t.Errorf("ParamExists test should return true when machine profile has test defined in RenderData\n")
-		}
-
-		_, e = rd.BootParams()
-		errString := "template: machine:1:2: executing \"machine\" at <.Param>: error calling Param: No such machine parameter cow"
-		if e == nil {
-			t.Errorf("BootParams with no ENV should have generated an error\n")
-		} else if e.Error() != errString {
-			t.Errorf("BootParams with no ENV should have generated an error: %s, but got %s\n", errString, e.Error())
 		}
 
 		machineSecret := machine.Secret

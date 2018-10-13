@@ -26,26 +26,42 @@ import (
 type RequestTracker struct {
 	*sync.Mutex
 	logger.Logger
-	dt        *DataTracker
-	locks     []string
-	d         Stores
-	toPublish []func()
+	dt         *DataTracker
+	locks      []string
+	d          Stores
+	toRunAfter []func()
 }
 
 func (rt *RequestTracker) unlocker(u func()) {
+	for _, f := range rt.toRunAfter {
+		f()
+	}
 	rt.Lock()
 	u()
 	rt.d = nil
-	for _, f := range rt.toPublish {
-		f()
-	}
-	rt.toPublish = []func(){}
+	rt.toRunAfter = []func(){}
 	rt.Unlock()
+}
+
+func (rt *RequestTracker) runAfter(thunk func()) {
+	if rt.d == nil {
+		rt.Panicf("Cannot runAfter a function outside Do()")
+	}
+	if rt.toRunAfter == nil {
+		rt.toRunAfter = []func(){}
+	}
+	rt.toRunAfter = append(rt.toRunAfter, thunk)
+}
+
+func (rt *RequestTracker) RunAfter(thunk func()) {
+	rt.Lock()
+	defer rt.Unlock()
+	rt.runAfter(thunk)
 }
 
 // Request initializes a RequestTracker from the specified DataTracker.
 func (p *DataTracker) Request(l logger.Logger, locks ...string) *RequestTracker {
-	return &RequestTracker{Mutex: &sync.Mutex{}, dt: p, Logger: l, locks: locks, toPublish: []func(){}}
+	return &RequestTracker{Mutex: &sync.Mutex{}, dt: p, Logger: l, locks: locks, toRunAfter: []func(){}}
 }
 
 // PublishEvent records the Event to publish to all publish listeners
@@ -63,7 +79,7 @@ func (rt *RequestTracker) PublishEvent(e *models.Event) error {
 	if rt.d == nil {
 		return rt.dt.publishers.publishEvent(e)
 	}
-	rt.toPublish = append(rt.toPublish, func() { rt.dt.publishers.publishEvent(e) })
+	rt.runAfter(func() { rt.dt.publishers.publishEvent(e) })
 	return nil
 }
 
@@ -87,7 +103,7 @@ func (rt *RequestTracker) Publish(prefix, action, key string, ref interface{}) e
 	default:
 		toSend = ref
 	}
-	rt.toPublish = append(rt.toPublish, func() { rt.dt.publishers.Publish(prefix, action, key, rt.Principal(), toSend) })
+	rt.runAfter(func() { rt.dt.publishers.Publish(prefix, action, key, rt.Principal(), toSend) })
 	return nil
 }
 
@@ -99,7 +115,7 @@ func (rt *RequestTracker) Publish(prefix, action, key string, ref interface{}) e
 func (rt *RequestTracker) find(prefix, key string) models.Model {
 	s := rt.d(prefix)
 	if s == nil {
-		return nil
+		rt.Panicf("Missing requested lock for %s", prefix)
 	}
 	parts := strings.SplitN(key, ":", 2)
 	if len(parts) == 2 {

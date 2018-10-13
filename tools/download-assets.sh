@@ -21,7 +21,7 @@ if [[ -d provisioner ]]; then
     rm -rf provisioner
 fi
 
-for f in ipxe.efi ipxe.pxe jq bootx64.efi lpxelinux.0 esxi.0 wimboot; do
+for f in jq bootx64.efi lpxelinux.0 esxi.0 wimboot; do
     [[ -f $f ]] && continue
     echo "Downloading asset for $f"
     case $f in

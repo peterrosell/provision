@@ -189,6 +189,56 @@ type rBootEnv struct {
 	renderData *RenderData
 }
 
+func (b *rBootEnv) arch() string {
+	if b.renderData.Machine == nil {
+		return "amd64"
+	}
+	return b.renderData.Machine.Arch
+}
+
+func (b *rBootEnv) KernelFor(arch string) string {
+	return b.BootEnv.realArches[arch].Kernel
+}
+
+func (b *rBootEnv) Kernel() string {
+	return b.KernelFor(b.arch())
+}
+
+func (b *rBootEnv) InitrdsFor(arch string) []string {
+	return b.BootEnv.realArches[arch].Initrds
+}
+
+func (b *rBootEnv) Initrds() []string {
+	return b.InitrdsFor(b.arch())
+}
+
+func (b *rBootEnv) BootParamsFor(arch string) (string, error) {
+	params := b.BootEnv.realArches[arch].BootParams
+	res := &bytes.Buffer{}
+	tmpl, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(params)
+	if err != nil {
+		return "", fmt.Errorf("Error compiling boot parameter template: %v", err)
+	}
+	tmpl = tmpl.Option("missingkey=error")
+	if err := tmpl.Execute(res, b.renderData); err != nil {
+		return "", err
+	}
+	str := res.String()
+	// ipxe in uefi mode requires an initrd stanza in the boot params.
+	// I have no idea why.
+	if strings.HasSuffix(b.renderData.tmplPath, ".ipxe") {
+		initrds := b.Initrds()
+		if len(initrds) > 0 {
+			str = fmt.Sprintf("initrd=%s %s", path.Base(initrds[0]), str)
+		}
+	}
+	return str, nil
+}
+
+func (b *rBootEnv) BootParams() (string, error) {
+	return b.BootParamsFor(b.arch())
+}
+
 // PathFor expands the partial paths for kernels and initrds into full
 // paths appropriate for specific protocols.
 //
@@ -196,8 +246,8 @@ type rBootEnv struct {
 //    http: Will expand to the URL the file can be accessed over.
 //    tftp: Will expand to the path the file can be accessed at via TFTP.
 //    disk: Will expand to the path of the file inside the provisioner container.
-func (b *rBootEnv) PathFor(proto, f string) string {
-	tail := b.BootEnv.PathFor(f)
+func (b *rBootEnv) PathForArch(proto, f, arch string) string {
+	tail := b.BootEnv.PathFor(f, arch)
 	switch proto {
 	case "tftp":
 		return strings.TrimPrefix(tail, "/")
@@ -209,13 +259,21 @@ func (b *rBootEnv) PathFor(proto, f string) string {
 	return ""
 }
 
+func (b *rBootEnv) PathFor(proto, f string) string {
+	return b.PathForArch(proto, f, b.arch())
+}
+
 // JoinInitrds joins the fully expanded initrd paths into a comma-separated string.
-func (b *rBootEnv) JoinInitrds(proto string) string {
-	fullInitrds := make([]string, len(b.Initrds))
-	for i, initrd := range b.Initrds {
-		fullInitrds[i] = b.PathFor(proto, initrd)
+func (b *rBootEnv) JoinInitrdsFor(proto, arch string) string {
+	fullInitrds := []string{}
+	for i, initrd := range b.InitrdsFor(arch) {
+		fullInitrds[i] = b.PathForArch(proto, initrd, arch)
 	}
 	return strings.Join(fullInitrds, " ")
+}
+
+func (b *rBootEnv) JoinInitrds(proto string) string {
+	return b.JoinInitrdsFor(proto, b.arch())
 }
 
 type rTask struct {
@@ -234,6 +292,7 @@ type rStage struct {
 type Repo struct {
 	Tag            string   `json:"tag"`
 	OS             []string `json:"os"`
+	Arch           string   `json:"arch"`
 	URL            string   `json:"url"`
 	PackageType    string   `json:"packageType"`
 	RepoType       string   `json:"repoType"`
@@ -289,7 +348,7 @@ func (rd *Repo) renderStyle() string {
 
 // UrlFor returns a Url for the requested component part of the repo.
 func (rd *Repo) UrlFor(component string) string {
-	if rd.InstallSource || rd.Distribution == "" {
+	if rd.InstallSource || rd.Distribution == "" || component == "" {
 		return rd.URL
 	}
 	osName, _ := rd.osParts()
@@ -310,24 +369,33 @@ func (rd *Repo) UrlFor(component string) string {
 func (rd *Repo) Install() (string, error) {
 	tmpl := template.New("installLines").Funcs(models.DrpSafeFuncMap()).Option("missingkey=error")
 	var err error
+	toExec := &bytes.Buffer{}
 	switch rd.renderStyle() {
 	case "yum":
 		if rd.InstallSource {
-			tmpl, err = tmpl.Parse(`install
-url --url {{.URL}}
-repo --name="{{.Tag}}" --baseurl={{.URL}} --cost=100{{if .R.ParamExists "proxy-servers"}} --proxy="{{index (.R.Param "proxy-servers") 0}}"{{end}}`)
+			fmt.Fprintf(toExec, `install
+url --url %s
+repo --name="{{.Tag}}" --baseurl=%s --cost=100{{if .R.ParamExists "proxy-servers"}} --proxy="{{index (.R.Param "proxy-servers") 0}}"{{end}}
+`,
+				rd.URL, rd.URL)
+		} else if len(rd.Components) == 0 {
+			fmt.Fprintf(toExec, `repo --name="{{.Tag}}" --baseurl=%s --cost=200{{if .R.ParamExists "proxy-servers"}} --proxy="{{index (.R.Param "proxy-servers") 0}}"{{end}}
+`,
+				rd.URL)
 		} else {
-			tmpl, err = tmpl.Parse(`
-repo --name="{{.Tag}}" --baseurl={{.URL}} --cost=100{{if .R.ParamExists "proxy-servers"}} --proxy="{{index (.R.Param "proxy-servers") 0}}"{{end}}`)
+			for _, component := range rd.Components {
+				fmt.Fprintf(toExec, `repo --name="{{.Tag}}-%s" --baseurl=%s --cost=200{{if .R.ParamExists "proxy-servers"}} --proxy="{{index (.R.Param "proxy-servers") 0}}"{{end}}
+`,
+					component, rd.UrlFor(component))
+			}
 		}
 	case "apt":
 		if rd.InstallSource {
-			tmpl, err = tmpl.Parse(`d-i mirror/protocol string {{.R.ParseUrl "scheme" .URL}}
+			fmt.Fprintln(toExec, `d-i mirror/protocol string {{.R.ParseUrl "scheme" .URL}}
 d-i mirror/http/hostname string {{.R.ParseUrl "host" .URL}}
-d-i mirror/http/directory string {{.R.ParseUrl "path" .URL}}
-`)
+d-i mirror/http/directory string {{.R.ParseUrl "path" .URL}}`)
 		} else {
-			tmpl, err = tmpl.Parse(`{{if (eq "debian" .R.Env.OS.Family)}}
+			fmt.Fprintln(toExec, `{{if (eq "debian" .R.Env.OS.Family)}}
 d-i apt-setup/security_host string {{.URL}}
 {{else}}
 d-i apt-setup/security_host string {{.R.ParseUrl "host" .URL}}
@@ -337,6 +405,7 @@ d-i apt-setup/security_path string {{.R.ParseUrl "path" .URL}}
 	default:
 		return "", fmt.Errorf("No idea how to handle repos for %s", rd.targetOS)
 	}
+	tmpl, err = tmpl.Parse(toExec.String())
 	if err != nil {
 		return "", err
 	}
@@ -437,29 +506,27 @@ func (r *RenderData) Repos(tags ...string) []*Repo {
 func (r *RenderData) localInstallRepo() *Repo {
 	for _, obj := range r.rt.d("bootenvs").Items() {
 		env := obj.(*BootEnv)
-		if env.OS.Name == r.Machine.OS {
-			fi, err := os.Stat(path.Join(r.rt.dt.FileRoot, r.Machine.OS, "install", env.Kernel))
-			if err == nil && fi.Mode().IsRegular() {
-				res := &Repo{
-					Tag:           env.Name,
-					InstallSource: true,
-					OS:            []string{r.Machine.OS},
-					URL:           r.rt.FileURL(r.remoteIP) + "/" + path.Join(r.Machine.OS, "install"),
-					r:             r,
-					targetOS:      r.Machine.OS,
-				}
-
-				switch res.renderStyle() {
-				case "apt":
-					if _, err := os.Stat(path.Join(r.rt.dt.FileRoot, r.Machine.OS, "install", "dists", "stable", "Release")); err == nil {
-						res.Distribution = "stable"
-						res.Components = []string{"main", "restricted"}
-					} else {
-						continue
-					}
-				}
-				return res
+		r.rt.Debugf("Examining env %s for machine %s OS %s", env.Name, r.Machine.UUID(), r.Machine.OS)
+		if env.OS.Name == r.Machine.OS && env.canLocalBoot(r.rt, r.Machine.Arch) == nil {
+			res := &Repo{
+				Tag:           env.Name,
+				InstallSource: true,
+				OS:            []string{r.Machine.OS},
+				URL:           r.rt.FileURL(r.remoteIP) + env.PathFor("", r.Machine.Arch),
+				r:             r,
+				targetOS:      r.Machine.OS,
 			}
+
+			switch res.renderStyle() {
+			case "apt":
+				if _, err := os.Stat(path.Join(r.rt.dt.FileRoot, r.Machine.OS, "install", "dists", "stable", "Release")); err == nil {
+					res.Distribution = "stable"
+					res.Components = []string{"main", "restricted"}
+				} else {
+					continue
+				}
+			}
+			return res
 		}
 	}
 	return nil
@@ -471,10 +538,26 @@ func (r *RenderData) MachineRepos() []*Repo {
 	found := []*Repo{}
 	// Sigh, current ubuntus do not have metadata good enough for things besides
 	// OS installation.
-	if li := r.localInstallRepo(); li != nil && li.renderStyle() != "apt" {
+	li := r.localInstallRepo()
+	if li != nil && li.renderStyle() != "apt" {
 		found = append(found, li)
 	}
 	found = append(found, r.fetchRepos(func(rd *Repo) bool {
+		if li != nil && rd.InstallSource {
+			return false
+		}
+		ok := rd.Arch == "any" && !rd.InstallSource
+		if !ok {
+			a1, a1ok := models.SupportedArch(rd.Arch)
+			if !a1ok {
+				return false
+			}
+			a2, _ := models.SupportedArch(r.Machine.Arch)
+			ok = a1 == a2
+		}
+		if !ok {
+			return false
+		}
 		for _, os := range rd.OS {
 			if os == r.Machine.OS {
 				rd.targetOS = r.Machine.OS
@@ -504,9 +587,11 @@ func (r *RenderData) InstallRepos() []*Repo {
 			updateRepo = repo
 		}
 	}
-	res = append(res, installRepo)
-	if updateRepo != nil {
-		res = append(res, updateRepo)
+	if installRepo != nil {
+		res = append(res, installRepo)
+		if updateRepo != nil {
+			res = append(res, updateRepo)
+		}
 	}
 	return res
 }
@@ -697,24 +782,17 @@ func (r *RenderData) GenerateProfileToken(profile string, duration int) string {
 
 // BootParams is a helper function that expands the BootParams
 // template from the boot environment.
+func (r *RenderData) BootParamsFor(arch string) (string, error) {
+	if r.Env == nil {
+		return "", fmt.Errorf("Missing bootenv")
+	}
+	return r.Env.BootParamsFor(arch)
+}
 func (r *RenderData) BootParams() (string, error) {
 	if r.Env == nil {
 		return "", fmt.Errorf("Missing bootenv")
 	}
-	res := &bytes.Buffer{}
-	if r.Env.bootParamsTmpl == nil {
-		return "", nil
-	}
-	if err := r.Env.bootParamsTmpl.Execute(res, r); err != nil {
-		return "", err
-	}
-	str := res.String()
-	// ipxe in uefi mode requires an initrd stanza in the boot params.
-	// I have no idea why.
-	if strings.HasSuffix(r.tmplPath, ".ipxe") && len(r.Env.Initrds) > 0 {
-		str = fmt.Sprintf("initrd=%s %s", path.Base(r.Env.Initrds[0]), str)
-	}
-	return str, nil
+	return r.BootParamsFor(r.Env.arch())
 }
 
 // ParseUrl is a template function that return the section

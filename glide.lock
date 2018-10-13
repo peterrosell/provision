@@ -1,5 +1,5 @@
-hash: fead7446b0d4bb4471f9882d64cb70a7ebf194bf35f5a942d3f1047431ffcf2a
-updated: 2018-08-03T09:20:24.668457024-05:00
+hash: 941279448eb1214fab93c4d8238d9c5ed1473d77aa569dcd7d1f57dc431da545
+updated: 2018-09-26T14:11:41.858384737-05:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -32,6 +32,14 @@ imports:
   version: 4b06d02345cad02a772ff21f13e1ef3551c943d4
 - name: github.com/digitalrebar/store
   version: 63349d4ab20ba3b162635d60d6c3b34c7bb59bd9
+- name: github.com/dsnet/compress
+  version: cc9eb1d7ad760af14e8f918698f745e80377af4f
+  subpackages:
+  - bzip2
+  - bzip2/internal/sais
+  - internal
+  - internal/errors
+  - internal/prefix
 - name: github.com/elazarl/go-bindata-assetfs
   version: 38087fe4dafb822e541b3f7955075cc1c30bd294
 - name: github.com/elithrar/simple-scrypt
@@ -58,6 +66,8 @@ imports:
   version: f5983d50c82d70eaa88c17080245cc871558081f
   subpackages:
   - proto
+- name: github.com/golang/snappy
+  version: 2e65f85255dbc3072edf28d6b5b8efc472979f5a
 - name: github.com/google/certificate-transparency-go
   version: 3d9ebf85105f5bf34dc43cc6d821475356aa1645
   subpackages:
@@ -66,7 +76,7 @@ imports:
   - x509
   - x509/pkix
 - name: github.com/google/uuid
-  version: dec09d789f3dba190787f8b4454c7d3c936fed9e
+  version: 064e2069ce9c359c118179501254f67d7d37ba24
 - name: github.com/gorilla/websocket
   version: 5ed622c449da6d44c3c8329331ff47a9e5844f71
 - name: github.com/groob/plist
@@ -92,7 +102,7 @@ imports:
 - name: github.com/huandu/xstrings
   version: 7bb0250b58e5c15670406e6f93ffda43281305b1
 - name: github.com/imdario/mergo
-  version: 9f23e2d6bd2a77f959b2bf6acdbefd708a83a4a4
+  version: 7fe0c75c13abdee74b09fcacef5ea1c6bba6a874
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/jessevdk/go-flags
@@ -114,7 +124,7 @@ imports:
   subpackages:
   - conn
 - name: github.com/Masterminds/semver
-  version: 4ca3c04fd4fe2a472df0d7121b1b9462f2214c43
+  version: 59c29afe1a994eacb71c833025ca7acf874bb1da
 - name: github.com/Masterminds/sprig
   version: 77bb58b7f5e10889a1195c21b9e7a96ee166f199
 - name: github.com/mattn/go-isatty
@@ -123,6 +133,8 @@ imports:
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
   - pbutil
+- name: github.com/mholt/archiver
+  version: de0d89e255e17c8d75a40122055763e743ab0593
 - name: github.com/mitchellh/go-homedir
   version: 58046073cbffe2f25d425fe1331102f55cf719de
 - name: github.com/mitchellh/mapstructure
@@ -131,8 +143,14 @@ imports:
   version: bacd9c7ef1dd9b15be4a9909b8ac7a4e313eec94
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
+- name: github.com/nwaples/rardecode
+  version: e06696f847aeda6f39a8f0b7cdff193b7690aef6
 - name: github.com/pborman/uuid
   version: c65b2f87fee37d1c7854c9164a450713c28d50cd
+- name: github.com/pierrec/lz4
+  version: 1f6e18d34f6790fc0afea6f13a5fe3d9ab1770af
+  subpackages:
+  - internal/xxh32
 - name: github.com/pin/tftp
   version: d715325c1fc1f1a22a8272a60dc6783a5ab093ba
   subpackages:
@@ -180,6 +198,12 @@ imports:
   version: 0e8ffdb13c81bdb48fa80a963cf83f10a0f5a496
   subpackages:
   - codec
+- name: github.com/ulikunitz/xz
+  version: 636d36a76670e6c700f22fd5f4588679ff2896c4
+  subpackages:
+  - internal/hash
+  - internal/xlog
+  - lzma
 - name: github.com/VictorLowther/godmi
   version: e96629ef451766733662a029d6caebbc6f245a1b
 - name: github.com/VictorLowther/jsonpatch2

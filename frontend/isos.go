@@ -197,15 +197,18 @@ func (f *Frontend) InitIsoApi() {
 }
 
 func reloadBootenvsForIso(rt *backend.RequestTracker, name string) {
+	exploders := []func(*backend.RequestTracker){}
 	rt.Do(func(d backend.Stores) {
 		for _, blob := range d("bootenvs").Items() {
 			env := backend.AsBootEnv(blob)
-			if env.OS.IsoFile != name {
-				continue
+			if env.IsoFor(name) {
+				exploders = append(exploders, env.IsoExploders(rt)...)
 			}
-			rt.Save(env)
 		}
 	})
+	for i := range exploders {
+		exploders[i](rt)
+	}
 }
 
 func uploadIso(f *Frontend, c *gin.Context, fileRoot, name string, dt *backend.DataTracker) {
@@ -305,6 +308,6 @@ func uploadIso(f *Frontend, c *gin.Context, fileRoot, name string, dt *backend.D
 	os.Rename(isoTmpName, isoName)
 	ref := &backend.BootEnv{}
 	rt := f.rt(c, ref.Locks("update")...)
-	go reloadBootenvsForIso(rt, name)
+	reloadBootenvsForIso(rt, name)
 	c.JSON(http.StatusCreated, &models.BlobInfo{Path: name, Size: copied})
 }

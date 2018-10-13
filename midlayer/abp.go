@@ -163,7 +163,7 @@ func (dhr *DhcpRequest) bsdpFromBootenv(serverID net.IP) *models.BsdpBootOption 
 	img.UnmarshalText([]byte("netboot:diags::1:dr-boot:ipxe.efi:"))
 	if dhr.machine != nil && dhr.bootEnv != nil && dhr.bootEnv.Meta["AppleBsdp"] != "" {
 		img.UnmarshalText([]byte(dhr.bootEnv.Meta["AppleBsdp"]))
-		img.Booter = dhr.bootEnv.PathFor(path.Join("i386", img.Booter))
+		img.Booter = dhr.bootEnv.PathFor(path.Join("i386", img.Booter), "amd64")
 		if img.RootPath != "" {
 			if sel, ok := dhr.pktOpts[dhcp.OptionParameterRequestList]; ok {
 				sel = append(sel, byte(dhcp.OptionRootPath))
@@ -174,7 +174,7 @@ func (dhr *DhcpRequest) bsdpFromBootenv(serverID net.IP) *models.BsdpBootOption 
 			img.RootPath = fmt.Sprintf("http://%s:%d%s",
 				serverID,
 				dhr.handler.bk.StaticPort,
-				dhr.bootEnv.PathFor(img.RootPath))
+				dhr.bootEnv.PathFor(img.RootPath, "amd64"))
 		}
 	}
 	dhr.Debugf("BSDPBootOption: %#v", img)
