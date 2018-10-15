@@ -11,15 +11,6 @@ imports:
   - quantile
 - name: github.com/boltdb/bolt
   version: fd01fc79c553a8e99d512a07e8e0c63d4a3ccfc5
-- name: github.com/cloudflare/cfssl
-  version: 80d5f5b4cfe73f5a918b851f03d468eb28499131
-  subpackages:
-  - crypto/pkcs7
-  - csr
-  - errors
-  - helpers
-  - helpers/derhelpers
-  - log
 - name: github.com/cpuguy83/go-md2man
   version: 691ee98543af2f262f35fbb54bdd42f00b9b9cc5
   subpackages:
@@ -225,8 +216,6 @@ imports:
 - name: golang.org/x/crypto
   version: 56440b844dfe139a8ac053f4ecac0b20b79058f4
   subpackages:
-  - cryptobyte
-  - cryptobyte/asn1
   - curve25519
   - ed25519
   - ed25519/internal/edwards25519
@@ -235,10 +224,7 @@ imports:
   - nacl/box
   - nacl/secretbox
   - nacl/sign
-  - ocsp
   - pbkdf2
-  - pkcs12
-  - pkcs12/internal/rc2
   - poly1305
   - salsa20/salsa
   - scrypt
