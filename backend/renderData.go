@@ -266,8 +266,8 @@ func (b *rBootEnv) PathFor(proto, f string) string {
 // JoinInitrds joins the fully expanded initrd paths into a comma-separated string.
 func (b *rBootEnv) JoinInitrdsFor(proto, arch string) string {
 	fullInitrds := []string{}
-	for i, initrd := range b.InitrdsFor(arch) {
-		fullInitrds[i] = b.PathForArch(proto, initrd, arch)
+	for _, initrd := range b.InitrdsFor(arch) {
+		fullInitrds = append(fullInitrds, b.PathForArch(proto, initrd, arch))
 	}
 	return strings.Join(fullInitrds, " ")
 }
