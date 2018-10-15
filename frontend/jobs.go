@@ -301,33 +301,31 @@ func (f *Frontend) InitJobApi() {
 			if b.Uuid == nil || len(b.Uuid) == 0 {
 				b.Uuid = uuid.NewRandom()
 			}
-			var res *models.Job
-			var err error
+			err := &models.Error{
+				Code: http.StatusNoContent,
+			}
+			var thunk func(*models.Error) *backend.Job
 			rt := f.rt(c, b.Locks("create")...)
-			code := http.StatusNoContent
-			rt.Do(func(d backend.Stores) {
-				code, err = realCreateJob(rt, b)
+			rt.Do(func(_ backend.Stores) {
+				b, thunk = realCreateJob(f, rt, b, err)
 			})
-			switch code {
+			if thunk != nil {
+				b = thunk(err)
+			}
+			switch err.Code {
 			case http.StatusAccepted, http.StatusCreated:
 				s, ok := models.Model(b.Job).(Sanitizable)
+				var res *models.Job
 				if ok {
 					res = s.Sanitize().(*models.Job)
 				} else {
 					res = b.Job
 				}
-				c.JSON(code, res)
+				c.JSON(err.Code, res)
 			case http.StatusNoContent:
-				c.Data(code, gin.MIMEJSON, nil)
+				c.Data(err.Code, gin.MIMEJSON, nil)
 			default:
-				if err != nil {
-					be, ok := err.(*models.Error)
-					if ok {
-						c.JSON(be.Code, be)
-					} else {
-						c.JSON(code, models.NewError(c.Request.Method, code, err.Error()))
-					}
-				}
+				c.JSON(err.Code, err)
 			}
 		})
 

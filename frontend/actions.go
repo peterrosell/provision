@@ -71,10 +71,13 @@ func (f *Frontend) makeActionEndpoints(cmdSet string, obj models.Model, idKey st
 						Plugin:  aa.Plugin.Plugin.Name,
 						Params:  map[string]interface{}{},
 					}
-					if _, err := validateAction(f, rt, cmdSet, id, ma); err == nil {
-						actions = append(actions, aa.AvailableAction)
-						break
+					var err *models.Error
+					rt.Do(func(_ backend.Stores) { _, err = validateAction(f, rt, cmdSet, id, ma) })
+					if err.ContainsError() {
+						continue
 					}
+					actions = append(actions, aa.AvailableAction)
+					break
 				}
 			}
 			c.JSON(http.StatusOK, actions)
@@ -107,7 +110,8 @@ func (f *Frontend) makeActionEndpoints(cmdSet string, obj models.Model, idKey st
 					Plugin:  aa.Plugin.Plugin.Name,
 					Params:  map[string]interface{}{},
 				}
-				if _, err = validateAction(f, rt, cmdSet, id, ma); err == nil {
+				rt.Do(func(_ backend.Stores) { _, err = validateAction(f, rt, cmdSet, id, ma) })
+				if !err.ContainsError() {
 					c.JSON(http.StatusOK, aa.AvailableAction)
 					return
 				}
@@ -132,8 +136,10 @@ func (f *Frontend) makeActionEndpoints(cmdSet string, obj models.Model, idKey st
 				Plugin:  plugin(c),
 				Command: cmd,
 				Params:  val}
-			ma, err := validateAction(f, rt, cmdSet, id, res)
-			if err != nil {
+			var ma *models.Action
+			var err *models.Error
+			rt.Do(func(_ backend.Stores) { ma, err = validateAction(f, rt, cmdSet, id, res) })
+			if err.ContainsError() {
 				err.Type = "INVOKE"
 				c.JSON(err.Code, err)
 				return
@@ -230,9 +236,7 @@ func validateAction(f *Frontend,
 			Model: ob,
 			Key:   id,
 		}
-		rt.Do(func(_ backend.Stores) {
-			validateActionParameters(f, rt, ma, aa, err)
-		})
+		validateActionParameters(f, rt, ma, aa, err)
 
 		if !err.ContainsError() {
 			ma.Plugin = aa.Plugin.Plugin.Name

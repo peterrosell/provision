@@ -1,10 +1,10 @@
 package midlayer
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -14,24 +14,20 @@ import (
 )
 
 func (pc *PluginClient) post(l logger.Logger, path string, indata interface{}) ([]byte, error) {
-	l.Tracef("post: started: %s, %v\n", path, indata)
 	if data, err := json.Marshal(indata); err != nil {
-		l.Tracef("post: error: marshal %v\n", err)
 		return nil, err
 	} else {
 		resp, err := pc.client.Post(
 			fmt.Sprintf("http://unix/api-plugin/v3%s", path),
 			"application/json",
-			strings.NewReader(string(data)))
+			bytes.NewReader(data))
 		if err != nil {
-			l.Tracef("post: error: call %v\n", err)
 			return nil, err
 		}
 		defer resp.Body.Close()
 
 		b, e := ioutil.ReadAll(resp.Body)
 		if e != nil {
-			l.Tracef("post: error: %v, %v\n", b, e)
 			return nil, e
 		}
 
@@ -39,12 +35,10 @@ func (pc *PluginClient) post(l logger.Logger, path string, indata interface{}) (
 			berr := models.Error{}
 			err := json.Unmarshal(b, &berr)
 			if err != nil {
-				l.Tracef("post: unmarshal error: %v, %v\n", b, e)
 				return nil, e
 			}
 			return nil, &berr
 		}
-
 		return b, nil
 	}
 }
