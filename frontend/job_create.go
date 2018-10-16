@@ -283,6 +283,9 @@ func realCreateJob(f *Frontend,
 		// change to the machine because it is already in the target stage
 		// or bootenv.
 		switch st[0] {
+		case "chroot":
+			logMsg = fmt.Sprintf("Machine %s agent is being signalled to chroot to %s and continue",
+				b.Machine.String(), st[1])
 		case "stage":
 			if m.Stage == st[1] {
 				continue
