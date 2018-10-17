@@ -415,6 +415,11 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 	if r.Provider.HasPublish {
 		pc.publishers.Add(r.Client)
 	}
+	for _, obj := range r.Provider.StoreObjects {
+		if err := pc.dt.AddStoreType(obj); err != nil {
+			r.Client.Errorf("failed to register object type: %s: %v\n", obj, err)
+		}
+	}
 	for i := range r.Provider.AvailableActions {
 		r.Provider.AvailableActions[i].Fill()
 		r.Provider.AvailableActions[i].Provider = r.Provider.Name

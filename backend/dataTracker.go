@@ -123,6 +123,10 @@ func Fill(t store.KeySaver) {
 		if obj.Tenant == nil {
 			obj.Tenant = &models.Tenant{}
 		}
+	case *RawModel:
+		if obj.RawModel == nil {
+			obj.RawModel = &models.RawModel{}
+		}
 	default:
 		panic(fmt.Sprintf("Unknown backend model %T", t))
 	}
@@ -166,6 +170,8 @@ func ModelToBackend(m models.Model) store.KeySaver {
 		return &Role{Role: obj}
 	case *models.Tenant:
 		return &Tenant{Tenant: obj}
+	case *models.RawModel:
+		return &RawModel{RawModel: obj}
 	default:
 		return nil
 	}
@@ -359,6 +365,16 @@ func toBackend(m models.Model, rt *RequestTracker) store.KeySaver {
 			res = Tenant{}
 		}
 		res.Tenant = obj
+		res.rt = rt
+		return &res
+	case *models.RawModel:
+		var res RawModel
+		if ours != nil {
+			res = *ours.(*RawModel)
+		} else {
+			res = RawModel{}
+		}
+		res.RawModel = obj
 		res.rt = rt
 		return &res
 
@@ -774,6 +790,31 @@ func ValidateDataTrackerStore(fileRoot string,
 		hard, soft = a.HasError(), b.HasError()
 	})
 	return
+}
+
+func (p *DataTracker) AddStoreType(prefix string) error {
+	_, err := p.Backend.MakeSub(prefix)
+	if err != nil {
+		return fmt.Errorf("dataTracker: Error creating substore %s: %v", prefix, err)
+	}
+
+	bk := p.Backend.GetSub(prefix)
+	p.objs[prefix] = &Store{backingStore: bk}
+	m := &models.RawModel{Type: prefix}
+	storeObjs, err := store.List(bk, ModelToBackend(m))
+	if err != nil {
+		// Make fake index to keep others from failing and exploding.
+		res := make([]models.Model, 0)
+		p.objs[prefix].Index = *index.Create(res)
+		return err
+	}
+	res := make([]models.Model, len(storeObjs))
+	for i := range storeObjs {
+		res[i] = models.Model(storeObjs[i])
+	}
+	p.objs[prefix].Index = *index.Create(res)
+
+	return nil
 }
 
 // Create a new DataTracker that will use passed store to save all operational data
