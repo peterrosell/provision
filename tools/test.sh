@@ -22,6 +22,8 @@ else
     PATH=`pwd`/bin/linux/amd64:$PATH
 fi
 
+go install github.com/digitalrebar/provision/cmds/drbundler
+
 # Move the files to make coverage better.
 mv api/fake_api_server_test.go api/fake_api_server.go
 mv midlayer/fake_midlayer_server_test.go midlayer/fake_midlayer_server.go
