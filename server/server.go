@@ -383,6 +383,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	fe.BinlPort = cOpts.BinlPort
 	fe.NoBinl = cOpts.DisableBINL
 	backend.SetLogPublisher(buf, publishers)
+	pc.AddStorageType = fe.AddStorageType
 
 	// Start the controller now that we have a frontend to front.
 	pc.StartRouter(fe.ApiGroup)

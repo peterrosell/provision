@@ -419,6 +419,7 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 		if err := pc.dt.AddStoreType(obj); err != nil {
 			r.Client.Errorf("failed to register object type: %s: %v\n", obj, err)
 		}
+		pc.AddStorageType(obj)
 	}
 	for i := range r.Provider.AvailableActions {
 		r.Provider.AvailableActions[i].Fill()
