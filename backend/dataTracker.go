@@ -800,7 +800,7 @@ func (p *DataTracker) AddStoreType(prefix string) error {
 
 	bk := p.Backend.GetSub(prefix)
 	p.objs[prefix] = &Store{backingStore: bk}
-	m := &models.RawModel{Type: prefix}
+	m := &models.RawModel{"Type": prefix}
 	storeObjs, err := store.List(bk, ModelToBackend(m))
 	if err != nil {
 		// Make fake index to keep others from failing and exploding.

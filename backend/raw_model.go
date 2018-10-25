@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"encoding/json"
+
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
@@ -13,7 +15,7 @@ type RawModel struct {
 }
 
 func (r *RawModel) SetReadOnly(b bool) {
-	r.ReadOnly = b
+	(*r.RawModel)["ReadOnly"] = b
 }
 
 func (r *RawModel) SaveClean() store.KeySaver {
@@ -140,7 +142,10 @@ func (r *RawModel) Indexes() map[string]index.Maker {
 }
 
 func (r *RawModel) New() store.KeySaver {
-	res := &RawModel{RawModel: &models.RawModel{Type: r.Type}}
+	res := &RawModel{RawModel: &models.RawModel{"Type": (*r.RawModel)["Type"].(string)}}
+	if r.RawModel != nil && r.ChangeForced() {
+		res.ForceChange()
+	}
 	res.rt = r.rt
 	return res
 }
@@ -158,12 +163,26 @@ func AsRawModels(o []models.Model) []*RawModel {
 }
 
 func (r *RawModel) Validate() {
-	idx := r.rt.stores(r.Type).Items()
+	idx := r.rt.stores((*r.RawModel)["Type"].(string)).Items()
 	r.AddError(index.CheckUnique(r, idx))
 	r.SetValid()
 	r.SetAvailable()
 }
 
 func (r *RawModel) Locks(action string) []string {
-	return []string{r.Type}
+	return []string{(*r.RawModel)["Type"].(string)}
+}
+
+func (r *RawModel) MarshalJSON() ([]byte, error) {
+	return json.Marshal(r.RawModel)
+}
+
+func (r *RawModel) UnmarshalJSON(data []byte) error {
+	ir := models.RawModel{}
+	if err := json.Unmarshal(data, &ir); err != nil {
+		return err
+	}
+
+	r.RawModel = &ir
+	return nil
 }

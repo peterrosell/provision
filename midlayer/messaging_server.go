@@ -119,8 +119,8 @@ func objectPostHandler(w http.ResponseWriter, r *http.Request, pc *PluginClient)
 		return
 	}
 
-	if m.Type == "" {
-		m.Type = parts[0]
+	if m["Type"] == nil || m["Type"].(string) == "" {
+		m["Type"] = parts[0]
 	}
 
 	var answer interface{}
@@ -129,10 +129,8 @@ func objectPostHandler(w http.ResponseWriter, r *http.Request, pc *PluginClient)
 	rt.Do(func(d backend.Stores) {
 		answer = rt.Find(parts[0], parts[1])
 		if answer != nil {
-			pc.Errorf("GREG: Updating %+v in object plugin\n", m)
 			_, e = rt.Update(&m)
 		} else {
-			pc.Errorf("GREG: Creating %+v in object plugin\n", m)
 			_, e = rt.Create(&m)
 		}
 		answer = &m
