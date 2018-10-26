@@ -415,10 +415,12 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 	if r.Provider.HasPublish {
 		pc.publishers.Add(r.Client)
 	}
-	for _, obj := range r.Provider.StoreObjects {
-		if err := pc.dt.AddStoreType(obj); err != nil {
+	for obj, schema := range r.Provider.StoreObjects {
+		// Register with the backend - DO NOT RUN Under RT Lock
+		if err := pc.dt.AddStoreType(obj, schema); err != nil {
 			r.Client.Errorf("failed to register object type: %s: %v\n", obj, err)
 		}
+		// Register with the frontend
 		pc.AddStorageType(obj)
 	}
 	for i := range r.Provider.AvailableActions {

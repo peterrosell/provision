@@ -190,8 +190,11 @@ func toBackend(m models.Model, rt *RequestTracker) store.KeySaver {
 		if backend == nil {
 			rt.Panicf("No store for %T", m)
 		}
-		if this := backend.Find(m.Key()); this != nil {
-			ours = this.(store.KeySaver)
+		k := m.Key()
+		if k != "" {
+			if this := backend.Find(k); this != nil {
+				ours = this.(store.KeySaver)
+			}
 		}
 	}
 
@@ -749,6 +752,11 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 			p.rootTemplate.Option("missingkey=error")
 		}
 	}
+	for pre, s := range rawModelSchemaMap {
+		if e := p.addStoreType(pre, s, loadRT); e != nil {
+			soft.Errorf("Failed to reload %s: %v", pre, e)
+		}
+	}
 	p.regenSecureParams(loadRT, hard, soft)
 	p.loadLicense(loadRT)
 	return
@@ -792,29 +800,39 @@ func ValidateDataTrackerStore(fileRoot string,
 	return
 }
 
-func (p *DataTracker) AddStoreType(prefix string) error {
-	_, err := p.Backend.MakeSub(prefix)
-	if err != nil {
-		return fmt.Errorf("dataTracker: Error creating substore %s: %v", prefix, err)
+func (p *DataTracker) addStoreType(prefix string, schema interface{}, rt *RequestTracker) error {
+	_, berr := p.Backend.MakeSub(prefix)
+	if berr != nil {
+		return fmt.Errorf("dataTracker: Error creating substore %s: %v", prefix, berr)
 	}
+	// Record schema if specified for validation and indexes
+	rawModelSchemaMap[prefix] = schema
 
 	bk := p.Backend.GetSub(prefix)
 	p.objs[prefix] = &Store{backingStore: bk}
 	m := &models.RawModel{"Type": prefix}
-	storeObjs, err := store.List(bk, ModelToBackend(m))
-	if err != nil {
+	storeObjs, serr := store.List(bk, toBackend(m, rt))
+	if serr != nil {
 		// Make fake index to keep others from failing and exploding.
 		res := make([]models.Model, 0)
 		p.objs[prefix].Index = *index.Create(res)
-		return err
+		return serr
 	}
 	res := make([]models.Model, len(storeObjs))
 	for i := range storeObjs {
 		res[i] = models.Model(storeObjs[i])
 	}
 	p.objs[prefix].Index = *index.Create(res)
-
 	return nil
+}
+
+func (p *DataTracker) AddStoreType(prefix string, schema interface{}) error {
+	rt := p.Request(p.Logger)
+	var err error
+	rt.AllLocked(func(d Stores) {
+		err = p.addStoreType(prefix, schema, rt)
+	})
+	return err
 }
 
 // Create a new DataTracker that will use passed store to save all operational data

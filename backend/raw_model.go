@@ -7,6 +7,11 @@ import (
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
+	"github.com/xeipuuv/gojsonschema"
+)
+
+var (
+	rawModelSchemaMap = map[string]interface{}{}
 )
 
 // RawModel models any data
@@ -26,7 +31,14 @@ func (r *RawModel) SaveClean() store.KeySaver {
 }
 
 func (r *RawModel) Indexes() map[string]index.Maker {
-	return index.MakeBaseIndexes(r)
+	idxs := index.MakeBaseIndexes(r)
+	if _, ok := rawModelSchemaMap[r.Prefix()]; !ok {
+		return idxs
+	}
+
+	// GREG: Add schema based indexes - plus the base
+
+	return idxs
 }
 
 func (r *RawModel) New() store.KeySaver {
@@ -53,8 +65,41 @@ func AsRawModels(o []models.Model) []*RawModel {
 func (r *RawModel) Validate() {
 	idx := r.rt.stores((*r.RawModel)["Type"].(string)).Items()
 	r.AddError(index.CheckUnique(r, idx))
+
+	if schema, ok := rawModelSchemaMap[r.Prefix()]; ok {
+		if schema != nil {
+			validator, err := gojsonschema.NewSchema(gojsonschema.NewGoLoader(schema))
+			if err != nil {
+				r.AddError(err)
+				return
+			}
+			res, err := validator.Validate(gojsonschema.NewGoLoader(r.RawModel))
+			if err != nil {
+				r.Errorf("Error validating value: %v", err)
+			} else if !res.Valid() {
+				for _, e := range res.Errors() {
+					r.Errorf("Error in value: %v", e.String())
+				}
+			}
+		}
+	}
+
 	r.SetValid()
 	r.SetAvailable()
+}
+
+func (r *RawModel) BeforeSave() error {
+	r.Validate()
+	if !r.Useable() {
+		return r.MakeError(422, ValidationError, r)
+	}
+	return nil
+}
+
+func (r *RawModel) OnLoad() error {
+	defer func() { r.rt = nil }()
+	r.Fill()
+	return r.BeforeSave()
 }
 
 func (r *RawModel) Locks(action string) []string {
@@ -72,6 +117,14 @@ func (r *RawModel) UnmarshalJSON(data []byte) error {
 	}
 
 	r.RawModel = &ir
+	if (*r.RawModel)["Errors"] != nil {
+		t := (*r.RawModel)["Errors"]
+		n := []string{}
+		if e := models.Remarshal(t, &n); e != nil {
+			return e
+		}
+		(*r.RawModel)["Errors"] = n
+	}
 	return nil
 }
 
