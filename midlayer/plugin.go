@@ -415,7 +415,36 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 	if r.Provider.HasPublish {
 		pc.publishers.Add(r.Client)
 	}
-	for obj, schema := range r.Provider.StoreObjects {
+	for obj, props := range r.Provider.StoreObjects {
+		// Turn the fields into a json object schema
+		schema := map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"Id": map[string]interface{}{
+					"type":       "string",
+					"isrequired": true,
+				},
+				"Type": map[string]interface{}{
+					"type":       "string",
+					"isrequired": true,
+				},
+			},
+		}
+		m := schema["properties"].(map[string]interface{})
+		for field, s := range props.(map[string]interface{}) {
+			m[field] = s
+		}
+		required := []string{}
+		for field, s := range m {
+			data := s.(map[string]interface{})
+			if rb, ok := data["isrequired"]; ok {
+				if b, ok := rb.(bool); ok && b {
+					required = append(required, field)
+				}
+			}
+		}
+		schema["required"] = required
+
 		// Register with the backend - DO NOT RUN Under RT Lock
 		if err := pc.dt.AddStoreType(obj, schema); err != nil {
 			r.Client.Errorf("failed to register object type: %s: %v\n", obj, err)

@@ -2,6 +2,7 @@ package backend
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/digitalrebar/provision/backend/index"
@@ -30,13 +31,102 @@ func (r *RawModel) SaveClean() store.KeySaver {
 	return toBackend(&mod, r.rt)
 }
 
+func (r *RawModel) getStringValue(field string) string {
+	if v, ok := (*r.RawModel)[field]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func (r *RawModel) getBooleanValue(field string) bool {
+	if v, ok := (*r.RawModel)[field]; ok && v != nil {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return false
+}
+
 func (r *RawModel) Indexes() map[string]index.Maker {
+	fix := AsRawModel
 	idxs := index.MakeBaseIndexes(r)
-	if _, ok := rawModelSchemaMap[r.Prefix()]; !ok {
+	sc, ok := rawModelSchemaMap[r.Prefix()].(map[string]interface{})
+	if !ok {
 		return idxs
 	}
 
-	// GREG: Add schema based indexes - plus the base
+	m := sc["properties"].(map[string]interface{})
+	for field, data := range m {
+		schema := data.(map[string]interface{})
+		t := schema["type"].(string)
+		unique := false
+		if v, ok := schema["isunique"]; ok {
+			if b, ok := v.(bool); ok && b {
+				unique = b
+			}
+		}
+
+		var iii *index.Maker
+
+		switch t {
+		case "string":
+			ii := index.Make(
+				unique,
+				"string",
+				func(i, j models.Model) bool { return fix(i).getStringValue(field) < fix(j).getStringValue(field) },
+				func(ref models.Model) (gte, gt index.Test) {
+					refField := fix(ref).getStringValue(field)
+					return func(s models.Model) bool {
+							return fix(s).getStringValue(field) >= refField
+						},
+						func(s models.Model) bool {
+							return fix(s).getStringValue(field) > refField
+						}
+				},
+				func(s string) (models.Model, error) {
+					rm := fix(r.New())
+					(*rm.RawModel)[field] = s
+					return rm, nil
+				})
+			iii = &ii
+		case "boolean":
+			ii := index.Make(
+				unique,
+				"boolean",
+				func(i, j models.Model) bool {
+					return (!fix(i).getBooleanValue(field)) && fix(j).getBooleanValue(field)
+				},
+				func(ref models.Model) (gte, gt index.Test) {
+					avail := fix(ref).getBooleanValue(field)
+					return func(s models.Model) bool {
+							v := fix(s).getBooleanValue(field)
+							return v || (v == avail)
+						},
+						func(s models.Model) bool {
+							return fix(s).getBooleanValue(field) && !avail
+						}
+				},
+				func(s string) (models.Model, error) {
+					res := fix(r.New())
+					switch s {
+					case "true":
+						(*res.RawModel)[field] = true
+					case "false":
+						(*res.RawModel)[field] = false
+					default:
+						return nil, errors.New("Runnable must be true or false")
+					}
+					return res, nil
+				})
+			iii = &ii
+		}
+
+		if iii != nil {
+			idxs[field] = *iii
+		}
+	}
 
 	return idxs
 }

@@ -753,7 +753,7 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 		}
 	}
 	for pre, s := range rawModelSchemaMap {
-		if e := p.addStoreType(pre, s, loadRT); e != nil {
+		if e := p.addStoreType(pre, s, loadRT, soft); e != nil {
 			soft.Errorf("Failed to reload %s: %v", pre, e)
 		}
 	}
@@ -800,7 +800,7 @@ func ValidateDataTrackerStore(fileRoot string,
 	return
 }
 
-func (p *DataTracker) addStoreType(prefix string, schema interface{}, rt *RequestTracker) error {
+func (p *DataTracker) addStoreType(prefix string, schema interface{}, rt *RequestTracker, soft *models.Error) error {
 	_, berr := p.Backend.MakeSub(prefix)
 	if berr != nil {
 		return fmt.Errorf("dataTracker: Error creating substore %s: %v", prefix, berr)
@@ -821,6 +821,11 @@ func (p *DataTracker) addStoreType(prefix string, schema interface{}, rt *Reques
 	res := make([]models.Model, len(storeObjs))
 	for i := range storeObjs {
 		res[i] = models.Model(storeObjs[i])
+		if v, ok := res[i].(models.Validator); ok && v.Useable() {
+			if soft != nil {
+				soft.AddError(v.HasError())
+			}
+		}
 	}
 	p.objs[prefix].Index = *index.Create(res)
 	return nil
@@ -830,7 +835,7 @@ func (p *DataTracker) AddStoreType(prefix string, schema interface{}) error {
 	rt := p.Request(p.Logger)
 	var err error
 	rt.AllLocked(func(d Stores) {
-		err = p.addStoreType(prefix, schema, rt)
+		err = p.addStoreType(prefix, schema, rt, nil)
 	})
 	return err
 }
