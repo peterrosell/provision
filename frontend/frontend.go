@@ -759,10 +759,8 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 				}
 			}
 			if !ok {
-				fmt.Printf("GREG: HERE1: %s\n", k)
 				// Did we find an meta-based object?
 				if _, found := ref.(models.MetaHaver); found && strings.HasPrefix(k, "Meta.") {
-					fmt.Printf("GREG: HERE2: %s\n", k)
 					parameter := strings.TrimPrefix(k, "Meta.")
 					maker = index.Make(
 						false,

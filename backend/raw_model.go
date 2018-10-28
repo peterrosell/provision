@@ -1,9 +1,18 @@
 package backend
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
+	"github.com/xeipuuv/gojsonschema"
+)
+
+var (
+	rawModelSchemaMap = map[string]interface{}{}
 )
 
 // RawModel models any data
@@ -13,7 +22,7 @@ type RawModel struct {
 }
 
 func (r *RawModel) SetReadOnly(b bool) {
-	r.ReadOnly = b
+	(*r.RawModel)["ReadOnly"] = b
 }
 
 func (r *RawModel) SaveClean() store.KeySaver {
@@ -22,125 +31,111 @@ func (r *RawModel) SaveClean() store.KeySaver {
 	return toBackend(&mod, r.rt)
 }
 
+func (r *RawModel) getStringValue(field string) string {
+	if v, ok := (*r.RawModel)[field]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func (r *RawModel) getBooleanValue(field string) bool {
+	if v, ok := (*r.RawModel)[field]; ok && v != nil {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return false
+}
+
 func (r *RawModel) Indexes() map[string]index.Maker {
-	res := index.MakeBaseIndexes(r)
-	/*
-		fix := AsRawModel
-		res["Addr"] = index.Make(
-			false,
-			"IP Address",
-			func(i, j models.Model) bool {
-				n, o := big.Int{}, big.Int{}
-				n.SetBytes(fix(i).Addr.To16())
-				o.SetBytes(fix(j).Addr.To16())
-				return n.Cmp(&o) == -1
-			},
-			func(ref models.Model) (gte, gt index.Test) {
-				addr := &big.Int{}
-				addr.SetBytes(fix(ref).Addr.To16())
-				return func(s models.Model) bool {
-						o := big.Int{}
-						o.SetBytes(fix(s).Addr.To16())
-						return o.Cmp(addr) != -1
-					},
-					func(s models.Model) bool {
-						o := big.Int{}
-						o.SetBytes(fix(s).Addr.To16())
-						return o.Cmp(addr) == 1
+	fix := AsRawModel
+	idxs := index.MakeBaseIndexes(r)
+	sc, ok := rawModelSchemaMap[r.Prefix()].(map[string]interface{})
+	if !ok {
+		return idxs
+	}
+
+	m := sc["properties"].(map[string]interface{})
+	for field, data := range m {
+		schema := data.(map[string]interface{})
+		t := schema["type"].(string)
+		unique := false
+		if v, ok := schema["isunique"]; ok {
+			if b, ok := v.(bool); ok && b {
+				unique = b
+			}
+		}
+
+		var iii *index.Maker
+
+		switch t {
+		case "string":
+			ii := index.Make(
+				unique,
+				"string",
+				func(i, j models.Model) bool { return fix(i).getStringValue(field) < fix(j).getStringValue(field) },
+				func(ref models.Model) (gte, gt index.Test) {
+					refField := fix(ref).getStringValue(field)
+					return func(s models.Model) bool {
+							return fix(s).getStringValue(field) >= refField
+						},
+						func(s models.Model) bool {
+							return fix(s).getStringValue(field) > refField
+						}
+				},
+				func(s string) (models.Model, error) {
+					rm := fix(r.New())
+					(*rm.RawModel)[field] = s
+					return rm, nil
+				})
+			iii = &ii
+		case "boolean":
+			ii := index.Make(
+				unique,
+				"boolean",
+				func(i, j models.Model) bool {
+					return (!fix(i).getBooleanValue(field)) && fix(j).getBooleanValue(field)
+				},
+				func(ref models.Model) (gte, gt index.Test) {
+					avail := fix(ref).getBooleanValue(field)
+					return func(s models.Model) bool {
+							v := fix(s).getBooleanValue(field)
+							return v || (v == avail)
+						},
+						func(s models.Model) bool {
+							return fix(s).getBooleanValue(field) && !avail
+						}
+				},
+				func(s string) (models.Model, error) {
+					res := fix(r.New())
+					switch s {
+					case "true":
+						(*res.RawModel)[field] = true
+					case "false":
+						(*res.RawModel)[field] = false
+					default:
+						return nil, errors.New("Runnable must be true or false")
 					}
-			},
-			func(s string) (models.Model, error) {
-				ip := net.ParseIP(s)
-				if ip == nil {
-					return nil, errors.New("Addr must be an IP address")
-				}
-				lease := fix(l.New())
-				lease.Addr = ip
-				return lease, nil
-			})
-		res["Token"] = index.Make(
-			false,
-			"string",
-			func(i, j models.Model) bool { return fix(i).Token < fix(j).Token },
-			func(ref models.Model) (gte, gt index.Test) {
-				token := fix(ref).Token
-				return func(s models.Model) bool {
-						return fix(s).Token >= token
-					},
-					func(s models.Model) bool {
-						return fix(s).Token > token
-					}
-			},
-			func(s string) (models.Model, error) {
-				lease := fix(l.New())
-				lease.Token = s
-				return lease, nil
-			})
-		res["Strategy"] = index.Make(
-			false,
-			"string",
-			func(i, j models.Model) bool { return fix(i).Strategy < fix(j).Strategy },
-			func(ref models.Model) (gte, gt index.Test) {
-				strategy := fix(ref).Strategy
-				return func(s models.Model) bool {
-						return fix(s).Strategy >= strategy
-					},
-					func(s models.Model) bool {
-						return fix(s).Strategy > strategy
-					}
-			},
-			func(s string) (models.Model, error) {
-				lease := fix(l.New())
-				lease.Strategy = s
-				return lease, nil
-			})
-		res["State"] = index.Make(
-			false,
-			"string",
-			func(i, j models.Model) bool { return fix(i).State < fix(j).State },
-			func(ref models.Model) (gte, gt index.Test) {
-				strategy := fix(ref).State
-				return func(s models.Model) bool {
-						return fix(s).State >= strategy
-					},
-					func(s models.Model) bool {
-						return fix(s).State > strategy
-					}
-			},
-			func(s string) (models.Model, error) {
-				lease := fix(l.New())
-				lease.State = s
-				return lease, nil
-			})
-		res["ExpireTime"] = index.Make(
-			false,
-			"Date/Time string",
-			func(i, j models.Model) bool { return fix(i).ExpireTime.Before(fix(j).ExpireTime) },
-			func(ref models.Model) (gte, gt index.Test) {
-				expireTime := fix(ref).ExpireTime
-				return func(s models.Model) bool {
-						ttime := fix(s).ExpireTime
-						return ttime.Equal(expireTime) || ttime.After(expireTime)
-					},
-					func(s models.Model) bool {
-						return fix(s).ExpireTime.After(expireTime)
-					}
-			},
-			func(s string) (models.Model, error) {
-				t := &time.Time{}
-				if err := t.UnmarshalText([]byte(s)); err != nil {
-					return nil, fmt.Errorf("ExpireTime is not valid: %v", err)
-				}
-				lease := fix(l.New())
-				lease.ExpireTime = *t
-				return lease, nil
-			})
-	*/
-	return res
+					return res, nil
+				})
+			iii = &ii
+		}
+
+		if iii != nil {
+			idxs[field] = *iii
+		}
+	}
+
+	return idxs
 }
 
 func (r *RawModel) New() store.KeySaver {
-	res := &RawModel{RawModel: &models.RawModel{Type: r.Type}}
+	res := &RawModel{RawModel: &models.RawModel{"Type": (*r.RawModel)["Type"].(string)}}
+	if r.RawModel != nil && r.ChangeForced() {
+		res.ForceChange()
+	}
 	res.rt = r.rt
 	return res
 }
@@ -158,12 +153,108 @@ func AsRawModels(o []models.Model) []*RawModel {
 }
 
 func (r *RawModel) Validate() {
-	idx := r.rt.stores(r.Type).Items()
+	idx := r.rt.stores((*r.RawModel)["Type"].(string)).Items()
 	r.AddError(index.CheckUnique(r, idx))
+
+	if schema, ok := rawModelSchemaMap[r.Prefix()]; ok {
+		if schema != nil {
+			validator, err := gojsonschema.NewSchema(gojsonschema.NewGoLoader(schema))
+			if err != nil {
+				r.AddError(err)
+				return
+			}
+			res, err := validator.Validate(gojsonschema.NewGoLoader(r.RawModel))
+			if err != nil {
+				r.Errorf("Error validating value: %v", err)
+			} else if !res.Valid() {
+				for _, e := range res.Errors() {
+					r.Errorf("Error in value: %v", e.String())
+				}
+			}
+		}
+	}
+
 	r.SetValid()
 	r.SetAvailable()
 }
 
+func (r *RawModel) BeforeSave() error {
+	r.Validate()
+	if !r.Useable() {
+		return r.MakeError(422, ValidationError, r)
+	}
+	return nil
+}
+
+func (r *RawModel) OnLoad() error {
+	defer func() { r.rt = nil }()
+	r.Fill()
+	return r.BeforeSave()
+}
+
 func (r *RawModel) Locks(action string) []string {
-	return []string{r.Type}
+	return []string{(*r.RawModel)["Type"].(string)}
+}
+
+func (r *RawModel) MarshalJSON() ([]byte, error) {
+	return json.Marshal(r.RawModel)
+}
+
+func (r *RawModel) UnmarshalJSON(data []byte) error {
+	ir := models.RawModel{}
+	if err := json.Unmarshal(data, &ir); err != nil {
+		return err
+	}
+
+	r.RawModel = &ir
+	if (*r.RawModel)["Errors"] != nil {
+		t := (*r.RawModel)["Errors"]
+		n := []string{}
+		if e := models.Remarshal(t, &n); e != nil {
+			return e
+		}
+		(*r.RawModel)["Errors"] = n
+	}
+	return nil
+}
+
+func (r *RawModel) ParameterMaker(rt *RequestTracker, parameter string) (index.Maker, error) {
+	fix := AsRawModel
+	pobj := rt.find("params", parameter)
+	if pobj == nil {
+		return index.Maker{}, fmt.Errorf("Filter not found: %s", parameter)
+	}
+	param := AsParam(pobj)
+
+	return index.Make(
+		false,
+		"parameter",
+		func(i, j models.Model) bool {
+			ip, _ := rt.GetParam(fix(i), parameter, true, false)
+			jp, _ := rt.GetParam(fix(j), parameter, true, false)
+			return GeneralLessThan(ip, jp)
+		},
+		func(ref models.Model) (gte, gt index.Test) {
+			jp, _ := rt.GetParam(fix(ref), parameter, true, false)
+			return func(s models.Model) bool {
+					ip, _ := rt.GetParam(fix(s), parameter, true, false)
+					return GeneralGreaterThanEqual(ip, jp)
+				},
+				func(s models.Model) bool {
+					ip, _ := rt.GetParam(fix(s), parameter, true, false)
+					return GeneralGreaterThan(ip, jp)
+				}
+		},
+		func(s string) (models.Model, error) {
+			obj, err := GeneralValidateParam(param, s)
+			if err != nil {
+				return nil, err
+			}
+			res := fix(r.New())
+			p := map[string]interface{}{}
+			p[parameter] = obj
+			(*res.RawModel)["Params"] = p
+			return res, nil
+		}), nil
+
 }

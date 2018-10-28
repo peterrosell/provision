@@ -38,6 +38,7 @@ type PluginController struct {
 	events             chan *models.Event
 	publishers         *backend.Publishers
 	Actions            *Actions
+	AddStorageType     func(string)
 }
 
 func (pc *PluginController) Request(locks ...string) *backend.RequestTracker {

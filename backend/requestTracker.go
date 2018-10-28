@@ -278,6 +278,7 @@ func (rt *RequestTracker) Create(obj models.Model) (saved bool, err error) {
 	if checkOK {
 		checker.ClearValidation()
 	}
+
 	saved, err = store.Create(backend, ref)
 	if saved {
 		ref.(validator).clearRT()
@@ -444,6 +445,7 @@ func (rt *RequestTracker) Save(obj models.Model) (saved bool, err error) {
 	if checkOK {
 		checker.ClearValidation()
 	}
+
 	saved, err = store.Save(backend, ref)
 	ref.(validator).clearRT()
 	if saved {
