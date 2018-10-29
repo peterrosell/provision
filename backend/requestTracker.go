@@ -26,10 +26,17 @@ import (
 type RequestTracker struct {
 	*sync.Mutex
 	logger.Logger
-	dt         *DataTracker
-	locks      []string
-	d          Stores
+	dt    *DataTracker
+	locks []string
+	d     Stores
+	// toRunAfter is to run at the end, but before the locks are dropped.
+	// This is used validation.
+	// The d Stores are assumed to be locked.
 	toRunAfter []func()
+	// toPublish is to run at the end, but after the locks are dropped.
+	// This is used by the publish system to prevent dead locks.
+	// The d Stores are assumed to be NOT locked and not Present.
+	toPublishAfter []func()
 }
 
 func (rt *RequestTracker) unlocker(u func()) {
@@ -39,6 +46,10 @@ func (rt *RequestTracker) unlocker(u func()) {
 	rt.Lock()
 	u()
 	rt.d = nil
+	for _, f := range rt.toPublishAfter {
+		f()
+	}
+	rt.toPublishAfter = []func(){}
 	rt.toRunAfter = []func(){}
 	rt.Unlock()
 }
@@ -59,9 +70,22 @@ func (rt *RequestTracker) RunAfter(thunk func()) {
 	rt.runAfter(thunk)
 }
 
+func (rt *RequestTracker) publishAfter(thunk func()) {
+	if rt.toPublishAfter == nil {
+		rt.toPublishAfter = []func(){}
+	}
+	rt.toPublishAfter = append(rt.toPublishAfter, thunk)
+}
+
+func (rt *RequestTracker) PublishAfter(thunk func()) {
+	rt.Lock()
+	defer rt.Unlock()
+	rt.publishAfter(thunk)
+}
+
 // Request initializes a RequestTracker from the specified DataTracker.
 func (p *DataTracker) Request(l logger.Logger, locks ...string) *RequestTracker {
-	return &RequestTracker{Mutex: &sync.Mutex{}, dt: p, Logger: l, locks: locks, toRunAfter: []func(){}}
+	return &RequestTracker{Mutex: &sync.Mutex{}, dt: p, Logger: l, locks: locks, toRunAfter: []func(){}, toPublishAfter: []func(){}}
 }
 
 // PublishEvent records the Event to publish to all publish listeners
@@ -79,7 +103,7 @@ func (rt *RequestTracker) PublishEvent(e *models.Event) error {
 	if rt.d == nil {
 		return rt.dt.publishers.publishEvent(e)
 	}
-	rt.runAfter(func() { rt.dt.publishers.publishEvent(e) })
+	rt.publishAfter(func() { rt.dt.publishers.publishEvent(e) })
 	return nil
 }
 
@@ -103,7 +127,7 @@ func (rt *RequestTracker) Publish(prefix, action, key string, ref interface{}) e
 	default:
 		toSend = ref
 	}
-	rt.runAfter(func() { rt.dt.publishers.Publish(prefix, action, key, rt.Principal(), toSend) })
+	rt.publishAfter(func() { rt.dt.publishers.Publish(prefix, action, key, rt.Principal(), toSend) })
 	return nil
 }
 
