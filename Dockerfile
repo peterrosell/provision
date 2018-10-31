@@ -17,13 +17,13 @@ RUN echo "DRP_VERSION=${DRP_VERSION}" && \
 
 # Copy binaries following symlinks. This is used for easier copying from builder image.
 RUN mkdir /provision/binaries && \
-    cp -L /provision/dr-provision /provision/drbundler /provision/drpcli /provision/binaries/
+    cp -L /provision/dr-provision /provision/drbundler /provision/drpcli /provision/drpjoin /provision/binaries/
 
 # Build final container
 FROM debian:stable-slim
 ENV LANG=C.UTF-8
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y iproute2 ipmitool libarchive-tools p7zip && \
+    apt-get install --no-install-recommends -y curl iproute2 ipmitool libarchive-tools p7zip && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /provision/drp-data
 

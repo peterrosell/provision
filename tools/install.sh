@@ -48,7 +48,7 @@ EOFUSAGE
 exit 0
 }
 
-# control flags 
+# control flags
 ISOLATED=false
 NO_CONTENT=false
 DBG=false
@@ -178,7 +178,7 @@ install_epel() {
                 sudo yum install -y epel-release
             fi
         fi
-    fi 
+    fi
 }
 
 # set our downloader GET variable appropriately - supports standard
@@ -207,7 +207,7 @@ get() {
     for URL in $*; do
         FILE=${URL##*/}
         echo ">>> Downloading file:  $FILE"
-        $GET -o $FILE $URL 
+        $GET -o $FILE $URL
     done
 }
 
@@ -234,7 +234,7 @@ ensure_packages() {
         if [[ "$FAST_DOWNLOADER" == "true" ]]; then
           if ! which aria2c  &>/dev/null; then
             echo "Install 'aria2' package"
-            echo 
+            echo
             echo "E.g: "
             echo "  brew install aria2"
           fi
@@ -273,7 +273,7 @@ ensure_packages() {
                 sudo apt-get install -y aria2
             fi
           fi
-        fi 
+        fi
     fi
 }
 
@@ -307,7 +307,7 @@ FASTMSG
     echo
 }
 
-# main 
+# main
 arch=$(uname -m)
 case $arch in
   x86_64|amd64) arch=amd64  ;;
@@ -372,7 +372,7 @@ if [[ "$MODE" == "upgrade" ]]
 then
     MODE=install
     UPGRADE=true
-    force=true 
+    force=true
 fi
 
 case $MODE in
@@ -424,7 +424,7 @@ case $MODE in
                      DRP_CONTENT_VERSION=tip
                  fi
                  echo "Installing Version $DRP_CONTENT_VERSION of Digital Rebar Provision Community Content"
-                 if [[ -n "$ZIP_FILE" ]]; then 
+                 if [[ -n "$ZIP_FILE" ]]; then
                    echo "WARNING: '--zip-file' specified, still trying to downoad community content..."
                    echo "         (specify '--nocontent' to skip download of community content"
                  fi
@@ -449,7 +449,7 @@ case $MODE in
                      else
                          sudo cp "$initfile" "$initdest"
                      fi
-                     echo 
+                     echo
                      echo "######### You can start the DigitalRebar Provision service with:"
                      echo "$starter"
                      echo "######### You can enable the DigitalRebar Provision service with:"
@@ -485,10 +485,13 @@ case $MODE in
                  if [[ -e $binpath/drbundler ]] ; then
                      ln -s $binpath/drbundler drbundler
                  fi
+                 if [[ -e $binpath/drpjoin ]] ; then
+                     ln -s $binpath/drpjoin drpjoin
+                 fi
 
-                 echo 
+                 echo
                  echo "********************************************************************************"
-                 echo 
+                 echo
                  echo "# Run the following commands to start up dr-provision in a local isolated way."
                  echo "# The server will store information and serve files from the drp-data directory."
                  echo
