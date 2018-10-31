@@ -102,7 +102,7 @@ for build in ${builds}; do
         ext=""
     fi
 
-    export GOOS="$os" GOARCH="$arch" 
+    export GOOS="$os" GOARCH="$arch"
     echo "Building binaries for ${arch}${ver_part} ${os} (staging to: '$BLD/$binpath')"
     mkdir -p "$binpath"
     go build -ldflags "$VERFLAGS" -o "$binpath/drpcli${ext}" cmds/drpcli/drpcli.go
@@ -110,6 +110,9 @@ for build in ${builds}; do
     go generate cmds/incrementer/incrementer.go
     go build -ldflags "$VERFLAGS" -o "$binpath/incrementer${ext}" cmds/incrementer/incrementer.go cmds/incrementer/content.go
     go build -ldflags "$VERFLAGS" -o "$binpath/drbundler${ext}" cmds/drbundler/drbundler.go
+
+    cp tools/drpjoin "$binpath/drpjoin"
+    chmod +x "$binpath/drpjoin"
   )
 done
 
