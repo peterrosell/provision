@@ -23,7 +23,7 @@ RUN mkdir /provision/binaries && \
 FROM debian:stable-slim
 ENV LANG=C.UTF-8
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y curl iproute2 ipmitool libarchive-tools p7zip && \
+    apt-get install --no-install-recommends -y curl iproute2 ipmitool jq libarchive-tools p7zip && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /provision/drp-data
 
