@@ -35,4 +35,6 @@ RUN dr-provision --version || true
 EXPOSE 8091 8092 69 67 4011
 VOLUME ["/provision/drp-data"]
 
-ENTRYPOINT dr-provision --base-root=/provision/drp-data --local-content= --default-content=
+ENTRYPOINT ["dr-provision", "--base-root=/provision/drp-data", "--local-content=", "--default-content="]
+CMD []
+
