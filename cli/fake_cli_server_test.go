@@ -53,6 +53,7 @@ func fakeServer() error {
 		"--dhcp-port", "10004",
 		"--binl-port", "10005",
 		"--metrics-port", "10006",
+		"--static-ip", "127.0.0.1",
 		"--fake-pinger",
 		"--drp-id", "Fred",
 		"--backend", "memory:///",
