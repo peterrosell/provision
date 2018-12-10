@@ -209,11 +209,12 @@ func (pc *PluginController) buildNewStore(content *models.Content) (newStore sto
 
 	if md, ok := newStore.(store.MetaSaver); ok {
 		data := map[string]string{
-			"Name":        content.Meta.Name,
-			"Source":      content.Meta.Source,
-			"Description": content.Meta.Description,
-			"Version":     content.Meta.Version,
-			"Type":        content.Meta.Type,
+			"Name":          content.Meta.Name,
+			"Source":        content.Meta.Source,
+			"Description":   content.Meta.Description,
+			"Documentation": content.Meta.Documentation,
+			"Version":       content.Meta.Version,
+			"Type":          content.Meta.Type,
 		}
 		md.SetMetaData(data)
 	}
@@ -325,6 +326,9 @@ func (pc *PluginController) importPluginProvider(rt *backend.RequestTracker, pro
 	}
 	if content.Meta.Source == "" {
 		content.Meta.Source = "FromPluginProvider"
+	}
+	if content.Meta.Documentation == "" {
+		content.Meta.Documentation = "Unspecified"
 	}
 	content.Meta.Type = "plugin"
 
