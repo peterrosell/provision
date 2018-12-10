@@ -23,6 +23,7 @@ type Machine struct {
 	validate
 	// used during AfterSave() and AfterRemove() to handle boot environment changes.
 	oldBootEnv, oldStage, oldWorkflow      string
+	oldMachine                             *Machine
 	changeStageAllowed, inCreate, inRunner bool
 
 	toDeRegister, toRegister renderers
@@ -440,7 +441,11 @@ func (n *Machine) Validate() {
 			}
 			if obFound := stages.Find(n.oldStage); obFound != nil && n.oldStage != n.Stage {
 				oldStage := AsStage(obFound)
-				n.toDeRegister = append(n.toDeRegister, oldStage.render(n.rt, n, n)...)
+				rm := n
+				if n.oldMachine != nil {
+					rm = n.oldMachine
+				}
+				n.toDeRegister = append(n.toDeRegister, oldStage.render(n.rt, rm, rm)...)
 			}
 			n.toRegister = append(n.toRegister, stage.render(n.rt, n, n)...)
 		}
@@ -468,7 +473,11 @@ func (n *Machine) Validate() {
 			}
 			if obFound := bootenvs.Find(n.oldBootEnv); obFound != nil {
 				oldEnv := AsBootEnv(obFound)
-				n.toDeRegister = append(n.toDeRegister, oldEnv.render(n.rt, n, n)...)
+				rm := n
+				if n.oldMachine != nil {
+					rm = n.oldMachine
+				}
+				n.toDeRegister = append(n.toDeRegister, oldEnv.render(n.rt, rm, rm)...)
 			}
 			n.toRegister = append(n.toRegister, env.render(n.rt, n, n)...)
 		}
@@ -513,7 +522,6 @@ func (n *Machine) BeforeSave() error {
 	if n.oldStage == "" && n.Stage != "" {
 		n.oldStage = n.Stage
 	}
-
 	if n.oldBootEnv == "" && n.BootEnv != "" {
 		n.oldBootEnv = n.BootEnv
 	}
@@ -568,6 +576,7 @@ func (n *Machine) AfterSave() {
 	n.oldStage = n.Stage
 	n.oldBootEnv = n.BootEnv
 	n.oldWorkflow = n.Workflow
+	n.oldMachine = nil
 	n.changeStageAllowed = false
 	n.inCreate = false
 	n.inRunner = false
@@ -789,6 +798,7 @@ func (n *Machine) OnChange(oldThing store.KeySaver) error {
 	n.oldBootEnv = oldm.BootEnv
 	n.oldStage = oldm.Stage
 	n.oldWorkflow = oldm.Workflow
+	n.oldMachine = oldm
 	oldPast, _, oldFuture := oldm.SplitTasks()
 	newPast, _, newFuture := n.SplitTasks()
 	e := &models.Error{
