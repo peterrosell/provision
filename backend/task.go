@@ -187,10 +187,10 @@ func (t *Task) render(rt *RequestTracker, m *Machine, e *models.Error) renderers
 
 var taskLockMap = map[string][]string{
 	"get":     {"templates", "tasks"},
-	"create":  {"stages", "machines", "templates", "tasks", "bootenvs", "workflows"},
-	"update":  {"stages", "machines", "templates", "tasks", "bootenvs", "workflows"},
-	"patch":   {"stages", "machines", "templates", "tasks", "bootenvs", "workflows"},
-	"delete":  {"stages", "tasks", "machines", "workflows"},
+	"create":  {"stages", "machines", "templates", "tasks", "bootenvs", "workflows", "profiles"},
+	"update":  {"stages", "machines", "templates", "tasks", "bootenvs", "workflows", "profiles"},
+	"patch":   {"stages", "machines", "templates", "tasks", "bootenvs", "workflows", "profiles"},
+	"delete":  {"stages", "tasks", "machines", "workflows", "profiles"},
 	"actions": {"tasks", "profiles", "params"},
 }
 
