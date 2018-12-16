@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"time"
 
+	utils2 "github.com/VictorLowther/jsonpatch2/utils"
 	"github.com/digitalrebar/provision/models"
 	"golang.org/x/crypto/nacl/sign"
 )
@@ -33,6 +34,46 @@ func (dt *DataTracker) LicenseFor(component string) *models.License {
 	if dt.licenses.Licenses == nil {
 		return nil
 	}
+
+	// Check for "carte-blanche" license and return it if active.
+	for _, l := range dt.licenses.Licenses {
+		if l.Name == "carte-blanche" {
+			l.Active, l.Expired = l.Check(time.Now())
+			if l.Active {
+				return &l
+			}
+			break
+		}
+	}
+
+	// Check for "upto-nodes"
+	for _, l := range dt.licenses.Licenses {
+		if l.Name == "upto-nodes" {
+			l.Active, l.Expired = l.Check(time.Now())
+			if l.Active {
+				// Marshal data into map of string / int counts
+				var counts map[string]int
+				if err := utils2.Remarshal(l.Data, &counts); err != nil {
+					return nil
+				}
+				for ty, count := range counts {
+					rt := dt.Request(dt, ty)
+					objCount := 0
+					rt.Do(func(d Stores) {
+						objs := d(ty)
+						objCount = objs.Count()
+					})
+					if objCount > count {
+						return nil
+					}
+				}
+				return &l
+			}
+			break
+		}
+	}
+
+	// Look for the specific license.
 	for _, l := range dt.licenses.Licenses {
 		if l.Name == component {
 			l.Active, l.Expired = l.Check(time.Now())
