@@ -32,7 +32,7 @@ mv cli/fake_cli_server_test.go cli/fake_cli_server.go
 i=0
 for d in $(go list ./... 2>/dev/null | grep -v cmds) ; do
     echo "----------- TESTING $d -----------"
-    time go test -race -covermode=atomic -coverpkg=$packages -coverprofile="profile${i}.txt" "$d" || FAILED=true
+    time go test -timeout 30m -race -covermode=atomic -coverpkg=$packages -coverprofile="profile${i}.txt" "$d" || FAILED=true
     i=$((i+1))
 done
 go run tools/mergeProfiles.go profile*.txt >coverage.txt
