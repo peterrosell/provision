@@ -193,7 +193,7 @@ func (r *RawModel) OnLoad() error {
 }
 
 func (r *RawModel) Locks(action string) []string {
-	return []string{(*r.RawModel)["Type"].(string)}
+	return []string{(*r.RawModel)["Type"].(string), "profiles", "params"}
 }
 
 func (r *RawModel) MarshalJSON() ([]byte, error) {
