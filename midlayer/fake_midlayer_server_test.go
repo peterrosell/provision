@@ -50,6 +50,7 @@ func fakeServer() error {
 		false,
 		8091,
 		8092,
+		"fred",
 		l,
 		map[string]string{"systemGrantorSecret": "itisfred", "defaultStage": "none", "defaultBootEnv": "local", "unknownBootEnv": "ignore"},
 		backend.NewPublishers(baseLog))

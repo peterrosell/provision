@@ -440,6 +440,7 @@ type DataTracker struct {
 	ForceOurAddress     bool
 	Cleanup             bool
 	StaticPort, ApiPort int
+	DrpId               string
 	FS                  *FileSystem
 	Backend             *DataStack
 	Secrets             store.Store
@@ -844,7 +845,7 @@ func (p *DataTracker) AddStoreType(prefix string, schema interface{}) error {
 func NewDataTracker(backend *DataStack,
 	secrets store.Store,
 	fileRoot, logRoot, addr string, forceAddr bool,
-	staticPort, apiPort int,
+	staticPort, apiPort int, drpId string,
 	logger logger.Logger,
 	defaultPrefs map[string]string,
 	publishers *Publishers) *DataTracker {
@@ -855,6 +856,7 @@ func NewDataTracker(backend *DataStack,
 		LogRoot:           logRoot,
 		StaticPort:        staticPort,
 		ApiPort:           apiPort,
+		DrpId:             drpId,
 		OurAddress:        addr,
 		ForceOurAddress:   forceAddr,
 		Logger:            logger,

@@ -323,6 +323,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		cOpts.ForceStatic,
 		cOpts.StaticPort,
 		cOpts.ApiPort,
+		cOpts.DrpId,
 		buf.Log("backend"),
 		map[string]string{
 			"debugBootEnv":        cOpts.DebugBootEnv,

@@ -128,6 +128,23 @@ func (dt *DataTracker) loadLicense(rt *RequestTracker) {
 		rt.Errorf("Contact support@rackn.com for an updated license")
 		return
 	}
+
+	// Validate endpoint list presence
+	hasOne := false
+	found := false
+	for _, e := range dt.licenses.Endpoints {
+		hasOne = true
+		if e == dt.DrpId {
+			found = true
+			break
+		}
+	}
+	if hasOne && !found {
+		rt.Errorf("License contains Endpoints and this one is not listed.")
+		rt.Errorf("Contact support@rackn.com for an updated license")
+		return
+	}
+
 	now := time.Now()
 	for i := range dt.licenses.Licenses {
 		dt.licenses.Licenses[i].Check(now)
