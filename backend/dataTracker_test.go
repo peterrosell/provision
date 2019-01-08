@@ -82,6 +82,7 @@ func mkDT() *DataTracker {
 		false,
 		8091,
 		8092,
+		"fred",
 		l,
 		map[string]string{"systemGrantorSecret": "itisfred", "defaultStage": "none", "defaultBootEnv": "local", "unknownBootEnv": "ignore"},
 		NewPublishers(baseLog))
