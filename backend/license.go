@@ -134,6 +134,10 @@ func (dt *DataTracker) loadLicense(rt *RequestTracker) {
 	found := false
 	for _, e := range dt.licenses.Endpoints {
 		hasOne = true
+		if e == "MatchAny" {
+			found = true
+			break
+		}
 		if e == dt.DrpId {
 			found = true
 			break
