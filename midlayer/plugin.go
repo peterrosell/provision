@@ -378,43 +378,6 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 
 	r.state = PLUGIN_CONFIGURING
 
-	pc.lock.Unlock()
-
-	// Configure the plugin
-	pc.Debugf("Config Plugin: %s\n", plugin)
-	terr := r.Client.Config(plugin.Params)
-
-	pc.lock.Lock()
-
-	if terr != nil || r.state != PLUGIN_CONFIGURING {
-		r.Client.Infof("Stop Plugin: %s Error: %v\n", plugin, terr)
-		r.Client.Stop()
-		r.Client = nil
-		r.state = PLUGIN_STOPPED
-		rt.Do(func(d backend.Stores) {
-			ref2 := rt.Find("plugins", plugin.Name)
-			if ref2 == nil {
-				return
-			}
-			r.Plugin = plugin
-
-			if len(r.Plugin.PluginErrors) == 0 {
-				r.Plugin.PluginErrors = []string{terr.Error()}
-				rt.Update(r.Plugin)
-			}
-		})
-
-		// If we got permission denied, we need to remove the plugin provider.
-		if berr, ok := terr.(*models.Error); ok && berr.Code == 403 {
-			pc.removePluginProvider(rt, r.Plugin.Provider)
-		}
-		return
-	}
-
-	r.state = PLUGIN_CONFIGED
-	if r.Provider.HasPublish {
-		pc.publishers.Add(r.Client)
-	}
 	for obj, props := range r.Provider.StoreObjects {
 		// Turn the fields into a json object schema
 		schema := map[string]interface{}{
@@ -451,6 +414,44 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 		}
 		// Register with the frontend
 		pc.AddStorageType(obj)
+	}
+
+	pc.lock.Unlock()
+
+	// Configure the plugin
+	pc.Debugf("Config Plugin: %s\n", plugin)
+	terr := r.Client.Config(plugin.Params)
+
+	pc.lock.Lock()
+
+	if terr != nil || r.state != PLUGIN_CONFIGURING {
+		r.Client.Infof("Stop Plugin: %s Error: %v\n", plugin, terr)
+		r.Client.Stop()
+		r.Client = nil
+		r.state = PLUGIN_STOPPED
+		rt.Do(func(d backend.Stores) {
+			ref2 := rt.Find("plugins", plugin.Name)
+			if ref2 == nil {
+				return
+			}
+			r.Plugin = plugin
+
+			if len(r.Plugin.PluginErrors) == 0 {
+				r.Plugin.PluginErrors = []string{terr.Error()}
+				rt.Update(r.Plugin)
+			}
+		})
+
+		// If we got permission denied, we need to remove the plugin provider.
+		if berr, ok := terr.(*models.Error); ok && berr.Code == 403 {
+			pc.removePluginProvider(rt, r.Plugin.Provider)
+		}
+		return
+	}
+
+	r.state = PLUGIN_CONFIGED
+	if r.Provider.HasPublish {
+		pc.publishers.Add(r.Client)
 	}
 	for i := range r.Provider.AvailableActions {
 		r.Provider.AvailableActions[i].Fill()
