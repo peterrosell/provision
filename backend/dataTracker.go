@@ -763,12 +763,13 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 	return
 }
 
+// GetObjectTypes returns a list of objects the backend is tracking.
 func (p *DataTracker) GetObjectTypes() []string {
 	sobjs := []string{}
 	for _, obj := range allKeySavers() {
 		sobjs = append(sobjs, obj.Prefix())
 	}
-	for pre, _ := range rawModelSchemaMap {
+	for pre := range rawModelSchemaMap {
 		sobjs = append(sobjs, pre)
 	}
 	sort.Strings(sobjs)
