@@ -549,6 +549,7 @@ func NewFrontend(
 	me.InitContentApi()
 	me.InitTenantApi()
 	me.InitSystemApi()
+	me.InitObjectsApi()
 
 	if EmbeddedAssetsServerFunc != nil {
 		EmbeddedAssetsServerFunc(mgmtApi, lgr)

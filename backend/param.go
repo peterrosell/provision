@@ -87,6 +87,7 @@ func (p *Param) Validate() {
 }
 
 func (p *Param) BeforeSave() error {
+	p.Endpoint = p.rt.dt.DrpId
 	p.Validate()
 	if !p.Useable() {
 		return p.MakeError(422, ValidationError, p)

@@ -763,6 +763,19 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 	return
 }
 
+// GetObjectTypes returns a list of objects the backend is tracking.
+func (p *DataTracker) GetObjectTypes() []string {
+	sobjs := []string{}
+	for _, obj := range allKeySavers() {
+		sobjs = append(sobjs, obj.Prefix())
+	}
+	for pre := range rawModelSchemaMap {
+		sobjs = append(sobjs, pre)
+	}
+	sort.Strings(sobjs)
+	return sobjs
+}
+
 // This must be locked with ALL locks on the source datatracker from the caller.
 func ValidateDataTrackerStore(fileRoot string,
 	backend *DataStack,

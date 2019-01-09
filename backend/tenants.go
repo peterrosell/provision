@@ -113,6 +113,7 @@ func (t *Tenant) Validate() {
 // also responsible for validating User membership is valid.
 // todo: Actually validate that all the items the Tenant references still exist.
 func (t *Tenant) BeforeSave() error {
+	t.Endpoint = t.rt.dt.DrpId
 	t.Validate()
 	if !t.Validated {
 		return t.MakeError(422, ValidationError, t)
