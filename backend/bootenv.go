@@ -396,7 +396,15 @@ func explodeISO(rt *RequestTracker, envName, osName, fileRoot, isoFile, dest, sh
 func (b *BootEnv) sledgeExploder(rt *RequestTracker, arch string, archInfo models.ArchInfo) func(*RequestTracker) {
 	lp := b.localPathFor(rt, "", arch)
 	isoPath := filepath.Join(rt.dt.FileRoot, "isos", archInfo.IsoFile)
-	if archiver.MatchingFormat(isoPath) == nil {
+
+	fp, err := os.Open(isoPath)
+	if err != nil {
+		rt.Infof("Sledgehammer image %s not a tarball, exiting to usual extract path.", isoPath)
+		return nil
+	}
+	defer fp.Close()
+	opener, err := archiver.ByHeader(fp)
+	if err != nil {
 		rt.Infof("Sledgehammer image %s not a tarball, exiting to usual extract path.", isoPath)
 		return nil
 	}
@@ -408,9 +416,8 @@ func (b *BootEnv) sledgeExploder(rt *RequestTracker, arch string, archInfo model
 			rt.Infof("BootEnv %s: %s slready exists", b.Name, sPath)
 			return
 		}
-		opener := archiver.MatchingFormat(isoPath)
 		rt.Errorf("Sledgehammer: Extracting %s to %s", archInfo.IsoFile, lp)
-		if err := opener.Open(isoPath, lp); err != nil {
+		if err := opener.Unarchive(isoPath, lp); err != nil {
 			os.RemoveAll(sPath)
 			rt.Errorf("Error extracting sledgehammer archive %s: %v", isoPath, err)
 		} else {
