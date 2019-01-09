@@ -150,6 +150,7 @@ func (p *Profile) Validate() {
 }
 
 func (p *Profile) BeforeSave() error {
+	p.Endpoint = p.rt.dt.DrpId
 	p.Validate()
 	if !p.Useable() {
 		return p.MakeError(422, ValidationError, p)

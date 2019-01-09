@@ -639,6 +639,7 @@ func (s *Subnet) OnChange(old store.KeySaver) error {
 // BeforeSave returns an error if the subnet is not valid.  This
 // is used by the store system to avoid saving bad Subnets.
 func (s *Subnet) BeforeSave() error {
+	s.Endpoint = s.rt.dt.DrpId
 	s.Validate()
 	if !s.Useable() {
 		return s.MakeError(422, ValidationError, s)

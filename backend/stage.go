@@ -255,6 +255,7 @@ func (s *Stage) New() store.KeySaver {
 // BeforeSave returns an error if the Stage
 // is not valid to abort the Save.
 func (s *Stage) BeforeSave() error {
+	s.Endpoint = s.rt.dt.DrpId
 	s.Fill()
 	s.Validate()
 	if !s.Validated {

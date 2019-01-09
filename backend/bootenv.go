@@ -568,6 +568,7 @@ func (b *BootEnv) New() store.KeySaver {
 }
 
 func (b *BootEnv) BeforeSave() error {
+	b.Endpoint = b.rt.dt.DrpId
 	b.Validate()
 	if !b.Validated {
 		return b.MakeError(422, ValidationError, b)

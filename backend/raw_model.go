@@ -179,6 +179,7 @@ func (r *RawModel) Validate() {
 }
 
 func (r *RawModel) BeforeSave() error {
+	(*r.RawModel)["Endpoint"] = r.rt.dt.DrpId
 	r.Validate()
 	if !r.Useable() {
 		return r.MakeError(422, ValidationError, r)
