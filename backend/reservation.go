@@ -251,7 +251,9 @@ func (r *Reservation) Validate() {
 // BeforeSave validates the object and returns an error
 // if the operation should be aborted.
 func (r *Reservation) BeforeSave() error {
-	r.Endpoint = r.rt.dt.DrpId
+	if r.Endpoint == "" {
+		r.Endpoint = r.rt.dt.DrpId
+	}
 	r.Validate()
 	if !r.Useable() {
 		return r.MakeError(422, ValidationError, r)

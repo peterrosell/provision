@@ -113,7 +113,9 @@ func (r *Role) Validate() {
 // BeforeSave returns an error if the Role is not Valid.
 // This aborts the save to a data store.
 func (r *Role) BeforeSave() error {
-	r.Endpoint = r.rt.dt.DrpId
+	if r.Endpoint == "" {
+		r.Endpoint = r.rt.dt.DrpId
+	}
 	r.Validate()
 	if !r.Validated {
 		return r.MakeError(422, ValidationError, r)

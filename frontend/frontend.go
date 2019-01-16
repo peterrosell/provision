@@ -19,8 +19,8 @@ import (
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/provision/utils"
 	"github.com/digitalrebar/store"
+	"github.com/galthaus/gzip"
 	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/gzip"
 	"github.com/gin-contrib/location"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -178,6 +178,7 @@ type Frontend struct {
 	NoProv     bool
 	NoBinl     bool
 	SaasDir    string
+	DrpId      string
 }
 
 func (f *Frontend) l(c *gin.Context) logger.Logger {
@@ -412,6 +413,7 @@ func NewFrontend(
 		NoProv:     noProv,
 		NoBinl:     noBinl,
 		SaasDir:    saasDir,
+		DrpId:      drpid,
 		authSource: authSource,
 	}
 	gin.SetMode(gin.ReleaseMode)
@@ -507,6 +509,21 @@ func NewFrontend(
 		c.JSON(err.Code, err)
 	})
 	mgmtApi.NoRoute(func(c *gin.Context) {
+		p := c.Request.URL.Path
+		p = strings.TrimPrefix(p, "/")
+		parts := strings.SplitN(p, "/", 2)
+
+		eid := ""
+		rest := "/"
+		if len(parts) >= 1 && parts[0] != "" {
+			eid = parts[0]
+		}
+		if len(parts) >= 2 && parts[1] != "" {
+			rest = "/" + parts[1]
+		}
+		if ok := me.forwardRequest(c, eid, rest, nil); ok {
+			return
+		}
 		err := &models.Error{
 			Code: http.StatusNotFound,
 			Type: c.Request.Method,
@@ -534,11 +551,11 @@ func NewFrontend(
 	me.InitLeaseApi()
 	me.InitReservationApi()
 	me.InitSubnetApi()
-	me.InitUserApi(drpid)
+	me.InitUserApi()
 	me.InitInterfaceApi()
 	me.InitPrefApi()
 	me.InitParamApi()
-	me.InitInfoApi(drpid)
+	me.InitInfoApi()
 	me.InitLogApi()
 	me.InitPluginApi()
 	me.InitPluginProviderApi()
@@ -1052,6 +1069,9 @@ func (f *Frontend) Create(c *gin.Context, val store.KeySaver) {
 	if !assureDecode(c, val) {
 		return
 	}
+	if fok, mok := f.processRequestWithForwarding(c, val, val); fok || mok {
+		return
+	}
 	f.create(c, val)
 }
 
@@ -1067,6 +1087,9 @@ func (f *Frontend) Patch(c *gin.Context, ref store.KeySaver, key string) {
 	rt := f.rt(c, ref.(Lockable).Locks("update")...)
 	tref = f.Find(c, rt, ref.Prefix(), key)
 	if tref == nil {
+		return
+	}
+	if fok, mok := f.processRequestWithForwarding(c, tref, patch); fok || mok {
 		return
 	}
 	authKey = tref.(backend.AuthSaver).AuthKey()
@@ -1105,6 +1128,9 @@ func (f *Frontend) Update(c *gin.Context, ref store.KeySaver, key string) {
 		}
 		err.Errorf("Key change from %s to %s not allowed", key, ref.Key())
 		c.JSON(err.Code, err)
+		return
+	}
+	if fok, mok := f.processRequestWithForwarding(c, ref, ref); fok || mok {
 		return
 	}
 	var err error
@@ -1148,6 +1174,9 @@ func (f *Frontend) Remove(c *gin.Context, ref store.KeySaver, key string) {
 	rt := f.rt(c, locks...)
 	res = f.Find(c, rt, ref.Prefix(), key)
 	if res == nil {
+		return
+	}
+	if fok, mok := f.processRequestWithForwarding(c, res, nil); fok || mok {
 		return
 	}
 	if !f.assureSimpleAuth(c, ref.Prefix(), "delete", res.(backend.AuthSaver).AuthKey()) {

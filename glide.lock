@@ -1,5 +1,5 @@
 hash: 4be4cf0b50b99d5118776bab2457d8f82e4997456ddfefd0880518368d040c15
-updated: 2019-01-09T14:14:54.011795-06:00
+updated: 2019-01-19T13:11:09.851903-06:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -37,6 +37,8 @@ imports:
   version: 28a8a89db0e1201d1b61b8ee90597fd7d035c0d5
 - name: github.com/fsnotify/fsnotify
   version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
+- name: github.com/galthaus/gzip
+  version: cfbca743ba8cc91ec4167e8a6c44626c5fad7288
 - name: github.com/ghodss/yaml
   version: e9ed3c6dfb39bb1a32197cb10d527906fe4da4b6
 - name: github.com/gin-contrib/cors

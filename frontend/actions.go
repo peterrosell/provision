@@ -59,6 +59,9 @@ func (f *Frontend) makeActionEndpoints(cmdSet string, obj models.Model, idKey st
 			if ref == nil {
 				return
 			}
+			if fok, mok := f.processRequestWithForwarding(c, ref, nil); fok || mok {
+				return
+			}
 			p := plugin(c)
 			for _, laa := range f.pc.Actions.List(cmdSet) {
 				for _, aa := range laa {
@@ -89,6 +92,9 @@ func (f *Frontend) makeActionEndpoints(cmdSet string, obj models.Model, idKey st
 			}
 			ref := f.Find(c, rt, obj.Prefix(), id)
 			if ref == nil {
+				return
+			}
+			if fok, mok := f.processRequestWithForwarding(c, ref, nil); fok || mok {
 				return
 			}
 			err := &models.Error{
@@ -129,6 +135,9 @@ func (f *Frontend) makeActionEndpoints(cmdSet string, obj models.Model, idKey st
 			}
 			ref := f.Find(c, rt, obj.Prefix(), id)
 			if ref == nil {
+				return
+			}
+			if fok, mok := f.processRequestWithForwarding(c, ref, val); fok || mok {
 				return
 			}
 			res := &models.Action{
