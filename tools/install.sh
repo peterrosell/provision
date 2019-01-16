@@ -542,11 +542,11 @@ case $MODE in
              fi
 
              echo
-             echo "# Once dr-provision is started, setup a discovery configuration"
+             echo "# Once dr-provision is started, setup a base discovery configuration"
              echo "  ${EP}drpcli bootenvs uploadiso sledgehammer"
              echo "  ${EP}drpcli prefs set defaultWorkflow discover-base unknownBootEnv discovery defaultBootEnv sledgehammer defaultStage discover"
              echo
-             echo "# Optionally, install the isos for common community operaring systems"
+             echo "# Optionally, install the isos for common community operating systems"
              echo "  ${EP}drpcli bootenvs uploadiso ubuntu-18.04-install"
              echo "  ${EP}drpcli bootenvs uploadiso centos-7-install"
              echo
