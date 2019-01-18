@@ -542,10 +542,13 @@ case $MODE in
              fi
 
              echo
-             echo "# Once dr-provision is started, these commands will install the isos for the community defaults"
+             echo "# Once dr-provision is started, setup a base discovery configuration"
+             echo "  ${EP}drpcli bootenvs uploadiso sledgehammer"
+             echo "  ${EP}drpcli prefs set defaultWorkflow discover-base unknownBootEnv discovery defaultBootEnv sledgehammer defaultStage discover"
+             echo
+             echo "# Optionally, install the isos for common community operating systems"
              echo "  ${EP}drpcli bootenvs uploadiso ubuntu-18.04-install"
              echo "  ${EP}drpcli bootenvs uploadiso centos-7-install"
-             echo "  ${EP}drpcli bootenvs uploadiso sledgehammer"
              echo
              [[ "$FAST_DOWNLOADER" == "true" ]] && show_fast_isos "ubuntu-16.04-install" "centos-7-install" "sledgehammer"
 
