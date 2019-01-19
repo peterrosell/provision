@@ -18,10 +18,10 @@ type InfoResponse struct {
 	Body *models.Info
 }
 
-func (f *Frontend) GetInfo(c *gin.Context, drpid string) (*models.Info, *models.Error) {
+func (f *Frontend) GetInfo(c *gin.Context) (*models.Info, *models.Error) {
 	i := &models.Info{
 		Version:            provision.RSVersion,
-		Id:                 drpid,
+		Id:                 f.DrpId,
 		ApiPort:            f.ApiPort,
 		FilePort:           f.ProvPort,
 		TftpPort:           f.TftpPort,
@@ -62,7 +62,7 @@ func (f *Frontend) GetInfo(c *gin.Context, drpid string) (*models.Info, *models.
 	return i, res
 }
 
-func (f *Frontend) InitInfoApi(drpid string) {
+func (f *Frontend) InitInfoApi() {
 	// swagger:route GET /info Info getInfo
 	//
 	// Return current system info.
@@ -80,7 +80,7 @@ func (f *Frontend) InitInfoApi(drpid string) {
 			if !f.assureSimpleAuth(c, "info", "get", "") {
 				return
 			}
-			info, err := f.GetInfo(c, drpid)
+			info, err := f.GetInfo(c)
 			if err != nil {
 				c.JSON(err.Code, err)
 				return

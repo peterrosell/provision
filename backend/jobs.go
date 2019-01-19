@@ -388,7 +388,9 @@ func (j *Job) OnLoad() error {
 	defer func() { j.rt = nil }()
 	j.oldState = j.State
 	j.Fill()
-	j.Endpoint = j.rt.dt.DrpId
+	if j.Endpoint == "" {
+		j.Endpoint = j.rt.dt.DrpId
+	}
 	j.SetValid()
 	j.Validate()
 	return nil
@@ -455,7 +457,9 @@ func (j *Job) Validate() {
 }
 
 func (j *Job) BeforeSave() error {
-	j.Endpoint = j.rt.dt.DrpId
+	if j.Endpoint == "" {
+		j.Endpoint = j.rt.dt.DrpId
+	}
 	j.Validate()
 	if !j.Validated {
 		return j.MakeError(422, ValidationError, j)

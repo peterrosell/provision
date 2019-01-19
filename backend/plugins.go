@@ -140,7 +140,9 @@ func (n *Plugin) Validate() {
 }
 
 func (n *Plugin) BeforeSave() error {
-	n.Endpoint = n.rt.dt.DrpId
+	if n.Endpoint == "" {
+		n.Endpoint = n.rt.dt.DrpId
+	}
 	n.Validate()
 	if !n.Useable() {
 		return n.MakeError(422, ValidationError, n)

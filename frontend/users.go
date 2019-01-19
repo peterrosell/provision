@@ -137,7 +137,7 @@ type UserActionBodyParameter struct {
 	Body map[string]interface{}
 }
 
-func (f *Frontend) InitUserApi(drpid string) {
+func (f *Frontend) InitUserApi() {
 	// swagger:route GET /users Users listUsers
 	//
 	// Lists Users filtered by some parameters.
@@ -346,7 +346,7 @@ func (f *Frontend) InitUserApi(drpid string) {
 			} else {
 				// Error is only if stats are not filled in.  User
 				// Token should work regardless of that.
-				info, _ := f.GetInfo(c, drpid)
+				info, _ := f.GetInfo(c)
 				if info != nil {
 					if a, _, e := net.SplitHostPort(c.Request.RemoteAddr); e == nil {
 						info.Address = backend.LocalFor(f.l(c), net.ParseIP(a))

@@ -157,7 +157,9 @@ func (u *User) GenClaim(grantor string, ttl time.Duration, wantedRoles ...string
 // BeforeSave validates and sets required fields
 // on the User object before savining.
 func (u *User) BeforeSave() error {
-	u.Endpoint = u.rt.dt.DrpId
+	if u.Endpoint == "" {
+		u.Endpoint = u.rt.dt.DrpId
+	}
 	if u.Secret == "" {
 		u.Secret = randString(16)
 	}
