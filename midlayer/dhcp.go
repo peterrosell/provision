@@ -251,7 +251,7 @@ func (dhr *DhcpRequest) checkMachine(l *backend.Lease) {
 			dhr.offerNetBoot = false
 			return
 		}
-		if len(l.Addr) == 0 || l.Addr.IsUnspecified() {
+		if !l.Fake() && (len(l.Addr) == 0 || l.Addr.IsUnspecified()) {
 			// We do not have a valid lease for this mac address.
 			// DO not let it boot.
 			dhr.Tracef("Refusing netboot, bad lease")
@@ -668,6 +668,7 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 				// This is a proxy DHCP response
 				dhr.buildBinlOptions(lease, serverID)
 				if !dhr.offerNetBoot {
+					dhr.Tracef("Fake lease offerNetBoot is false, returning NoPXE")
 					return "NoPXE"
 				}
 				reply := dhr.buildReply(dhcp.Offer, serverID, lease.Addr)
