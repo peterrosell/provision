@@ -39,8 +39,6 @@ then
     && xiterr 1 "API_KEY is empty or unset ... check 'secrets' file"
   [[ -z "$PROJECT_ID"     || "$PROJECT_ID"     == "insert_project_id_here" ]]      \
     && xiterr 1 "PROJECT_ID is empty or unset ... check 'secrets' file"
-  [[ -z "$RACKN_USERNAME" || "$RACKN_USERNAME" == "insert_rackn_username_here" ]]  \
-    && xiterr 1 "RACKN_USERNAME is empty or unset ... check 'secrets' file"
 fi
 
 # get our OS info of this platform 
@@ -49,8 +47,6 @@ _arch=`uname -m | tr '[:upper:]' '[:lower:]'`
 case $_arch in
   x86_64) _arch="amd64" ;;
 esac
-
-RACKN_AUTH="?username=${RACKN_USENAME}"
 
 API="insert_api_key_here"
 PROJECT="insert_project_id_here"
@@ -329,10 +325,10 @@ case $1 in
 
     # community contents
     $CURL \
-      https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/content/task-library${RACKN_AUTH} \
+      https://api.rackn.io/catalog/content/task-library \
       -o task-library-content.yaml
 #    $CURL \
-#      https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/content/task-library.sha256${RACKN_AUTH} \
+#      https://api.rackn.io/catalog/content/task-library.sha256 \
 #      -o task-library-content.sha256
 #    sed -i 's/ \(task-library\)\(.yaml\)$/ \1-content\2/' task-library-content.sha256
 #
@@ -354,7 +350,7 @@ case $1 in
     cd dr-provision-install
 
     # get our packet-ipmi provider plugin location 
-    PACKET_URL="https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/plugins/packet-ipmi${RACKN_AUTH}"
+    PACKET_URL="https://api.rackn.io/catalog/plugins/packet-ipmi"
     PART=`$CURL $PACKET_URL | jq -r ".$DRP_ARCH.$DRP_OS"`
     BASE=`$CURL $PACKET_URL | jq -r '.base'`
     # download the plugin - AWS cares about extra slashes ... blech 
@@ -374,17 +370,17 @@ case $1 in
 
     # packet helper content
     $CURL \
-      https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/content/packet${RACKN_AUTH} \
+      https://api.rackn.io/catalog/content/packet \
       -o drp-content-packet.json
     ls -l drp-content-packet.json
 
      $CURL \
-       https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/plugins/packet-ipmi${RACKN_AUTH} \
+       https://api.rackn.io/catalog/plugins/packet-ipmi \
        -o drp-plugin-packet-ipmi.json
     ls -l drp-plugin-packet-ipmi.json
 
     # get our packet-ipmi provider plugin location 
-    PACKET_URL="https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/plugins/packet-ipmi${RACKN_AUTH}"
+    PACKET_URL="https://api.rackn.io/catalog/plugins/packet-ipmi"
     PART=`$CURL $PACKET_URL | jq -r ".$DRP_ARCH.$DRP_OS"`
     BASE=`$CURL $PACKET_URL | jq -r '.base'`
     # download the plugin - AWS cares about extra slashes ... blech 
@@ -451,7 +447,7 @@ case $1 in
   # where drp-setup will pick it up and install it for us
   get-drp-krib-content)
 
-    curl -s https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/content/krib${RACKN_AUTH} \
+    curl -s https://api.rackn.io/catalog/content/krib \
       -o dr-provision-install/drp-krib-content.json
     ;;
 
@@ -529,7 +525,7 @@ case $1 in
   # intended to be run on remote DRP endpoint
   fix-stages-bug)
 
-    URL="https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/content/packet${RACKN_AUTH}"
+    URL="https://api.rackn.io/catalog/content/packet"
     CONTENT="dr-provision-install/drp-content-packet.json"
     CONTENT_NAME=`cat $CONTENT | jq -r '.meta.Name'`
     set -x
@@ -550,10 +546,10 @@ case $1 in
 
     # get content
     # content/packet is separate out to drp-content-packet in get-plugins (json and plugin both)
-    # https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/content/packet${RACKN_AUTH}
+    # https://api.rackn.io/catalog/content/packet
     URLS="
-    https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/content/os-linux${RACKN_AUTH}
-    https://qww9e4paf1.execute-api.us-west-2.amazonaws.com/main/catalog/content/os-discovery${RACKN_AUTH}
+    https://api.rackn.io/catalog/content/os-linux
+    https://api.rackn.io/catalog/content/os-discovery
     "
     for URL in $URLS
     do

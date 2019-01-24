@@ -545,8 +545,10 @@ case $MODE in
              echo "# Once dr-provision is started, setup a base discovery configuration"
              echo "  ${EP}drpcli bootenvs uploadiso sledgehammer"
              echo "  ${EP}drpcli prefs set defaultWorkflow discover-base unknownBootEnv discovery defaultBootEnv sledgehammer defaultStage discover"
+             echo "# Add common utilities (sourced from RackN)"
+             echo "  ${EP}drpcli contents upload https://api.rackn.io/catalog/content/task-library"
              echo
-             echo "# Optionally, install the isos for common community operating systems"
+             echo "# Optionally, locally cache the isos for common community operating systems"
              echo "  ${EP}drpcli bootenvs uploadiso ubuntu-18.04-install"
              echo "  ${EP}drpcli bootenvs uploadiso centos-7-install"
              echo
