@@ -929,7 +929,7 @@ func NewDataTracker(backend *DataStack,
 		prefs := res.Prefs()
 		for _, pref := range []string{"systemGrantorSecret", "baseTokenSecret"} {
 			if val, ok := prefs[pref]; !ok || val == "" {
-				prefs[pref] = randString(32)
+				prefs[pref] = models.RandString(32)
 				savePrefs = true
 			}
 		}

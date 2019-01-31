@@ -7,7 +7,6 @@ import (
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
-	sc "github.com/elithrar/simple-scrypt"
 )
 
 // User is an API user of DigitalRebar Provision
@@ -90,14 +89,10 @@ func AsUsers(o []models.Model) []*User {
 // ChangePassword takes a clear text password, generates a hash,
 // clears the previous secret, and saves the object in the store.
 func (u *User) ChangePassword(rt *RequestTracker, newPass string) error {
-	ph, err := sc.GenerateFromPassword([]byte(newPass), sc.DefaultParams)
-	if err != nil {
-		return err
+	err := u.User.ChangePassword(newPass)
+	if err == nil {
+		_, err = rt.Save(u)
 	}
-	u.PasswordHash = ph
-	// When a user changes their password, invalidate any previous cached auth tokens.
-	u.Secret = randString(16)
-	_, err = rt.Save(u)
 	return err
 }
 
@@ -161,7 +156,7 @@ func (u *User) BeforeSave() error {
 		u.Endpoint = u.rt.dt.DrpId
 	}
 	if u.Secret == "" {
-		u.Secret = randString(16)
+		u.Secret = models.RandString(16)
 	}
 	u.Validate()
 	if !u.Useable() {

@@ -216,21 +216,80 @@ func (f *Frontend) rt(c *gin.Context, locks ...string) *backend.RequestTracker {
 }
 
 type AuthSource interface {
-	GetUser(f *Frontend, c *gin.Context, username string) *backend.User
+	GetUser(f *Frontend, c *gin.Context, username, password string) *backend.User
 }
 
 type DefaultAuthSource struct {
 	dt *backend.DataTracker
 }
 
-func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username string) *backend.User {
-	rt := f.rt(c, "users")
+func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, password string) *backend.User {
+	tu := &backend.User{}
+	rt := f.rt(c, tu.Locks("get")...)
 	var res *backend.User
+
 	rt.Do(func(d backend.Stores) {
 		if u := rt.Find("users", username); u != nil {
 			res = u.(*backend.User)
 		}
 	})
+
+	checkAuth := res == nil
+	if res != nil {
+		if auth, ok := res.Meta["auth-method"]; ok && auth != "" {
+			checkAuth = true
+		}
+	}
+
+	// Check for plugin-based auth
+	if checkAuth {
+		// Assume that it is not a good user or good password
+		res = nil
+		ma := &models.Action{
+			Model:   nil,
+			Plugin:  "",
+			Command: "authenticate",
+			Params: map[string]interface{}{
+				"auth/username": username,
+				"auth/password": password,
+			},
+		}
+		if obj, runErr := f.pc.Actions.Run(rt, "system", ma); runErr == nil {
+			u := &models.User{}
+			if jerr := models.Remarshal(obj, u); jerr == nil {
+				// Upgrade RT to a user create level
+				rt = f.rt(c, tu.Locks("create")...)
+				rt.Do(func(d backend.Stores) {
+					// Make sure someone didn't create it on me
+					if u2 := rt.Find("users", username); u2 != nil {
+						res = u2.(*backend.User)
+					}
+					// Create the object if not found.
+					if res == nil {
+						if _, err := rt.Create(u); err != nil {
+							f.Logger.Errorf("Failed to create user: %s, %v", username, err)
+						}
+						if u3 := rt.Find("users", username); u3 != nil {
+							res = u3.(*backend.User)
+						}
+					} else {
+						// If password doesn't match and we got a new
+						// object, we need to save the new object
+						// because the password changed.
+						if !res.CheckPassword(password) {
+							if _, err := rt.Update(u); err != nil {
+								f.Logger.Errorf("Failed to update user: %s, %v", username, err)
+							}
+							if u3 := rt.Find("users", username); u3 != nil {
+								res = u3.(*backend.User)
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+
 	return res
 }
 
@@ -280,7 +339,7 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
-			user := fe.authSource.GetUser(fe, c, string(userpass[0]))
+			user := fe.authSource.GetUser(fe, c, string(userpass[0]), string(userpass[1]))
 			if user == nil {
 				c.AbortWithStatus(http.StatusForbidden)
 				return

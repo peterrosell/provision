@@ -118,6 +118,10 @@ func NewPluginClient(pc *PluginController, pluginCommDir, plugin, provider strin
 	env = append(env, fmt.Sprintf("RS_TOKEN=%s", token))
 	answer.cmd.Env = env
 
+	filepath := fmt.Sprintf("%s/../plugin-tmp", pc.pluginDir)
+	os.MkdirAll(filepath, 0700)
+	answer.cmd.Dir = filepath
+
 	var err2 error
 	answer.stderr, err2 = answer.cmd.StderrPipe()
 	if err2 != nil {

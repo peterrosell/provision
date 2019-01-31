@@ -9,7 +9,7 @@ import (
 )
 
 func TestRandString(t *testing.T) {
-	r := randString(16)
+	r := models.RandString(16)
 	if len(r) != 16 {
 		t.Errorf("Random string should be 16 bytes long: %s\n", r)
 	}
@@ -36,7 +36,7 @@ func TestJWTUtils(t *testing.T) {
 		t.Errorf("Key was not set: %v %v\n", testkey, string(jwtManager.key))
 	}
 
-	jwtManager = NewJwtManager([]byte(randString(32)))
+	jwtManager = NewJwtManager([]byte(models.RandString(32)))
 	s, e := NewClaim("fred", "fred", 30).AddRawClaim("*", "get", "m").Seal(jwtManager)
 	if e != nil {
 		t.Errorf("Failed to sign token: %v\n", e)
