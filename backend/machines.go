@@ -520,7 +520,7 @@ func (n *Machine) BeforeSave() error {
 	}
 	// Always make sure we have a secret
 	if n.Secret == "" {
-		n.Secret = randString(16)
+		n.Secret = models.RandString(16)
 	}
 	if n.oldStage == "" && n.Stage != "" {
 		n.oldStage = n.Stage

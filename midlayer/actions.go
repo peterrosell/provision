@@ -195,7 +195,7 @@ func (ma *Actions) Run(rt *backend.RequestTracker, ob string, maa *models.Action
 		aa, ok = ma.GetSpecific(ob, maa.Command, maa.Plugin)
 	}
 	if !ok {
-		return nil, fmt.Errorf("Action no longer available: %s", aa.Command)
+		return nil, fmt.Errorf("Action no longer available: %s", maa.Command)
 	}
 
 	if err := aa.Reserve(); err != nil {

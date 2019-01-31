@@ -14,17 +14,6 @@ import (
 	"github.com/digitalrebar/provision/models"
 )
 
-func randString(n int) string {
-	b := make([]byte, n)
-	_, err := rand.Read(b)
-	if err != nil {
-		fmt.Printf("Failed to read random\n")
-		return "ARGH!"
-	}
-	base64 := base64.URLEncoding.EncodeToString(b)
-	return base64[:n]
-}
-
 // Config configures a Manager.
 type JwtConfig struct {
 	// digital signing method, defaults to jwt.SigningMethodHS256 (SHA256)
