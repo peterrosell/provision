@@ -84,11 +84,17 @@ func (f *Frontend) InitPluginProviderApi() {
 	//       500: ErrorResponse
 	f.ApiGroup.HEAD("/plugin_providers",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "plugin_providers", "list", "") {
-				return
+			count := "0"
+			if f.getAuth(c).matchClaim(models.MakeRole("", "plugin_providers", "list", "").Compile()) {
+				res := []*models.PluginProvider{}
+				pps := f.pc.GetPluginProviders()
+				for _, pp := range pps {
+					if f.getAuth(c).tenantOK("plugin_providers", pp.Name) {
+						res = append(res, pp)
+					}
+				}
+				count = fmt.Sprintf("%d", len(res))
 			}
-			pp := f.pc.GetPluginProviders()
-			count := fmt.Sprintf("%d", len(pp))
 			c.Header("X-DRP-LIST-TOTAL-COUNT", count)
 			c.Header("X-DRP-LIST-COUNT", count)
 			c.Status(http.StatusOK)
