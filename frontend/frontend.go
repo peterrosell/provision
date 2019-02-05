@@ -273,6 +273,10 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 						}
 						if u3 := rt.Find("users", username); u3 != nil {
 							res = u3.(*backend.User)
+							if !res.Validated || !res.Available {
+								f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
+								res = nil
+							}
 						}
 					} else {
 						// Always save the object to pick up role and tenant changes
@@ -281,6 +285,10 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 						}
 						if u3 := rt.Find("users", username); u3 != nil {
 							res = u3.(*backend.User)
+							if !res.Validated || !res.Available {
+								f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
+								res = nil
+							}
 						}
 					}
 					// Update tenants
