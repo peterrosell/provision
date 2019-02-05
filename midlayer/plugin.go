@@ -418,9 +418,33 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 
 	pc.lock.Unlock()
 
+	params := map[string]interface{}{}
+	// Plugins should take advantage of defaults
+	for k, v := range plugin.Params {
+		params[k] = v
+	}
+	rt.Do(func(d backend.Stores) {
+		for _, name := range r.Provider.RequiredParams {
+			if _, ok := params[name]; ok {
+				continue
+			}
+			if v, ok := rt.GetParam(plugin, name, true, true); ok {
+				params[name] = v
+			}
+		}
+		for _, name := range r.Provider.OptionalParams {
+			if _, ok := params[name]; ok {
+				continue
+			}
+			if v, ok := rt.GetParam(plugin, name, true, true); ok {
+				params[name] = v
+			}
+		}
+	})
+
 	// Configure the plugin
 	pc.Debugf("Config Plugin: %s\n", plugin)
-	terr := r.Client.Config(plugin.Params)
+	terr := r.Client.Config(params)
 
 	pc.lock.Lock()
 
