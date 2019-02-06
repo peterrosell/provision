@@ -273,17 +273,21 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 						}
 						if u3 := rt.Find("users", username); u3 != nil {
 							res = u3.(*backend.User)
+							if !res.Validated || !res.Available {
+								f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
+								res = nil
+							}
 						}
 					} else {
-						// If password doesn't match and we got a new
-						// object, we need to save the new object
-						// because the password changed.
-						if !res.CheckPassword(password) {
-							if _, err := rt.Update(u); err != nil {
-								f.Logger.Errorf("Failed to update user: %s, %v", username, err)
-							}
-							if u3 := rt.Find("users", username); u3 != nil {
-								res = u3.(*backend.User)
+						// Always save the object to pick up role and tenant changes
+						if _, err := rt.Update(u); err != nil {
+							f.Logger.Errorf("Failed to update user: %s, %v", username, err)
+						}
+						if u3 := rt.Find("users", username); u3 != nil {
+							res = u3.(*backend.User)
+							if !res.Validated || !res.Available {
+								f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
+								res = nil
 							}
 						}
 					}
