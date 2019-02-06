@@ -114,8 +114,13 @@ func (fe *Frontend) processRequestWithForwarding(c *gin.Context, obj interface{}
 	mobj, _ := obj.(models.Model)
 	if owned, ook := mobj.(models.Owner); ook {
 		owner := owned.GetEndpoint()
-		if owner == "" || owner == fe.DrpId {
+		if owner == "" {
 			return false, false // This is mine, don't forward.
+		}
+		for _, id := range fe.DrpIds {
+			if owner == id {
+				return false, false // This is mine, don't forward.
+			}
 		}
 		if fok := fe.forwardRequest(c, owned.GetEndpoint(), "", newBody); fok {
 			return true, true // forwarded and not mine

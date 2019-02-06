@@ -105,6 +105,7 @@ type ProgOpts struct {
 	TlsCertFile   string `long:"tls-cert" description:"The TLS Cert File" default:"server.crt"`
 	UseOldCiphers bool   `long:"use-old-ciphers" description:"Use Original Less Secure Cipher List"`
 	DrpId         string `long:"drp-id" description:"The id of this Digital Rebar Provision instance" default:""`
+	HaId          string `long:"ha-id" description:"The id of this Digital Rebar Provision HA Cluster" default:""`
 	CurveOrBits   string `long:"cert-type" description:"Type of cert to generate. values are: P224, P256, P384, P521, RSA, or <number of RSA bits>" default:"P384"`
 
 	BaseTokenSecret     string `long:"base-token-secret" description:"Auth Token secret to allow revocation of all tokens" default:""`
@@ -312,6 +313,33 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		return fmt.Sprintf("Unable to open secrets store: %v", err)
 	}
 
+	// No DrpId - get a mac address
+	intfs, err := net.Interfaces()
+	if err != nil {
+		return fmt.Sprintf("Error getting interfaces for DrpId: %v", err)
+	}
+
+	var localId string
+	for _, intf := range intfs {
+		if (intf.Flags & net.FlagLoopback) == net.FlagLoopback {
+			continue
+		}
+		if (intf.Flags & net.FlagUp) != net.FlagUp {
+			continue
+		}
+		if strings.HasPrefix(intf.Name, "veth") {
+			continue
+		}
+		localId = intf.HardwareAddr.String()
+		break
+	}
+	if cOpts.DrpId == "" {
+		cOpts.DrpId = localId
+	}
+	if cOpts.HaId == "" {
+		cOpts.HaId = cOpts.DrpId
+	}
+
 	// We have a backend, now get default assets
 	publishers := backend.NewPublishers(localLogger)
 
@@ -323,7 +351,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		cOpts.ForceStatic,
 		cOpts.StaticPort,
 		cOpts.ApiPort,
-		cOpts.DrpId,
+		cOpts.HaId,
 		buf.Log("backend"),
 		map[string]string{
 			"debugBootEnv":        cOpts.DebugBootEnv,
@@ -345,27 +373,6 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	if cOpts.CleanupCorrupt {
 		dt.Cleanup = true
 	}
-	// No DrpId - get a mac address
-	if cOpts.DrpId == "" {
-		intfs, err := net.Interfaces()
-		if err != nil {
-			return fmt.Sprintf("Error getting interfaces for DrpId: %v", err)
-		}
-
-		for _, intf := range intfs {
-			if (intf.Flags & net.FlagLoopback) == net.FlagLoopback {
-				continue
-			}
-			if (intf.Flags & net.FlagUp) != net.FlagUp {
-				continue
-			}
-			if strings.HasPrefix(intf.Name, "veth") {
-				continue
-			}
-			cOpts.DrpId = intf.HardwareAddr.String()
-			break
-		}
-	}
 
 	pc, err := midlayer.InitPluginController(cOpts.PluginRoot, cOpts.PluginCommRoot, dt, publishers)
 	if err != nil {
@@ -377,7 +384,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		cOpts.OurAddress,
 		cOpts.ApiPort, cOpts.StaticPort, cOpts.DhcpPort, cOpts.BinlPort,
 		cOpts.FileRoot,
-		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, cOpts.DrpId, pc,
+		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, []string{cOpts.DrpId, localId, cOpts.HaId}, pc,
 		cOpts.DisableDHCP, cOpts.DisableTftpServer, cOpts.DisableProvisioner, cOpts.DisableBINL,
 		cOpts.SaasContentRoot)
 	fe.TftpPort = cOpts.TftpPort
