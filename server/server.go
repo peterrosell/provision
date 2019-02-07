@@ -136,6 +136,7 @@ func Server(cOpts *ProgOpts) {
 func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	onlyICanReadThings()
 	var err error
+	var watchDone chan struct{}
 
 	if cOpts.VersionFlag {
 		return fmt.Sprintf("Version: %s", provision.RSVersion)
@@ -505,6 +506,12 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT)
 
+	watchDone, err = watchSelf()
+	if err != nil {
+		log.Printf("Error starting watcher service: %v", err)
+		ch <- syscall.SIGTERM
+	}
+
 	go func() {
 		// Wait for Api to come up
 		for count := 0; count < 5; count++ {
@@ -572,6 +579,9 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 						localLogger.Printf("could not shutdown: %v", err)
 					}
 				}
+				if watchDone != nil {
+					close(watchDone)
+				}
 				break
 			}
 		}
@@ -585,6 +595,9 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 			if err := svc.Shutdown(context.Background()); err != http.ErrServerClosed {
 				localLogger.Printf("could not shutdown: %v", err)
 			}
+		}
+		if watchDone != nil {
+			close(watchDone)
 		}
 		return fmt.Sprintf("Error running API service: %v\n", err)
 	}
