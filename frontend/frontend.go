@@ -178,7 +178,7 @@ type Frontend struct {
 	NoProv     bool
 	NoBinl     bool
 	SaasDir    string
-	DrpId      string
+	DrpIds     []string
 }
 
 func (f *Frontend) l(c *gin.Context) logger.Logger {
@@ -487,7 +487,7 @@ func NewFrontend(
 	fileRoot, localUI, UIUrl string,
 	authSource AuthSource,
 	pubs *backend.Publishers,
-	drpid string,
+	drpids []string,
 	pc *midlayer.PluginController,
 	noDhcp, noTftp, noProv, noBinl bool,
 	saasDir string) (me *Frontend) {
@@ -506,7 +506,7 @@ func NewFrontend(
 		NoProv:     noProv,
 		NoBinl:     noBinl,
 		SaasDir:    saasDir,
-		DrpId:      drpid,
+		DrpIds:     drpids,
 		authSource: authSource,
 	}
 	gin.SetMode(gin.ReleaseMode)
