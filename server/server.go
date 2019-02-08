@@ -136,7 +136,6 @@ func Server(cOpts *ProgOpts) {
 func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	onlyICanReadThings()
 	var err error
-	var watchDone chan struct{}
 
 	if cOpts.VersionFlag {
 		return fmt.Sprintf("Version: %s", provision.RSVersion)
@@ -506,11 +505,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT)
 
-	watchDone, err = watchSelf()
-	if err != nil {
-		log.Printf("Error starting watcher service: %v", err)
-		ch <- syscall.SIGTERM
-	}
+	watchDone := make(chan struct{})
 
 	go func() {
 		// Wait for Api to come up
@@ -587,19 +582,25 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		}
 	}()
 
-	localLogger.Printf("Starting API server")
-	if err = srv.ListenAndServeTLS(cOpts.TlsCertFile, cOpts.TlsKeyFile); err != http.ErrServerClosed {
-		// Stop the service gracefully.
-		for _, svc := range services {
-			localLogger.Println("Shutting down server...")
-			if err := svc.Shutdown(context.Background()); err != http.ErrServerClosed {
-				localLogger.Printf("could not shutdown: %v", err)
+	go func() {
+		localLogger.Printf("Starting API server")
+		if err = srv.ListenAndServeTLS(cOpts.TlsCertFile, cOpts.TlsKeyFile); err != http.ErrServerClosed {
+			// Stop the service gracefully.
+			for _, svc := range services {
+				localLogger.Println("Shutting down server...")
+				if err := svc.Shutdown(context.Background()); err != http.ErrServerClosed {
+					localLogger.Printf("could not shutdown: %v", err)
+				}
+			}
+			if watchDone != nil {
+				close(watchDone)
 			}
 		}
-		if watchDone != nil {
-			close(watchDone)
-		}
-		return fmt.Sprintf("Error running API service: %v\n", err)
+	}()
+
+	err = watchSelf(localLogger, watchDone, services)
+	if err != nil {
+		log.Printf("Error starting watcher service: %v", err)
 	}
 	return "Exiting"
 }
