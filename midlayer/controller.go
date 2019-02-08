@@ -344,7 +344,7 @@ func (pc *PluginController) importPluginProvider(rt *backend.RequestTracker, pro
 	pc.Tracef("Replacing new datastore for: %s\n", provider)
 	rt.AllLocked(func(d backend.Stores) {
 		l := rt.Logger.Level()
-		rt.Logger.SetLevel(logger.Error)
+		rt.Logger.SetLevel(logger.Fatal)
 		defer rt.Logger.SetLevel(l)
 
 		ds := pc.dt.Backend
