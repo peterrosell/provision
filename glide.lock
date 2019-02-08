@@ -1,5 +1,5 @@
-hash: 4be4cf0b50b99d5118776bab2457d8f82e4997456ddfefd0880518368d040c15
-updated: 2019-01-19T13:11:09.851903-06:00
+hash: 858db33e2632d0fc8bbb527b44e2897e2ec6353f92ee4e443231d2a8dc6d91eb
+updated: 2019-02-06T21:13:31.799809-06:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -95,6 +95,8 @@ imports:
   version: 1c38ed7ad0cc3d9e66649ac398c30e45f395c4eb
 - name: github.com/json-iterator/go
   version: 10a568c51178f31e41456cedaac7838e0f4f7360
+- name: github.com/kardianos/osext
+  version: ae77be60afb1dcacde03767a8c37337fad28ac14
 - name: github.com/klauspost/compress
   version: b50017755d442260d792c34c7c43216d9ba7ffc7
   subpackages:

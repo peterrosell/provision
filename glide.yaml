@@ -53,5 +53,6 @@ import:
   - prometheus
 - package: github.com/groob/plist
 - package: github.com/klauspost/pgzip
+- package: github.com/kardianos/osext
 - package: github.com/mholt/archiver
   version: ^3.1.0

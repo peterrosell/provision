@@ -464,7 +464,7 @@ func (b *BootEnv) IsoExploders(rt *RequestTracker) []func(*RequestTracker) {
 			if b.installRepos[arch] != nil {
 				rt.Infof("BootEnv: Explode ISO: ISO does not exist, falling back to install repo at %s", b.installRepos[arch].URL)
 			} else {
-				rt.Errorf("BootEnv %s : Explode ISO: Iso %s does not exist. Will not be able to PXE boot arch %s",
+				rt.Infof("BootEnv %s : Explode ISO: Iso %s does not exist. Will not be able to PXE boot arch %s",
 					b.Name, isoFile, arch)
 			}
 			continue
