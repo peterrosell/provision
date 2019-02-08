@@ -249,7 +249,7 @@ func (f *Frontend) InitSystemApi() {
 			}
 			tmpcurrentDrp := currentDrp + ".next"
 
-			for _, fname := range []string{"drpcli", "drbundler", "dr-provision"} {
+			for _, fname := range []string{"drpcli", "drbundler"} {
 				newfname := path.Join(dir, "bin", osLocal, arch, fname)
 				var oldFname string
 
@@ -260,16 +260,12 @@ func (f *Frontend) InitSystemApi() {
 					}
 					oldFname = ""
 				}
-
 				if oldFname != "" {
 					if terr := CopyFile(oldFname, oldFname+".bak"); terr != nil {
 						err.Code = http.StatusBadRequest
 						err.AddError(terr)
 						c.JSON(err.Code, err)
 						return
-					}
-					if fname == "dr-provision" {
-						oldFname = tmpcurrentDrp
 					}
 					if terr := os.Rename(newfname, oldFname); terr != nil {
 						err.Code = http.StatusBadRequest
@@ -280,11 +276,25 @@ func (f *Frontend) InitSystemApi() {
 				}
 			}
 
+			if terr := CopyFile(currentDrp, currentDrp+".bak"); terr != nil {
+				err.Code = http.StatusBadRequest
+				err.AddError(terr)
+				c.JSON(err.Code, err)
+				return
+			}
+			newfname := path.Join(dir, "bin", osLocal, arch, "dr-provision")
+			if terr := os.Rename(newfname, tmpcurrentDrp); terr != nil {
+				err.Code = http.StatusBadRequest
+				err.AddError(terr)
+				c.JSON(err.Code, err)
+				return
+			}
+
 			os.RemoveAll(dir) // clean up
 			c.JSON(http.StatusCreated, &models.BlobInfo{Path: "drpupgrade.zip", Size: copied})
 
 			if terr := os.Rename(tmpcurrentDrp, currentDrp); terr != nil {
-				// GREG: log an error
+				f.Logger.Errorf("Failed to rename %s to %s: %v\n", tmpcurrentDrp, currentDrp, terr)
 			}
 		})
 }
