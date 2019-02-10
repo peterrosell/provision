@@ -113,6 +113,21 @@ func (f FakeValid) IsAvailable() bool { return bool(f) }
 func (f FakeValid) IsReadOnly() bool  { return bool(f) }
 func (f FakeValid) HasError() error   { return nil }
 
+type FakeBundler string
+
+func (f FakeBundler) Prefix() string     { return "fakebundler" }
+func (f FakeBundler) Key() string        { return "noID" }
+func (f FakeBundler) KeyName() string    { return "noID" }
+func (f FakeBundler) Fill()              {}
+func (f FakeBundler) Validate()          {}
+func (f FakeBundler) ClearValidation()   {}
+func (f FakeBundler) Useable() bool      { return false }
+func (f FakeBundler) IsAvailable() bool  { return false }
+func (f FakeBundler) IsReadOnly() bool   { return false }
+func (f FakeBundler) HasError() error    { return nil }
+func (f FakeBundler) GetBundle() string  { return string(f) }
+func (f FakeBundler) SetBundle(s string) {}
+
 func MakeBaseIndexes(m models.Model) map[string]Maker {
 	res := map[string]Maker{}
 	res["Key"] = MakeKey()
@@ -208,6 +223,25 @@ func MakeBaseIndexes(m models.Model) map[string]Maker {
 				return FakeValid(valid), nil
 			},
 		}
+	}
+	if _, ok := m.(models.Bundler); ok {
+		fix := func(m models.Model) models.Bundler { return m.(models.Bundler) }
+		res["Bundle"] = Make(
+			false,
+			"string",
+			func(i, j models.Model) bool { return fix(i).GetBundle() < fix(j).GetBundle() },
+			func(ref models.Model) (gte, gt Test) {
+				refBundle := fix(ref).GetBundle()
+				return func(s models.Model) bool {
+						return fix(s).GetBundle() >= refBundle
+					},
+					func(s models.Model) bool {
+						return fix(s).GetBundle() > refBundle
+					}
+			},
+			func(s string) (models.Model, error) {
+				return FakeBundler(s), nil
+			})
 	}
 	return res
 }
