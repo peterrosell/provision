@@ -72,11 +72,25 @@ func buildSummary(st store.Store) *models.ContentSummary {
 	return cs
 }
 
-func (f *Frontend) buildContent(st store.Store) (*models.Content, *models.Error) {
+func (f *Frontend) buildContent(rt *backend.RequestTracker, st store.Store) (*models.Content, *models.Error) {
 	content := &models.Content{}
 	err := content.FromStore(st)
 	if err != nil {
 		return nil, models.NewError("ServerError", http.StatusInternalServerError, err.Error())
+	}
+	for section := range content.Sections {
+		if len(content.Sections[section]) == 0 {
+			continue
+		}
+		for key := range content.Sections[section] {
+			obj, ok := content.Sections[section][key].(models.Paramer)
+			if !ok {
+				continue
+			}
+			params := rt.GetParams(obj, false, true)
+			obj.SetParams(params)
+			content.Sections[section][key] = obj
+		}
 	}
 	return content, nil
 }
@@ -161,7 +175,7 @@ func (f *Frontend) InitContentApi() {
 					res.Errorf("No such content store")
 					c.JSON(http.StatusNotFound, res)
 				} else {
-					content, err := f.buildContent(cst)
+					content, err := f.buildContent(rt, cst)
 					if err != nil {
 						c.JSON(err.Code, err)
 					} else {
