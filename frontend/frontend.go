@@ -863,7 +863,8 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 	}
 
 	for k, vs := range params {
-		if k == "offset" || k == "limit" || k == "sort" || k == "reverse" || k == "slim" {
+		switch k {
+		case "offset", "limit", "sort", "reverse", "slim", "decode":
 			continue
 		}
 		// Did we find an existing index?
