@@ -111,13 +111,22 @@ func (rt *RequestTracker) PublishEvent(e *models.Event) error {
 // immediately if not locks are in place.  Otherwise, the action is delayed
 // until the locks are released.
 func (rt *RequestTracker) Publish(prefix, action, key string, ref interface{}) error {
+	return rt.PublishExt(prefix, action, key, ref, nil)
+}
+
+// PublishExt takes the components of an Event and notifies the publishers
+// immediately if not locks are in place.  Otherwise, the action is delayed
+// until the locks are released.
+//
+// Target specifies the original object or nil
+func (rt *RequestTracker) PublishExt(prefix, action, key string, ref, target interface{}) error {
 	rt.Lock()
 	defer rt.Unlock()
 	if rt.dt.publishers == nil {
 		return nil
 	}
 	if rt.d == nil {
-		return rt.dt.publishers.Publish(prefix, action, key, rt.Principal(), ref)
+		return rt.dt.publishers.PublishExt(prefix, action, key, rt.Principal(), ref, target)
 
 	}
 	var toSend interface{}
@@ -127,7 +136,15 @@ func (rt *RequestTracker) Publish(prefix, action, key string, ref interface{}) e
 	default:
 		toSend = ref
 	}
-	rt.publishAfter(func() { rt.dt.publishers.Publish(prefix, action, key, rt.Principal(), toSend) })
+	var toTarget interface{}
+	switch m := target.(type) {
+	case models.Model:
+		toTarget = models.Clone(m)
+	default:
+		toTarget = target
+	}
+
+	rt.publishAfter(func() { rt.dt.publishers.PublishExt(prefix, action, key, rt.Principal(), toSend, toTarget) })
 	return nil
 }
 
@@ -413,7 +430,7 @@ func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.P
 	toSave.(validator).clearRT()
 	if saved {
 		idx.Add(toSave)
-		rt.Publish(prefix, "update", key, toSave)
+		rt.PublishExt(prefix, "update", key, toSave, ref)
 	}
 	return toSave, err
 }
@@ -447,7 +464,7 @@ func (rt *RequestTracker) Update(obj models.Model) (saved bool, err error) {
 	ref.(validator).clearRT()
 	if saved {
 		idx.Add(ref)
-		rt.Publish(prefix, "update", key, ref)
+		rt.PublishExt(prefix, "update", key, ref, target)
 	}
 	return saved, err
 }
@@ -460,7 +477,7 @@ func (rt *RequestTracker) Update(obj models.Model) (saved bool, err error) {
 //
 // Assumes that locks are held as appropriate.
 func (rt *RequestTracker) Save(obj models.Model) (saved bool, err error) {
-	_, prefix, key, idx, backend, ref, _ := rt.spkibrt(obj)
+	_, prefix, key, idx, backend, ref, target := rt.spkibrt(obj)
 	if ms, ok := ref.(models.Filler); ok {
 		ms.Fill()
 	}
@@ -474,7 +491,7 @@ func (rt *RequestTracker) Save(obj models.Model) (saved bool, err error) {
 	ref.(validator).clearRT()
 	if saved {
 		idx.Add(ref)
-		rt.Publish(prefix, "save", key, ref)
+		rt.PublishExt(prefix, "save", key, ref, target)
 	}
 	return saved, err
 }

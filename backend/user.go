@@ -165,6 +165,11 @@ func (u *User) BeforeSave() error {
 	return nil
 }
 
+// AfterSave updates the tenant if needed
+func (u *User) AfterSave() {
+	u.updateTenant()
+}
+
 // OnLoad initializes and validates the user when loaded from
 // the data store.
 //
@@ -211,11 +216,40 @@ func (u *User) AfterDelete() {
 	}
 }
 
+func (u *User) updateTenant() error {
+	for _, obj := range u.rt.stores("tenants").Items() {
+		t := AsTenant(obj)
+		for _, name := range t.Users {
+			if strings.HasPrefix(name, "auth-groups:") {
+				group := strings.TrimPrefix(name, "auth-groups:")
+				if gs, ok := u.Meta["auth-groups"]; ok {
+					parts := strings.Split(gs, ",")
+					for _, g := range parts {
+						if group == g {
+							u.activeTenant = t.Name
+							return nil
+						}
+					}
+				}
+			} else if name == u.Name {
+				u.activeTenant = t.Name
+				return nil
+			}
+		}
+	}
+	return nil
+}
+
+// OnCreate will lookup the tenants and see if one matches
+func (u *User) OnCreate() error {
+	return u.updateTenant()
+}
+
 var userLockMap = map[string][]string{
-	"get":     {"users", "roles"},
-	"create":  {"users", "roles"},
-	"update":  {"users", "roles"},
-	"patch":   {"users", "roles"},
+	"get":     {"users", "roles", "tenants"},
+	"create":  {"users", "roles", "tenants"},
+	"update":  {"users", "roles", "tenants"},
+	"patch":   {"users", "roles", "tenants"},
 	"delete":  {"users", "tenants"},
 	"actions": {"users", "roles", "profiles", "params"},
 }

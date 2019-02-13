@@ -174,6 +174,14 @@ func (r *RawModel) Validate() {
 		}
 	}
 
+	if params, ok := (*r.RawModel)["Params"].(map[string]interface{}); ok {
+		if pk, err := r.rt.PrivateKeyFor(r); err == nil {
+			ValidateParams(r.rt, r, params, pk)
+		} else {
+			r.Errorf("Unable to get key: %v", err)
+		}
+	}
+
 	r.SetValid()
 	r.SetAvailable()
 }

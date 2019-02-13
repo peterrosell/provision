@@ -8,7 +8,7 @@ import (
 
 func TestUserCrud(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "users")
+	rt := dt.Request(dt.Logger, "users", "tenants")
 	tests := []crudTest{
 		{"Create empty user", rt.Create, &models.User{}, false},
 		{"Create with bad user /", rt.Create, &models.User{Name: "greg/asdg"}, false},
@@ -36,7 +36,7 @@ func TestUserCrud(t *testing.T) {
 
 func TestUserPassword(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "users")
+	rt := dt.Request(dt.Logger, "users", "tenants")
 	u := &User{}
 	Fill(u)
 	u.Name = "test user"
@@ -97,4 +97,3 @@ func TestUserPassword(t *testing.T) {
 		}
 	})
 }
-
