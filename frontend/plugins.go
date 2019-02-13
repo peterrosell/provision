@@ -109,6 +109,8 @@ type PluginListPathParameter struct {
 	Name string
 	// in: query
 	Provider string
+	// in: query
+	Decode bool `json:"decode"`
 }
 
 // PluginActionsPathParameter used to find a Plugin / Actions in the path

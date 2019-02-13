@@ -776,6 +776,14 @@ func (f *Frontend) assureAuthUpdate(c *gin.Context,
 	return f.assureAuth(c, wantsClaims, scope, action, specific)
 }
 
+func (f *Frontend) wantDecodeSecure(c *gin.Context) bool {
+	return c.Query("decode") == "true"
+}
+
+func (f *Frontend) assureDecodeAuth(c *gin.Context, prefix, key string) bool {
+	return f.assureSimpleAuth(c, prefix, "getSecure", key)
+}
+
 func assureDecode(c *gin.Context, val interface{}) bool {
 	if !assureContentType(c, "application/json") {
 		return false
@@ -855,7 +863,8 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 	}
 
 	for k, vs := range params {
-		if k == "offset" || k == "limit" || k == "sort" || k == "reverse" || k == "slim" {
+		switch k {
+		case "offset", "limit", "sort", "reverse", "slim", "decode":
 			continue
 		}
 		// Did we find an existing index?
@@ -1002,7 +1011,7 @@ func (f *Frontend) emptyList(c *gin.Context, statsOnly bool) {
 	}
 }
 
-func processItem(obj models.Model, slim string) models.Model {
+func (f *Frontend) processItem(c *gin.Context, rt *backend.RequestTracker, obj models.Model, slim string) models.Model {
 	for _, elide := range strings.Split(strings.ToLower(slim), ",") {
 		switch strings.TrimSpace(elide) {
 		case "meta":
@@ -1020,6 +1029,11 @@ func processItem(obj models.Model, slim string) models.Model {
 	if f, ok := obj.(models.Filler); ok {
 		f.Fill()
 	}
+	if d, ok := obj.(models.Paramer); ok && f.wantDecodeSecure(c) {
+		params := rt.GetParams(d, false, true)
+		d.SetParams(params)
+		obj = d
+	}
 	if s, ok := obj.(Sanitizable); ok {
 		obj = s.Sanitize()
 	}
@@ -1032,6 +1046,9 @@ func (f *Frontend) list(c *gin.Context, ref store.KeySaver, statsOnly bool) {
 	var totalCount, count int
 	if !f.getAuth(c).matchClaim(models.MakeRole("", ref.Prefix(), "list", "").Compile()) {
 		f.emptyList(c, statsOnly)
+		return
+	}
+	if f.wantDecodeSecure(c) && !f.assureDecodeAuth(c, ref.Prefix(), "") {
 		return
 	}
 	res := &models.Error{
@@ -1069,7 +1086,7 @@ func (f *Frontend) list(c *gin.Context, ref store.KeySaver, statsOnly bool) {
 
 		items := idx.Items()
 		for _, item := range items {
-			arr = append(arr, processItem(models.Clone(item), slim))
+			arr = append(arr, f.processItem(c, rt, models.Clone(item), slim))
 		}
 	})
 
@@ -1117,7 +1134,12 @@ func (f *Frontend) Fetch(c *gin.Context, ref store.KeySaver, key string) {
 	if !f.assureSimpleAuth(c, prefix, "get", aref.AuthKey()) {
 		return
 	}
-	res = processItem(res, c.Query("slim"))
+	if f.wantDecodeSecure(c) && !f.assureDecodeAuth(c, prefix, key) {
+		return
+	}
+	rt.Do(func(_ backend.Stores) {
+		res = f.processItem(c, rt, res, c.Query("slim"))
+	})
 	c.JSON(http.StatusOK, res)
 }
 

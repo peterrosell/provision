@@ -202,6 +202,8 @@ type MachineListPathParameter struct {
 	Address string
 	// in: query
 	Runnable string
+	// in: query
+	Decode bool `json:"decode"`
 }
 
 func (f *Frontend) InitMachineApi() {

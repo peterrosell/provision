@@ -19,9 +19,6 @@ func (f *Frontend) makeParamEndpoints(obj models.Paramer, idKey string) (
 	aggregator := func(c *gin.Context) bool {
 		return c.Query("aggregate") == "true"
 	}
-	decoder := func(c *gin.Context) bool {
-		return c.Query("decode") == "true"
-	}
 	idrtkey := func(c *gin.Context, op string) (string, *backend.RequestTracker, string) {
 		id := c.Param(idKey)
 		return id,
@@ -32,7 +29,7 @@ func (f *Frontend) makeParamEndpoints(obj models.Paramer, idKey string) (
 		if !f.assureSimpleAuth(c, obj.Prefix(), "get", key) {
 			return false
 		}
-		if !decoder(c) {
+		if !f.wantDecodeSecure(c) {
 			return true
 		}
 		return f.assureSimpleAuth(c, obj.Prefix(), "getSecure", key)
@@ -92,7 +89,7 @@ func (f *Frontend) makeParamEndpoints(obj models.Paramer, idKey string) (
 				return
 			}
 			rt.Do(func(_ backend.Stores) {
-				params = rt.GetParams(ob.(models.Paramer), aggregator(c), decoder(c))
+				params = rt.GetParams(ob.(models.Paramer), aggregator(c), f.wantDecodeSecure(c))
 			})
 			c.JSON(http.StatusOK, params)
 		},
@@ -107,7 +104,7 @@ func (f *Frontend) makeParamEndpoints(obj models.Paramer, idKey string) (
 			}
 			var val interface{}
 			rt.Do(func(d backend.Stores) {
-				val, _ = rt.GetParam(ob.(models.Paramer), key, aggregator(c), decoder(c))
+				val, _ = rt.GetParam(ob.(models.Paramer), key, aggregator(c), f.wantDecodeSecure(c))
 			})
 			c.JSON(http.StatusOK, val)
 		},
