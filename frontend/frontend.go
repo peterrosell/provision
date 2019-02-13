@@ -255,12 +255,10 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 			},
 		}
 		if obj, runErr := f.pc.Actions.Run(rt, "system", ma); runErr == nil {
-			ead := &models.ExtAuthData{}
-			if jerr := models.Remarshal(obj, ead); jerr == nil {
-				u := ead.User
-				ts := ead.Tenants
+			u := &models.User{}
+			if jerr := models.Remarshal(obj, u); jerr == nil {
 				// Upgrade RT to a user create level
-				rt = f.rt(c, "users", "tenants", "roles")
+				rt = f.rt(c, "users", "roles", "tenants")
 				rt.Do(func(d backend.Stores) {
 					// Make sure someone didn't create it on me
 					if u2 := rt.Find("users", username); u2 != nil {
@@ -288,35 +286,6 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 							if !res.Validated || !res.Available {
 								f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
 								res = nil
-							}
-						}
-					}
-					// Update tenants
-					if res != nil {
-						for _, tname := range ts {
-							obj := rt.Find("tenants", tname)
-							if obj != nil {
-								t := obj.(*backend.Tenant)
-								found := false
-								for _, tu := range t.Users {
-									if tu == res.Name {
-										found = true
-										break
-									}
-								}
-								if !found {
-									t.Users = append(t.Users, res.Name)
-									_, err := rt.Update(t)
-									if err != nil {
-										f.Logger.Errorf("Failed to save tenant: %s for %s, %v", tname, res.Name, err)
-										res = nil
-										return
-									}
-								}
-							} else {
-								f.Logger.Errorf("Failed to find tenant: %s for %s", tname, res.Name)
-								res = nil
-								return
 							}
 						}
 					}

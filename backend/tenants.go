@@ -1,6 +1,9 @@
 package backend
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
@@ -12,7 +15,7 @@ type Tenant struct {
 	*models.Tenant
 	validate
 	cachedExpansion map[string]map[string]struct{}
-	userAdd, userRm []string
+	userAdd, userRm map[string]struct{}
 }
 
 // ExpandedMembers builds a cached map of members
@@ -123,6 +126,9 @@ func (t *Tenant) BeforeSave() error {
 	t.SetValid()
 	if t.userAdd != nil && len(t.userAdd) > 0 {
 		for _, name := range t.Users {
+			if strings.Contains(name, ":") {
+				continue
+			}
 			if t.rt.find("users", name) == nil {
 				t.Errorf("User %s does not exist", name)
 			}
@@ -155,17 +161,38 @@ func (t *Tenant) BeforeSave() error {
 // on users.
 func (t *Tenant) AfterSave() {
 	t.cachedExpansion = nil
-	if t.userRm != nil && len(t.userRm) > 0 {
-		for _, u := range t.userRm {
-			if u2 := t.rt.find("users", u); u2 != nil {
-				AsUser(u2).activeTenant = ""
+	if t.userRm != nil || t.userAdd != nil {
+		for _, u2 := range t.rt.d("users").Items() {
+			ru := AsUser(u2)
+			if t.userRm != nil && len(t.userRm) > 0 {
+				if _, ok := t.userRm[ru.Name]; ok {
+					ru.activeTenant = ""
+				}
+				// If we have auth groups, check for tenant membership
+				if gs, ok := ru.Meta["auth-groups"]; ok {
+					parts := strings.Split(gs, ",")
+					for _, g := range parts {
+						group := fmt.Sprintf("auth-groups:%s", g)
+						if _, ok := t.userRm[group]; ok {
+							ru.activeTenant = ""
+						}
+					}
+				}
 			}
-		}
-	}
-	if t.userAdd != nil && len(t.userAdd) > 0 {
-		for _, u := range t.userAdd {
-			if u2 := t.rt.find("users", u); u2 != nil {
-				AsUser(u2).activeTenant = t.Name
+			if t.userAdd != nil && len(t.userAdd) > 0 {
+				if _, ok := t.userAdd[ru.Name]; ok {
+					ru.activeTenant = t.Name
+				}
+				// If we have auth groups, check for tenant membership
+				if gs, ok := ru.Meta["auth-groups"]; ok {
+					parts := strings.Split(gs, ",")
+					for _, g := range parts {
+						group := fmt.Sprintf("auth-groups:%s", g)
+						if _, ok := t.userAdd[group]; ok {
+							ru.activeTenant = t.Name
+						}
+					}
+				}
 			}
 		}
 	}
@@ -176,7 +203,10 @@ func (t *Tenant) AfterSave() {
 func (t *Tenant) OnLoad() error {
 	defer func() { t.rt = nil }()
 	t.Fill()
-	t.userAdd = t.Users
+	t.userAdd = map[string]struct{}{}
+	for _, u := range t.Users {
+		t.userAdd[u] = struct{}{}
+	}
 	if err := t.BeforeSave(); err != nil {
 		return err
 	}
@@ -187,14 +217,17 @@ func (t *Tenant) OnLoad() error {
 // OnCreate sets the internal add fields when a new object is created
 // by the user.
 func (t *Tenant) OnCreate() error {
-	t.userAdd = t.Users
+	t.userAdd = map[string]struct{}{}
+	for _, u := range t.Users {
+		t.userAdd[u] = struct{}{}
+	}
 	return nil
 }
 
 // OnChange figures out which users need to be updates based
 // upon being added or removed from this Tenant.
 func (t *Tenant) OnChange(t2 store.KeySaver) error {
-	t.userAdd, t.userRm = []string{}, []string{}
+	t.userAdd, t.userRm = map[string]struct{}{}, map[string]struct{}{}
 	oldT := AsTenant(t2)
 	newU, oldU := map[string]struct{}{}, map[string]struct{}{}
 	for _, u := range oldT.Users {
@@ -202,13 +235,13 @@ func (t *Tenant) OnChange(t2 store.KeySaver) error {
 	}
 	for _, u := range t.Users {
 		if _, ok := oldU[u]; !ok {
-			t.userAdd = append(t.userAdd, u)
+			t.userAdd[u] = struct{}{}
 		}
 		newU[u] = struct{}{}
 	}
 	for u := range oldU {
 		if _, ok := newU[u]; !ok {
-			t.userRm = append(t.userRm, u)
+			t.userRm[u] = struct{}{}
 		}
 	}
 	return nil
