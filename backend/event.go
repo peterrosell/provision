@@ -70,13 +70,18 @@ func (p *Publishers) List() []Publisher {
 }
 
 func (p *Publishers) Publish(t, a, k, pr string, o interface{}) error {
+	return p.PublishExt(t, a, k, pr, o, nil)
+}
+
+func (p *Publishers) PublishExt(t, a, k, pr string, o, target interface{}) error {
 	e := &models.Event{
 		Time:      time.Now(),
 		Type:      t,
 		Action:    a,
 		Key:       k,
 		Principal: pr,
-		Object:    o}
+		Object:    o,
+		Original:  target}
 	return p.publishEvent(e)
 }
 
