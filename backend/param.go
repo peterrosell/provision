@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"errors"
+
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
@@ -76,6 +78,34 @@ func (p *Param) Indexes() map[string]index.Maker {
 			param := fix(p.New())
 			param.Name = s
 			return param, nil
+		})
+	res["Secure"] = index.Make(
+		false,
+		"boolean",
+		func(i, j models.Model) bool {
+			return (!fix(i).Secure) && fix(j).Secure
+		},
+		func(ref models.Model) (gte, gt index.Test) {
+			avail := fix(ref).Secure
+			return func(s models.Model) bool {
+					v := fix(s).Secure
+					return v || (v == avail)
+				},
+				func(s models.Model) bool {
+					return fix(s).Secure && !avail
+				}
+		},
+		func(s string) (models.Model, error) {
+			res := fix(p.New())
+			switch s {
+			case "true":
+				res.Secure = true
+			case "false":
+				res.Secure = false
+			default:
+				return nil, errors.New("Secure must be true or false")
+			}
+			return res, nil
 		})
 	return res
 }
