@@ -105,6 +105,8 @@ type ProfileListPathParameter struct {
 	ReadOnly string
 	// in: query
 	Name string
+	// in: query
+	Decode bool `json:"decode"`
 }
 
 // ProfileActionsPathParameter used to find a Profile / Actions in the path
