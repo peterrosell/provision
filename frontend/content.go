@@ -44,7 +44,64 @@ type ContentParameter struct {
 	Name string `json:"name"`
 }
 
-func (f *Frontend) buildNewStore(content *models.Content) (newStore store.Store, err error) {
+func (f *Frontend) buildNewStore(rt *backend.RequestTracker, content *models.Content) (newStore store.Store, err error) {
+	// First, preprocess to secure all the params that should be secure.
+	paramCache := map[string]*models.Param{}
+	if len(content.Sections["params"]) > 0 {
+		for k := range content.Sections["params"] {
+			p := &models.Param{}
+			if err := models.Remarshal(content.Sections["params"][k], p); err != nil {
+				continue
+			}
+			paramCache[k] = p
+		}
+	}
+	for section := range content.Sections {
+		if len(content.Sections[section]) == 0 {
+			continue
+		}
+		for key := range content.Sections[section] {
+			obj, _ := models.New(section)
+			if err = models.Remarshal(content.Sections[section][key], obj); err != nil {
+				continue
+			}
+			paramer, ok := obj.(models.Paramer)
+			if !ok {
+				continue
+			}
+			params := paramer.GetParams()
+			var p *models.Param
+			for paramName := range params {
+				p = paramCache[paramName]
+				if p == nil {
+					fp := rt.Find("params", paramName)
+					if fp == nil {
+						continue
+					}
+					p = fp.(*models.Param)
+					paramCache[paramName] = p
+				}
+				if !p.Secure {
+					continue
+				}
+				var pk []byte
+				pk, err = rt.PublicKeyFor(paramer)
+				if err != nil {
+					return
+				}
+				sd := &models.SecureData{}
+				if err = sd.Marshal(pk, params[paramName]); err != nil {
+					return
+				}
+				params[paramName] = sd
+			}
+			paramer.SetParams(params)
+			q := map[string]interface{}{}
+			models.Remarshal(paramer, &q)
+			content.Sections[section][key] = q
+		}
+	}
+	// Next, save the preprocessed content
 	filename := fmt.Sprintf("/%s/%s-%s.yaml", f.SaasDir, content.Meta.Name, content.Meta.Version)
 	count := 1
 	for true {
@@ -225,7 +282,7 @@ func (f *Frontend) InitContentApi() {
 					res.Errorf("Content %s already exists", name)
 					return
 				}
-				newStore, err := f.buildNewStore(content)
+				newStore, err := f.buildNewStore(rt, content)
 				if err != nil {
 					res.AddError(err)
 					return
@@ -299,7 +356,7 @@ func (f *Frontend) InitContentApi() {
 					return
 				}
 
-				newStore, err := f.buildNewStore(content)
+				newStore, err := f.buildNewStore(rt, content)
 				if err != nil {
 					res.Code = http.StatusInternalServerError
 					res.Errorf("Failed to build content")
