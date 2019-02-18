@@ -56,50 +56,47 @@ func (f *Frontend) buildNewStore(rt *backend.RequestTracker, content *models.Con
 			paramCache[k] = p
 		}
 	}
-	for section := range content.Sections {
-		if len(content.Sections[section]) == 0 {
-			continue
+	err = content.Mangle(func(prefix string, obj interface{}) (interface{}, error) {
+		o2, _ := models.New(prefix)
+		if err := models.Remarshal(obj, o2); err != nil {
+			return nil, nil
 		}
-		for key := range content.Sections[section] {
-			obj, _ := models.New(section)
-			if err = models.Remarshal(content.Sections[section][key], obj); err != nil {
-				continue
-			}
-			paramer, ok := obj.(models.Paramer)
-			if !ok {
-				continue
-			}
-			params := paramer.GetParams()
-			var p *models.Param
-			for paramName := range params {
-				p = paramCache[paramName]
-				if p == nil {
-					fp := rt.Find("params", paramName)
-					if fp == nil {
-						continue
-					}
-					p = fp.(*models.Param)
-					paramCache[paramName] = p
-				}
-				if !p.Secure {
+		paramer, ok := o2.(models.Paramer)
+		if !ok {
+			return nil, nil
+		}
+		params := paramer.GetParams()
+		var p *models.Param
+		for paramName := range params {
+			p = paramCache[paramName]
+			if p == nil {
+				fp := rt.Find("params", paramName)
+				if fp == nil {
 					continue
 				}
-				var pk []byte
-				pk, err = rt.PublicKeyFor(paramer)
-				if err != nil {
-					return
-				}
-				sd := &models.SecureData{}
-				if err = sd.Marshal(pk, params[paramName]); err != nil {
-					return
-				}
-				params[paramName] = sd
+				p = fp.(*models.Param)
+				paramCache[paramName] = p
 			}
-			paramer.SetParams(params)
-			q := map[string]interface{}{}
-			models.Remarshal(paramer, &q)
-			content.Sections[section][key] = q
+			if !p.Secure {
+				continue
+			}
+			var pk []byte
+			pk, err = rt.PublicKeyFor(paramer)
+			if err != nil {
+				return nil, err
+			}
+			sd := &models.SecureData{}
+			if err = sd.Marshal(pk, params[paramName]); err != nil {
+				return nil, err
+			}
+			params[paramName] = sd
 		}
+		paramer.SetParams(params)
+		q := map[string]interface{}{}
+		return q, models.Remarshal(paramer, &q)
+	})
+	if err != nil {
+		return
 	}
 	// Next, save the preprocessed content
 	filename := fmt.Sprintf("/%s/%s-%s.yaml", f.SaasDir, content.Meta.Name, content.Meta.Version)
@@ -135,19 +132,17 @@ func (f *Frontend) buildContent(rt *backend.RequestTracker, st store.Store) (*mo
 	if err != nil {
 		return nil, models.NewError("ServerError", http.StatusInternalServerError, err.Error())
 	}
-	for section := range content.Sections {
-		if len(content.Sections[section]) == 0 {
-			continue
+	err = content.Mangle(func(_ string, obj interface{}) (interface{}, error) {
+		paramer, ok := obj.(models.Paramer)
+		if !ok {
+			return nil, nil
 		}
-		for key := range content.Sections[section] {
-			obj, ok := content.Sections[section][key].(models.Paramer)
-			if !ok {
-				continue
-			}
-			params := rt.GetParams(obj, false, true)
-			obj.SetParams(params)
-			content.Sections[section][key] = obj
-		}
+		params := rt.GetParams(paramer, false, true)
+		paramer.SetParams(params)
+		return paramer, nil
+	})
+	if err != nil {
+		return nil, models.NewError("ServerError", http.StatusInternalServerError, err.Error())
 	}
 	return content, nil
 }
