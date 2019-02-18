@@ -44,7 +44,61 @@ type ContentParameter struct {
 	Name string `json:"name"`
 }
 
-func (f *Frontend) buildNewStore(content *models.Content) (newStore store.Store, err error) {
+func (f *Frontend) buildNewStore(rt *backend.RequestTracker, content *models.Content) (newStore store.Store, err error) {
+	// First, preprocess to secure all the params that should be secure.
+	paramCache := map[string]*models.Param{}
+	if len(content.Sections["params"]) > 0 {
+		for k := range content.Sections["params"] {
+			p := &models.Param{}
+			if err := models.Remarshal(content.Sections["params"][k], p); err != nil {
+				continue
+			}
+			paramCache[k] = p
+		}
+	}
+	err = content.Mangle(func(prefix string, obj interface{}) (interface{}, error) {
+		o2, _ := models.New(prefix)
+		if err := models.Remarshal(obj, o2); err != nil {
+			return nil, nil
+		}
+		paramer, ok := o2.(models.Paramer)
+		if !ok {
+			return nil, nil
+		}
+		params := paramer.GetParams()
+		var p *models.Param
+		for paramName := range params {
+			p = paramCache[paramName]
+			if p == nil {
+				fp := rt.Find("params", paramName)
+				if fp == nil {
+					continue
+				}
+				p = fp.(*models.Param)
+				paramCache[paramName] = p
+			}
+			if !p.Secure {
+				continue
+			}
+			var pk []byte
+			pk, err = rt.PublicKeyFor(paramer)
+			if err != nil {
+				return nil, err
+			}
+			sd := &models.SecureData{}
+			if err = sd.Marshal(pk, params[paramName]); err != nil {
+				return nil, err
+			}
+			params[paramName] = sd
+		}
+		paramer.SetParams(params)
+		q := map[string]interface{}{}
+		return q, models.Remarshal(paramer, &q)
+	})
+	if err != nil {
+		return
+	}
+	// Next, save the preprocessed content
 	filename := fmt.Sprintf("/%s/%s-%s.yaml", f.SaasDir, content.Meta.Name, content.Meta.Version)
 	count := 1
 	for true {
@@ -72,9 +126,21 @@ func buildSummary(st store.Store) *models.ContentSummary {
 	return cs
 }
 
-func (f *Frontend) buildContent(st store.Store) (*models.Content, *models.Error) {
+func (f *Frontend) buildContent(rt *backend.RequestTracker, st store.Store) (*models.Content, *models.Error) {
 	content := &models.Content{}
 	err := content.FromStore(st)
+	if err != nil {
+		return nil, models.NewError("ServerError", http.StatusInternalServerError, err.Error())
+	}
+	err = content.Mangle(func(_ string, obj interface{}) (interface{}, error) {
+		paramer, ok := obj.(models.Paramer)
+		if !ok {
+			return nil, nil
+		}
+		params := rt.GetParams(paramer, false, true)
+		paramer.SetParams(params)
+		return paramer, nil
+	})
 	if err != nil {
 		return nil, models.NewError("ServerError", http.StatusInternalServerError, err.Error())
 	}
@@ -161,7 +227,7 @@ func (f *Frontend) InitContentApi() {
 					res.Errorf("No such content store")
 					c.JSON(http.StatusNotFound, res)
 				} else {
-					content, err := f.buildContent(cst)
+					content, err := f.buildContent(rt, cst)
 					if err != nil {
 						c.JSON(err.Code, err)
 					} else {
@@ -211,7 +277,7 @@ func (f *Frontend) InitContentApi() {
 					res.Errorf("Content %s already exists", name)
 					return
 				}
-				newStore, err := f.buildNewStore(content)
+				newStore, err := f.buildNewStore(rt, content)
 				if err != nil {
 					res.AddError(err)
 					return
@@ -285,7 +351,7 @@ func (f *Frontend) InitContentApi() {
 					return
 				}
 
-				newStore, err := f.buildNewStore(content)
+				newStore, err := f.buildNewStore(rt, content)
 				if err != nil {
 					res.Code = http.StatusInternalServerError
 					res.Errorf("Failed to build content")
