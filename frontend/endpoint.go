@@ -45,7 +45,6 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id string) (string, bool) {
 		res := fe.getEndpoint(c, id)
 		if res == nil {
 			// Couldn't find the id
-			fmt.Printf("GREG: Could not find %s\n", id)
 			break
 		}
 
@@ -55,13 +54,11 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id string) (string, bool) {
 			if e == myid {
 				p := res.GetParams()
 				s, ok := p["manager/url"].(string)
-				fmt.Printf("GREG: found url for (%v) %s : %s\n", ok, id, s)
 				return s, ok
 			}
 		}
 
 		// Recurse to owner
-		fmt.Printf("GREG: %s is really handled by %s\n", id, e)
 		id = e
 	}
 	return "", false
