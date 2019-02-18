@@ -38,8 +38,27 @@ func (fe *Frontend) getEndpoint(c *gin.Context, id string) *backend.RawModel {
 }
 
 func (fe *Frontend) getEndpointUrl(c *gin.Context, id string) (string, bool) {
-	if res := fe.getEndpoint(c, id); res != nil {
-		return res.GetStringField("URL")
+
+	done := false
+	for !done {
+		res := fe.getEndpoint(c, id)
+		if res == nil {
+			// Couldn't find the id
+			break
+		}
+
+		e := res.GetEndpoint()
+		// is this owned by me?
+		for _, myid := range fe.DrpIds {
+			if e == myid {
+				p := res.GetParams()
+				s, ok := p["manager/url"].(string)
+				return s, ok
+			}
+		}
+
+		// Recurse to owner
+		id = e
 	}
 	return "", false
 }
