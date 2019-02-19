@@ -479,7 +479,7 @@ case $MODE in
                  TFTP_DIR="`pwd`/drp-data/tftpboot"
 
                  # Make local links for execs
-                 rm -f drpcli dr-provision drbundler
+                 rm -f drpcli dr-provision drbundler drpjoin
                  ln -s $binpath/drpcli drpcli
                  ln -s $binpath/dr-provision dr-provision
                  if [[ -e $binpath/drbundler ]] ; then
