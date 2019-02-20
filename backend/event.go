@@ -97,7 +97,7 @@ func (p *Publishers) publishEvent(e *models.Event) error {
 
 	for _, pub := range newPubs {
 		if err := pub.Publish(e); err != nil {
-			p.logger.Printf("Failed to Publish event on %#v: %#v\n", pub, err)
+			p.logger.Printf("Failed to Publish event on %#v: %v %#v\n", pub, err, e)
 		}
 		pub.Release()
 	}
