@@ -109,6 +109,34 @@ func (pc *PluginController) StartPlugins() {
 	return
 }
 
+func (pc *PluginController) RestartPlugins() {
+	pc.lock.Lock()
+	defer pc.lock.Unlock()
+
+	// Get all the plugins that have this as provider
+	ref := &backend.Plugin{}
+	rt := pc.Request(ref.Locks("get")...)
+	rt.Do(func(d backend.Stores) {
+		var idx *index.Index
+		idx, err := index.All([]index.Filter{index.Native()}...)(&d(ref.Prefix()).Index)
+		if err != nil {
+			return
+		}
+		arr := idx.Items()
+		for _, res := range arr {
+			plugin := res.(*backend.Plugin)
+			// If we don't know about this plugin yet, create it on the running list
+			if _, ok := pc.runningPlugins[plugin.Name]; !ok {
+				rt.PublishEvent(models.EventFor(plugin, "create"))
+			} else {
+				rt.PublishEvent(models.EventFor(plugin, "stop"))
+			}
+			rt.PublishEvent(models.EventFor(plugin, "start"))
+		}
+	})
+	return
+}
+
 func (pc *PluginController) allPlugins(provider, action string) (err error) {
 	pc.lock.Lock()
 	defer pc.lock.Unlock()

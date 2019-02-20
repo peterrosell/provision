@@ -65,8 +65,12 @@ func (f *Frontend) InitPrefApi() {
 				Model: "prefs",
 				Code:  http.StatusBadRequest,
 			}
+			restartPlugins := false
 			// Filter unknown preferences here
 			for k := range prefs {
+				if k == "baseTokenSecret" || k == "systemGrantorSecret" {
+					restartPlugins = true
+				}
 				switch k {
 				case "baseTokenSecret":
 					if !f.assureSimpleAuth(c, "prefs", "post", k) {
@@ -101,6 +105,9 @@ func (f *Frontend) InitPrefApi() {
 			if err.ContainsError() {
 				c.JSON(err.Code, err)
 			} else {
+				if restartPlugins {
+					f.pc.RestartPlugins()
+				}
 				c.JSON(http.StatusCreated, f.dt.Prefs())
 			}
 		})
