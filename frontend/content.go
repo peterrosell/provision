@@ -74,7 +74,7 @@ func (f *Frontend) buildNewStore(rt *backend.RequestTracker, content *models.Con
 				if fp == nil {
 					continue
 				}
-				p = fp.(*models.Param)
+				p = fp.(*backend.Param).Param
 				paramCache[paramName] = p
 			}
 			if !p.Secure {
