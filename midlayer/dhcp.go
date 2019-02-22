@@ -338,8 +338,6 @@ func (dhr *DhcpRequest) buildReply(
 	if !dhr.offerNetBoot {
 		delete(dhr.outOpts, dhcp.OptionTFTPServerName)
 		delete(dhr.outOpts, dhcp.OptionBootFileName)
-		delete(dhr.outOpts, dhcp.OptionVendorSpecificInformation)
-		delete(dhr.outOpts, dhcp.OptionVendorClassIdentifier)
 		delete(dhr.outOpts, dhcp.OptionRootPath)
 	}
 	// The DHCP spec implies that we should use the bootp sname and file
