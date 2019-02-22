@@ -15,7 +15,7 @@ Options:
     --upgrade=[true|false]  # Turns on 'force' option to overwrite local binaries/content
     --isolated              # Sets up current directory as install location for drpcli
                             # and dr-provision
-    --nocontent             # Don't add content to the system
+    --no-content            # Don't add content to the system
     --zip-file=filename.zip # Don't download the dr-provision.zip file, instead use
                             # the referenced zip file (useful for airgap deployments)
     --ipaddr=<ip>           # The IP to use for the system identified IP.  The system
@@ -28,6 +28,7 @@ Options:
     --skip-run-check        # Skip the process check for 'dr-provision' on new install
                             # only valid in '--isolated' install mode
     --skip-depends          # Skip OS dependency checks, for testing 'isolated' mode
+    --no-sudo               # Do not use "sudo" prefix on commands (assume you're root)
     --fast-downloader       # (experimental) Use Fast Downloader (uses 'aria2')
 
     install                 # Sets up an isolated or system 'production' enabled install.
@@ -57,6 +58,7 @@ REMOVE_DATA=false
 SKIP_RUN_CHECK=false
 SKIP_DEPENDS=false
 FAST_DOWNLOADER=false
+_sudo="sudo"
 
 # download URL locations; overridable via ENV variables
 URL_BASE=${URL_BASE:-"https://github.com/digitalrebar/"}
@@ -88,7 +90,7 @@ while (( $# > 0 )); do
         --skip-run-check)
             SKIP_RUN_CHECK=true
             ;;
-        --skip-depends)
+        --skip-dep*)
             SKIP_DEPENDS=true
             ;;
         --fast-downloader)
@@ -107,8 +109,11 @@ while (( $# > 0 )); do
             UPGRADE=true
             force=true
             ;;
-        --nocontent)
+        --nocontent|--no-content)
             NO_CONTENT=true
+            ;;
+        --no-sudo)
+            _sudo=""
             ;;
         --*)
             arg_key="${arg_key#--}"
@@ -175,7 +180,7 @@ install_epel() {
             echo "EPEL repository installed already."
         else
             if [[ $OS_TYPE != fedora ]] ; then
-                sudo yum install -y epel-release
+                $_sudo yum install -y epel-release
             fi
         fi
     fi
@@ -249,18 +254,18 @@ ensure_packages() {
         if ! which bsdtar &>/dev/null; then
             echo "Installing bsdtar"
             if [[ $OS_FAMILY == rhel ]] ; then
-                sudo yum install -y bsdtar
+                $_sudo yum install -y bsdtar
             elif [[ $OS_FAMILY == debian ]] ; then
-                sudo apt-get install -y bsdtar
+                $_sudo apt-get install -y bsdtar
             fi
         fi
         if ! which 7z &>/dev/null; then
             echo "Installing 7z"
             if [[ $OS_FAMILY == rhel ]] ; then
                 install_epel
-                sudo yum install -y p7zip
+                $_sudo yum install -y p7zip
             elif [[ $OS_FAMILY == debian ]] ; then
-                sudo apt-get install -y p7zip-full
+                $_sudo apt-get install -y p7zip-full
             fi
         fi
         if [[ "$FAST_DOWNLOADER" == "true" ]]; then
@@ -268,9 +273,9 @@ ensure_packages() {
             echo "Installing aria2 for 'fast downloader'"
             if [[ $OS_FAMILY == rhel ]] ; then
                 install_epel
-                sudo yum install -y aria2
+                $_sudo yum install -y aria2
             elif [[ $OS_FAMILY == debian ]] ; then
-                sudo apt-get install -y aria2
+                $_sudo apt-get install -y aria2
             fi
           fi
         fi
@@ -299,8 +304,8 @@ FASTMSG
         echo "  \$CMD -o \$ISO \$URL"
     done
     echo "  # this should move the ISOs to the TFTP directory..."
-    echo "  sudo mv *.tar *.iso $TFTP_DIR/isos/"
-    echo "  sudo pkill -HUP dr-provision"
+    echo "  $_sudo mv *.tar *.iso $TFTP_DIR/isos/"
+    echo "  $_sudo pkill -HUP dr-provision"
     echo "  echo 'NOTICE:  exploding isos may take up to 5 minutes to complete ... '"
     echo "###### END scriptlet"
 
@@ -332,14 +337,14 @@ case $(uname -s) in
             # SystemD
             initfile="assets/startup/dr-provision.service"
             initdest="/etc/systemd/system/dr-provision.service"
-            starter="sudo systemctl daemon-reload && sudo systemctl start dr-provision"
-            enabler="sudo systemctl daemon-reload && sudo systemctl enable dr-provision"
+            starter="$_sudo systemctl daemon-reload && $_sudo systemctl start dr-provision"
+            enabler="$_sudo systemctl daemon-reload && $_sudo systemctl enable dr-provision"
         elif [[ -d /etc/init ]]; then
             # Upstart
             initfile="assets/startup/dr-provision.unit"
             initdest="/etc/init/dr-provision.conf"
-            starter="sudo service dr-provision start"
-            enabler="sudo service dr-provision enable"
+            starter="$_sudo service dr-provision start"
+            enabler="$_sudo service dr-provision enable"
         elif [[ -d /etc/init.d ]]; then
             # SysV
             initfile="assets/startup/dr-provision.sysv"
@@ -436,7 +441,7 @@ case $MODE in
 
              if [[ $ISOLATED == false ]]; then
                  TFTP_DIR="/var/lib/dr-provision/tftpboot"
-                 sudo cp "$binpath"/* "$bindest"
+                 $_sudo cp "$binpath"/* "$bindest"
                  if [[ $initfile ]]; then
                      if [[ -r $initdest ]]
                      then
@@ -447,7 +452,7 @@ case $MODE in
                          echo ""
                          echo "specifically verify: '--file-root=<tftpboot directory>'"
                      else
-                         sudo cp "$initfile" "$initdest"
+                         $_sudo cp "$initfile" "$initdest"
                      fi
                      echo
                      echo "######### You can start the DigitalRebar Provision service with:"
@@ -459,20 +464,20 @@ case $MODE in
                  # handle the v3.0.X to v3.1.0 directory structure.
                  if [[ ! -e /var/lib/dr-provision/digitalrebar && -e /var/lib/dr-provision ]] ; then
                      DIR=$(mktemp -d)
-                     sudo mv /var/lib/dr-provision $DIR
-                     sudo mkdir -p /var/lib/dr-provision
-                     sudo mv $DIR/* /var/lib/dr-provision/digitalrebar
+                     $_sudo mv /var/lib/dr-provision $DIR
+                     $_sudo mkdir -p /var/lib/dr-provision
+                     $_sudo mv $DIR/* /var/lib/dr-provision/digitalrebar
                  fi
 
                  if [[ ! -e /var/lib/dr-provision/digitalrebar/tftpboot && -e /var/lib/tftpboot ]] ; then
                      echo "MOVING /var/lib/tftpboot to /var/lib/dr-provision/tftpboot location ... "
-                     sudo mv /var/lib/tftpboot /var/lib/dr-provision/
+                     $_sudo mv /var/lib/tftpboot /var/lib/dr-provision/
                  fi
 
-                 sudo mkdir -p /usr/share/dr-provision
+                 $_sudo mkdir -p /usr/share/dr-provision
                  if [[ $NO_CONTENT == false ]] ; then
                      DEFAULT_CONTENT_FILE="/usr/share/dr-provision/default.yaml"
-                     sudo mv drp-community-content.yaml $DEFAULT_CONTENT_FILE
+                     $_sudo mv drp-community-content.yaml $DEFAULT_CONTENT_FILE
                  fi
              else
                  mkdir -p drp-data
@@ -525,13 +530,13 @@ case $MODE in
                      bcast=$(netstat -rn | grep "255.255.255.255 " | awk '{ print $6 }')
                      if [[ $bcast == "" && $IPADDR ]] ; then
                              echo "# No broadcast route set - this is required for Darwin < 10.9."
-                             echo "sudo route add 255.255.255.255 $IPADDR"
+                             echo "$_sudo route add 255.255.255.255 $IPADDR"
                              echo "# No broadcast route set - this is required for Darwin > 10.9."
-                             echo "sudo route -n add -net 255.255.255.255 $IPADDR"
+                             echo "$_sudo route -n add -net 255.255.255.255 $IPADDR"
                      fi
                  fi
 
-                 echo "sudo ./dr-provision --base-root=`pwd`/drp-data --local-content=\"\" --default-content=\"\" &"
+                 echo "$_sudo ./dr-provision --base-root=`pwd`/drp-data --local-content=\"\" --default-content=\"\" &"
                  mkdir -p "`pwd`/drp-data/saas-content"
                  if [[ $NO_CONTENT == false ]] ; then
                      DEFAULT_CONTENT_FILE="`pwd`/drp-data/saas-content/default.yaml"
@@ -567,10 +572,10 @@ case $MODE in
              echo "'dr-provision' service is not running, beginning removal process ... "
          fi
          echo "Removing program and service files"
-         sudo rm -f "$bindest/dr-provision" "$bindest/drpcli" "$initdest"
+         $_sudo rm -f "$bindest/dr-provision" "$bindest/drpcli" "$initdest"
          if [[ $REMOVE_DATA == true ]] ; then
              echo "Removing data files"
-             sudo rm -rf "/usr/share/dr-provision" "/etc/dr-provision" "/var/lib/dr-provision"
+             $_sudo rm -rf "/usr/share/dr-provision" "/etc/dr-provision" "/var/lib/dr-provision"
          fi;;
      *)
          echo "Unknown action \"$1\". Please use 'install', 'upgrade', or 'remove'";;
