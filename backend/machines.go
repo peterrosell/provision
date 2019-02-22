@@ -515,9 +515,6 @@ func (n *Machine) Validate() {
 }
 
 func (n *Machine) BeforeSave() error {
-	if n.Endpoint == "" {
-		n.Endpoint = n.rt.dt.DrpId
-	}
 	// Always make sure we have a secret
 	if n.Secret == "" {
 		n.Secret = models.RandString(16)

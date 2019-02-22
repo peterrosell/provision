@@ -235,9 +235,6 @@ func (l *Lease) Validate() {
 }
 
 func (l *Lease) BeforeSave() error {
-	if l.Endpoint == "" {
-		l.Endpoint = l.rt.dt.DrpId
-	}
 	l.Validate()
 	if !l.Useable() {
 		return l.MakeError(422, ValidationError, l)

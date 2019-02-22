@@ -138,9 +138,6 @@ func (t *Template) Validate() {
 // BeforeSave makes sure that the template is valid and returns
 // an error otherwise.
 func (t *Template) BeforeSave() error {
-	if t.Endpoint == "" {
-		t.Endpoint = t.rt.dt.DrpId
-	}
 	t.Validate()
 	if !t.Useable() {
 		return t.MakeError(422, ValidationError, t)
@@ -154,7 +151,6 @@ func (t *Template) OnLoad() error {
 	t.Fill()
 	t.Validated = true
 	t.Available = true
-	t.Endpoint = t.rt.dt.DrpId
 	return nil
 }
 
