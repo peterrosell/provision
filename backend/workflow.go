@@ -107,9 +107,6 @@ func (w *Workflow) Validate() {
 // when an object needs to initialized and
 // validated.
 func (w *Workflow) BeforeSave() error {
-	if w.Endpoint == "" {
-		w.Endpoint = w.rt.dt.DrpId
-	}
 	w.Fill()
 	w.Validate()
 	if !w.Validated {

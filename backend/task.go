@@ -137,9 +137,6 @@ func (t *Task) OnLoad() error {
 // BeforeSave makes sure the Task is valid and returns an error if not.
 // This is used to abort saving invalid objects.
 func (t *Task) BeforeSave() error {
-	if t.Endpoint == "" {
-		t.Endpoint = t.rt.dt.DrpId
-	}
 	t.Validate()
 	if !t.HasFeature("sane-exit-codes") {
 		t.AddFeature("original-exit-codes")
