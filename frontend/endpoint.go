@@ -47,7 +47,13 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id string) (string, bool) {
 			break
 		}
 
-		e := res.GetEndpoint()
+		e, _ := res.GetStringField("Manager")
+		if e == "" {
+			p := res.GetParams()
+			s, ok := p["manager/url"].(string)
+			return s, ok
+		}
+
 		// is this owned by me?
 		for _, myid := range fe.DrpIds {
 			if e == myid {
