@@ -104,7 +104,7 @@ type ProgOpts struct {
 	TlsKeyFile    string `long:"tls-key" description:"The TLS Key File" default:"server.key" env:"RS_TLS_KEY_FILE"`
 	TlsCertFile   string `long:"tls-cert" description:"The TLS Cert File" default:"server.crt" env:"RS_TLS_CERT_FILE"`
 	UseOldCiphers bool   `long:"use-old-ciphers" description:"Use Original Less Secure Cipher List" env:"RS_USE_OLD_CIPHERS"`
-	DrpId         string `long:"drp-id" description:"The id of this Digital Rebar Provision instance" default:"" env:"RS_DRP_IP"`
+	DrpId         string `long:"drp-id" description:"The id of this Digital Rebar Provision instance" default:"" env:"RS_DRP_ID"`
 	HaId          string `long:"ha-id" description:"The id of this Digital Rebar Provision HA Cluster" default:"" env:"RS_HA_ID"`
 	CurveOrBits   string `long:"cert-type" description:"Type of cert to generate. values are: P224, P256, P384, P521, RSA, or <number of RSA bits>" default:"P384" env:"RS_CURVE_OR_BITS"`
 
