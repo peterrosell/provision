@@ -37,8 +37,9 @@ func (fe *Frontend) getEndpoint(c *gin.Context, id string) *backend.RawModel {
 	return res
 }
 
-func (fe *Frontend) getEndpointUrl(c *gin.Context, id string) (string, bool) {
+func (fe *Frontend) getEndpointUrl(c *gin.Context, id, rest string) (string, string, bool) {
 
+	nrest := rest
 	done := false
 	for !done {
 		res := fe.getEndpoint(c, id)
@@ -51,7 +52,7 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id string) (string, bool) {
 		if e == "" {
 			p := res.GetParams()
 			s, ok := p["manager/url"].(string)
-			return s, ok
+			return s, nrest, ok
 		}
 
 		// is this owned by me?
@@ -59,18 +60,19 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id string) (string, bool) {
 			if e == myid {
 				p := res.GetParams()
 				s, ok := p["manager/url"].(string)
-				return s, ok
+				return s, nrest, ok
 			}
 		}
 
 		// Recurse to owner
 		id = e
+		nrest = ""
 	}
-	return "", false
+	return "", rest, false
 }
 
 func (fe *Frontend) forwardRequest(c *gin.Context, id, rest string, newBody interface{}) bool {
-	if ep, ok := fe.getEndpointUrl(c, id); ok {
+	if ep, nrest, ok := fe.getEndpointUrl(c, id, rest); ok {
 		// parse the url
 		turl, _ := url.Parse(ep)
 
@@ -84,8 +86,8 @@ func (fe *Frontend) forwardRequest(c *gin.Context, id, rest string, newBody inte
 		req := c.Request
 		req.URL.Host = turl.Host
 		req.URL.Scheme = turl.Scheme
-		if rest != "" {
-			req.URL.Path = rest
+		if nrest != "" {
+			req.URL.Path = nrest
 		}
 		req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
 		req.Host = turl.Host
