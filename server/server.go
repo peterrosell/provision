@@ -59,67 +59,67 @@ var EmbeddedAssetsExtractFunc func(string, string) error
 // ProgOpts defines the DRP server command line options.
 type ProgOpts struct {
 	VersionFlag         bool   `long:"version" description:"Print Version and exit"`
-	DisableTftpServer   bool   `long:"disable-tftp" description:"Disable TFTP server"`
-	DisableProvisioner  bool   `long:"disable-provisioner" description:"Disable provisioner"`
-	DisableDHCP         bool   `long:"disable-dhcp" description:"Disable DHCP server"`
-	DisableBINL         bool   `long:"disable-pxe" description:"Disable PXE/BINL server"`
-	MetricsPort         int    `long:"metrics-port" description:"Port the metrics HTTP server should listen on" default:"8080"`
-	StaticPort          int    `long:"static-port" description:"Port the static HTTP file server should listen on" default:"8091"`
-	TftpPort            int    `long:"tftp-port" description:"Port for the TFTP server to listen on" default:"69"`
-	ApiPort             int    `long:"api-port" description:"Port for the API server to listen on" default:"8092"`
-	DhcpPort            int    `long:"dhcp-port" description:"Port for the DHCP server to listen on" default:"67"`
-	BinlPort            int    `long:"binl-port" description:"Port for the PXE/BINL server to listen on" default:"4011"`
-	UnknownTokenTimeout int    `long:"unknown-token-timeout" description:"The default timeout in seconds for the machine create authorization token" default:"600"`
-	KnownTokenTimeout   int    `long:"known-token-timeout" description:"The default timeout in seconds for the machine update authorization token" default:"3600"`
-	OurAddress          string `long:"static-ip" description:"IP address to advertise for the static HTTP file server" default:""`
-	ForceStatic         bool   `long:"force-static" description:"Force the system to always use the static IP."`
+	DisableTftpServer   bool   `long:"disable-tftp" description:"Disable TFTP server" env:"RS_DISABLE_TFTP_SERVER"`
+	DisableProvisioner  bool   `long:"disable-provisioner" description:"Disable provisioner" env:"RS_DISABLE_PROVISIONER"`
+	DisableDHCP         bool   `long:"disable-dhcp" description:"Disable DHCP server" env:"RS_DISABLE_DHCP"`
+	DisableBINL         bool   `long:"disable-pxe" description:"Disable PXE/BINL server" env:"RS_DISABLE_BINL"`
+	MetricsPort         int    `long:"metrics-port" description:"Port the metrics HTTP server should listen on" default:"8080" env:"RS_METRICS_PORT"`
+	StaticPort          int    `long:"static-port" description:"Port the static HTTP file server should listen on" default:"8091" env:"RS_STATIC_PORT"`
+	TftpPort            int    `long:"tftp-port" description:"Port for the TFTP server to listen on" default:"69" env:"RS_TFTP_PORT"`
+	ApiPort             int    `long:"api-port" description:"Port for the API server to listen on" default:"8092" env:"RS_API_PORT"`
+	DhcpPort            int    `long:"dhcp-port" description:"Port for the DHCP server to listen on" default:"67" env:"RS_DHCP_PORT"`
+	BinlPort            int    `long:"binl-port" description:"Port for the PXE/BINL server to listen on" default:"4011" env:"RS_BINL_PORT"`
+	UnknownTokenTimeout int    `long:"unknown-token-timeout" description:"The default timeout in seconds for the machine create authorization token" default:"600" env:"RS_UNKNOWN_TOKEN_TIMEOUT"`
+	KnownTokenTimeout   int    `long:"known-token-timeout" description:"The default timeout in seconds for the machine update authorization token" default:"3600" env:"RS_KNOWN_TOKEN_TIMEOUT"`
+	OurAddress          string `long:"static-ip" description:"IP address to advertise for the static HTTP file server" default:"" env:"RS_STATIC_IP"`
+	ForceStatic         bool   `long:"force-static" description:"Force the system to always use the static IP." env:"RS_FORCE_STATIC"`
 
-	BackEndType    string `long:"backend" description:"Storage to use for persistent data. Can be either 'consul', 'directory', or a store URI" default:"directory"`
-	SecretsType    string `long:"secrets" description:"Storage to use for persistent data. Can be either 'consul', 'directory', or a store URI.  Will default to being the same as 'backend'" default:""`
-	LocalContent   string `long:"local-content" description:"Storage to use for local overrides." default:"directory:///etc/dr-provision?codec=yaml"`
-	DefaultContent string `long:"default-content" description:"Store URL for local content" default:"file:///usr/share/dr-provision/default.yaml?codec=yaml"`
+	BackEndType    string `long:"backend" description:"Storage to use for persistent data. Can be either 'consul', 'directory', or a store URI" default:"directory" env:"RS_BACKEND_TYPE"`
+	SecretsType    string `long:"secrets" description:"Storage to use for persistent data. Can be either 'consul', 'directory', or a store URI.  Will default to being the same as 'backend'" default:"" env:"RS_SECRETS_TYPE"`
+	LocalContent   string `long:"local-content" description:"Storage to use for local overrides." default:"directory:///etc/dr-provision?codec=yaml" env:"RS_LOCAL_CONTENT"`
+	DefaultContent string `long:"default-content" description:"Store URL for local content" default:"file:///usr/share/dr-provision/default.yaml?codec=yaml" env:"RS_DEFAULT_CONTENT"`
 
-	BaseRoot        string `long:"base-root" description:"Base directory for other root dirs." default:"/var/lib/dr-provision"`
-	DataRoot        string `long:"data-root" description:"Location we should store runtime information in" default:"digitalrebar"`
-	SecretsRoot     string `long:"secrets-root" description:"Location we should store encrypted parameter private keys in" default:"secrets"`
-	PluginRoot      string `long:"plugin-root" description:"Directory for plugins" default:"plugins"`
-	PluginCommRoot  string `long:"plugin-comm-root" description:"Directory for the communications for plugins" default:"/var/run"`
-	LogRoot         string `long:"log-root" description:"Directory for job logs" default:"job-logs"`
-	SaasContentRoot string `long:"saas-content-root" description:"Directory for additional content" default:"saas-content"`
-	FileRoot        string `long:"file-root" description:"Root of filesystem we should manage" default:"tftpboot"`
-	ReplaceRoot     string `long:"replace-root" description:"Root of filesystem we should use to replace embedded assets" default:"replace"`
+	BaseRoot        string `long:"base-root" description:"Base directory for other root dirs." default:"/var/lib/dr-provision" env:"RS_BASE_ROOT"`
+	DataRoot        string `long:"data-root" description:"Location we should store runtime information in" default:"digitalrebar" env:"RS_DATA_ROOT"`
+	SecretsRoot     string `long:"secrets-root" description:"Location we should store encrypted parameter private keys in" default:"secrets" env:"RS_SECRETS_ROOT"`
+	PluginRoot      string `long:"plugin-root" description:"Directory for plugins" default:"plugins" env:"RS_PLUGIN_ROOT"`
+	PluginCommRoot  string `long:"plugin-comm-root" description:"Directory for the communications for plugins" default:"/var/run" env:"RS_PLUGIN_COMM_ROOT"`
+	LogRoot         string `long:"log-root" description:"Directory for job logs" default:"job-logs" env:"RS_LOG_ROOT"`
+	SaasContentRoot string `long:"saas-content-root" description:"Directory for additional content" default:"saas-content" env:"RS_SAAS_CONTENT_ROOT"`
+	FileRoot        string `long:"file-root" description:"Root of filesystem we should manage" default:"tftpboot" env:"RS_FILE_ROOT"`
+	ReplaceRoot     string `long:"replace-root" description:"Root of filesystem we should use to replace embedded assets" default:"replace" env:"RS_REPLACE_ROOT"`
 
-	LocalUI        string `long:"local-ui" description:"Root of Local UI Pages" default:"ux"`
-	UIUrl          string `long:"ui-url" description:"URL to redirect to UI" default:"https://portal.rackn.io"`
-	DhcpInterfaces string `long:"dhcp-ifs" description:"Comma-separated list of interfaces to listen for DHCP packets" default:""`
-	DefaultStage   string `long:"default-stage" description:"The default stage for the nodes" default:"none"`
-	DefaultBootEnv string `long:"default-boot-env" description:"The default bootenv for the nodes" default:"local"`
-	UnknownBootEnv string `long:"unknown-boot-env" description:"The unknown bootenv for the system.  Should be \"ignore\" or \"discovery\"" default:"ignore"`
+	LocalUI        string `long:"local-ui" description:"Root of Local UI Pages" default:"ux" env:"RS_LOCAL_UI"`
+	UIUrl          string `long:"ui-url" description:"URL to redirect to UI" default:"https://portal.rackn.io" env:"RS_UI_URL"`
+	DhcpInterfaces string `long:"dhcp-ifs" description:"Comma-separated list of interfaces to listen for DHCP packets" default:"" env:"RS_DHCP_INTERFACES"`
+	DefaultStage   string `long:"default-stage" description:"The default stage for the nodes" default:"none" env:"RS_DEFAULT_STAGE"`
+	DefaultBootEnv string `long:"default-boot-env" description:"The default bootenv for the nodes" default:"local" env:"RS_DEFAULT_BOOTENV"`
+	UnknownBootEnv string `long:"unknown-boot-env" description:"The unknown bootenv for the system.  Should be \"ignore\" or \"discovery\"" default:"ignore" env:"RS_UNKNOWN_BOOTENV"`
 
-	DebugBootEnv  string `long:"debug-bootenv" description:"Debug level for the BootEnv System" default:"warn"`
-	DebugDhcp     string `long:"debug-dhcp" description:"Debug level for the DHCP Server" default:"warn"`
-	DebugRenderer string `long:"debug-renderer" description:"Debug level for the Template Renderer" default:"warn"`
-	DebugFrontend string `long:"debug-frontend" description:"Debug level for the Frontend" default:"warn"`
-	DebugPlugins  string `long:"debug-plugins" description:"Debug level for the Plug-in layer" default:"warn"`
-	TlsKeyFile    string `long:"tls-key" description:"The TLS Key File" default:"server.key"`
-	TlsCertFile   string `long:"tls-cert" description:"The TLS Cert File" default:"server.crt"`
-	UseOldCiphers bool   `long:"use-old-ciphers" description:"Use Original Less Secure Cipher List"`
-	DrpId         string `long:"drp-id" description:"The id of this Digital Rebar Provision instance" default:""`
-	HaId          string `long:"ha-id" description:"The id of this Digital Rebar Provision HA Cluster" default:""`
-	CurveOrBits   string `long:"cert-type" description:"Type of cert to generate. values are: P224, P256, P384, P521, RSA, or <number of RSA bits>" default:"P384"`
+	DebugBootEnv  string `long:"debug-bootenv" description:"Debug level for the BootEnv System" default:"warn" env:"RS_DEBUG_BOOTENV"`
+	DebugDhcp     string `long:"debug-dhcp" description:"Debug level for the DHCP Server" default:"warn" env:"RS_DEBUG_DHCP"`
+	DebugRenderer string `long:"debug-renderer" description:"Debug level for the Template Renderer" default:"warn" env:"RS_DEBUG_RENDERER"`
+	DebugFrontend string `long:"debug-frontend" description:"Debug level for the Frontend" default:"warn" env:"RS_DEBUG_FRONTEND"`
+	DebugPlugins  string `long:"debug-plugins" description:"Debug level for the Plug-in layer" default:"warn" env:"RS_DEBUG_PLUGINS"`
+	TlsKeyFile    string `long:"tls-key" description:"The TLS Key File" default:"server.key" env:"RS_TLS_KEY_FILE"`
+	TlsCertFile   string `long:"tls-cert" description:"The TLS Cert File" default:"server.crt" env:"RS_TLS_CERT_FILE"`
+	UseOldCiphers bool   `long:"use-old-ciphers" description:"Use Original Less Secure Cipher List" env:"RS_USE_OLD_CIPHERS"`
+	DrpId         string `long:"drp-id" description:"The id of this Digital Rebar Provision instance" default:"" env:"RS_DRP_IP"`
+	HaId          string `long:"ha-id" description:"The id of this Digital Rebar Provision HA Cluster" default:"" env:"RS_HA_ID"`
+	CurveOrBits   string `long:"cert-type" description:"Type of cert to generate. values are: P224, P256, P384, P521, RSA, or <number of RSA bits>" default:"P384" env:"RS_CURVE_OR_BITS"`
 
-	BaseTokenSecret     string `long:"base-token-secret" description:"Auth Token secret to allow revocation of all tokens" default:""`
-	SystemGrantorSecret string `long:"system-grantor-secret" description:"Auth Token secret to allow revocation of all Machine tokens" default:""`
-	FakePinger          bool   `hidden:"true" long:"fake-pinger"`
-	DefaultLogLevel     string `long:"log-level" description:"Level to log messages at" default:"warn"`
+	BaseTokenSecret     string `long:"base-token-secret" description:"Auth Token secret to allow revocation of all tokens" default:"" env:"RS_BASE_TOKEN_SECRET"`
+	SystemGrantorSecret string `long:"system-grantor-secret" description:"Auth Token secret to allow revocation of all Machine tokens" default:"" env:"RS_SYSTEM_GRANTOR_SECRET"`
+	FakePinger          bool   `hidden:"true" long:"fake-pinger" env:"RS_FAKE_PINGER"`
+	DefaultLogLevel     string `long:"log-level" description:"Level to log messages at" default:"warn" env:"RS_DEFAULT_LOG_LEVEL"`
 
-	HaEnabled   bool   `long:"ha-enabled" description:"Enable HA"`
-	HaAddress   string `long:"ha-address" description:"IP address to advertise as our HA address" default:""`
-	HaInterface string `long:"ha-interface" description:"Interface to put the VIP on for HA" default:""`
+	HaEnabled   bool   `long:"ha-enabled" description:"Enable HA" env:"RS_HA_ENABLED"`
+	HaAddress   string `long:"ha-address" description:"IP address to advertise as our HA address" default:"" env:"RS_HA_ADDRESS"`
+	HaInterface string `long:"ha-interface" description:"Interface to put the VIP on for HA" default:"" env:"RS_HA_INTERFACE"`
 
-	PromGwUrl      string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:""`
-	PromInterval   int    `long:"prometheus-interval" description:"Duration in seconds to push metrics" default:"5"`
-	CleanupCorrupt bool   `long:"cleanup" description:"Clean up corrupted writable data.  Only use when directed."`
+	PromGwUrl      string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:"" env:"RS_PROM_GW_URL"`
+	PromInterval   int    `long:"prometheus-interval" description:"Duration in seconds to push metrics" default:"5" env:"RS_PROM_INTERVAL"`
+	CleanupCorrupt bool   `long:"cleanup" description:"Clean up corrupted writable data.  Only use when directed." env:"RS_CLEANUP_CORRUPT"`
 }
 
 func mkdir(d string) error {
