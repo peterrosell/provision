@@ -71,15 +71,21 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id, rest string) (string, str
 	return "", rest, false
 }
 
+var proxyMap map[string]*httputil.ReverseProxy = map[string]*httputil.ReverseProxy{}
+
 func (fe *Frontend) forwardRequest(c *gin.Context, id, rest string, newBody interface{}) bool {
 	if ep, nrest, ok := fe.getEndpointUrl(c, id, rest); ok {
 		// parse the url
 		turl, _ := url.Parse(ep)
 
-		// create the reverse proxy
-		proxy := httputil.NewSingleHostReverseProxy(turl)
-		proxy.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // client uses self-signed cert
+		// reuse/create the reverse proxy
+		proxy, ok := proxyMap[turl.String()]
+		if !ok {
+			proxy = httputil.NewSingleHostReverseProxy(turl)
+			proxy.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // client uses self-signed cert
+			}
+			proxyMap[turl.String()] = proxy
 		}
 
 		// Update the headers to allow for SSL redirection
@@ -90,7 +96,9 @@ func (fe *Frontend) forwardRequest(c *gin.Context, id, rest string, newBody inte
 			req.URL.Path = nrest
 		}
 		req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
+		req.Header.Set("Connection", "close")
 		req.Host = turl.Host
+		req.Close = true
 
 		if newBody != nil {
 			jstr, jerr := json.Marshal(newBody)
