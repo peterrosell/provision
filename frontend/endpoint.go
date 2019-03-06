@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sync"
 
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/models"
@@ -72,6 +73,7 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id, rest string) (string, str
 }
 
 var proxyMap map[string]*httputil.ReverseProxy = map[string]*httputil.ReverseProxy{}
+var proxyMutex = &sync.Mutex{}
 
 func (fe *Frontend) forwardRequest(c *gin.Context, id, rest string, newBody interface{}) bool {
 	if ep, nrest, ok := fe.getEndpointUrl(c, id, rest); ok {
@@ -79,6 +81,7 @@ func (fe *Frontend) forwardRequest(c *gin.Context, id, rest string, newBody inte
 		turl, _ := url.Parse(ep)
 
 		// reuse/create the reverse proxy
+		proxyMutex.Lock()
 		proxy, ok := proxyMap[turl.String()]
 		if !ok {
 			proxy = httputil.NewSingleHostReverseProxy(turl)
@@ -87,6 +90,7 @@ func (fe *Frontend) forwardRequest(c *gin.Context, id, rest string, newBody inte
 			}
 			proxyMap[turl.String()] = proxy
 		}
+		proxyMutex.Unlock()
 
 		// Update the headers to allow for SSL redirection
 		req := c.Request
