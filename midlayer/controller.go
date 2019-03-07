@@ -109,10 +109,13 @@ func (pc *PluginController) StartRouter(apiGroup *gin.RouterGroup) {
 func (pc *PluginController) StartController() error {
 	pc.Debugf("Starting Start Plugin Controller:\n")
 
-	rt := pc.Request()
-
 	pc.StartPlugins()
+	err := pc.rereadPluginProviders()
+	return err
+}
 
+func (pc *PluginController) rereadPluginProviders() error {
+	rt := pc.Request()
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
 	// Walk plugin dir contents with lock
@@ -128,7 +131,7 @@ func (pc *PluginController) StartController() error {
 			pc.Tracef("walkPlugDir: importing %s error: %v\n", f.Name(), err)
 		}
 	}
-	pc.Debugf("Finishing Start Plugin Controller: %v\n", err)
+	pc.Debugf("Finishing Rereading Plugin Providers: %v\n", err)
 	return err
 }
 
@@ -149,7 +152,7 @@ func (pc *PluginController) Shutdown(ctx context.Context) error {
 func (pc *PluginController) Publish(e *models.Event) error {
 	switch e.Type {
 	case "plugins", "plugin", "plugin_provider", "plugin_providers":
-		pc.NoPublish().Tracef("PluginController Publish Event stared: %v\n", e)
+		pc.NoPublish().Tracef("PluginController Publish Event started: %v\n", e)
 		pc.events <- e
 		pc.NoPublish().Tracef("PluginController Publish Event finished: %v\n", e)
 	}
@@ -298,7 +301,6 @@ func (pc *PluginController) importPluginProvider(rt *backend.RequestTracker, pro
 		pc.Errorf("Skipping %s because of bad json: %s\n%s\n", provider, err, out)
 		return fmt.Errorf("Skipping %s because of bad json: %s\n%s\n", provider, err, out)
 	}
-	skip := false
 	pp.Fill()
 
 	if pp.PluginVersion != 2 {
@@ -332,9 +334,6 @@ func (pc *PluginController) importPluginProvider(rt *backend.RequestTracker, pro
 	}
 	content.Meta.Type = "plugin"
 
-	if skip {
-		return nil
-	}
 	pc.Tracef("Building new datastore for: %s\n", provider)
 	ns, err := pc.buildNewStore(content)
 	if err != nil {
