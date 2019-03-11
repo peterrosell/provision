@@ -193,7 +193,7 @@ imports:
   - internal/xlog
   - lzma
 - name: github.com/VictorLowther/godmi
-  version: f6b6085f031e980692f75937e6df39dbadf6fde6
+  version: 270258a8252d31faabd760000198a51fee1b24d9
 - name: github.com/VictorLowther/jsonpatch2
   version: a3386fdb359634d937f41d6f66af3df4d25c5ae4
   subpackages:
