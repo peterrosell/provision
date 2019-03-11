@@ -735,7 +735,6 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 				}
 			}
 		}
-
 		if prefix == "bootenvs" {
 			for _, thing := range p.objs[prefix].Items() {
 				benv := AsBootEnv(thing)

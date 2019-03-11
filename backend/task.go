@@ -1,12 +1,18 @@
 package backend
 
 import (
+	"strings"
 	"sync"
 	"text/template"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
+)
+
+var (
+	taskSanityMap = map[string][]string{}
+	taskSanityMux = &sync.Mutex{}
 )
 
 // Task is a thing that can run on a Machine.
@@ -17,9 +23,48 @@ type Task struct {
 	tmplMux      sync.Mutex
 }
 
-// SetReadOnly sets the ReadOnly flag.
-func (t *Task) SetReadOnly(b bool) {
-	t.ReadOnly = b
+func (t *Task) sanityCheck(rt *RequestTracker, e models.ErrorAdder, seen map[string]int) (prereqs []string, sane bool) {
+	prereqs = []string{}
+	sane = true
+	if idx, ok := seen[t.Name]; ok {
+		sane = false
+		s := make([]string, len(seen))
+		for v, i := range seen {
+			s[i] = v
+		}
+		if idx == 0 {
+			e.Errorf("Task %s depends on itself!", t.Name)
+		} else {
+			e.Errorf("Task %s depends on a task with a circular dependency", t.Name)
+		}
+		e.Errorf("%v: %v (cycle at %d)", strings.Join(s, ": "), t.Name, idx)
+		return
+	}
+	if len(t.Prerequisites) == 0 {
+		return
+	}
+	seen[t.Name] = len(seen)
+	for _, prereq := range t.Prerequisites {
+		pq := rt.find("tasks", prereq)
+		if pq == nil {
+			sane = false
+			e.Errorf("Task %s missing prerequisite %s", t.Name, prereq)
+			continue
+		}
+		cpr, cSane := AsTask(pq).sanityCheck(rt, e, seen)
+		sane = sane && cSane
+		prereqs = append(prereqs, cpr...)
+	}
+	prereqs = append(prereqs, t.Prerequisites...)
+	delete(seen, t.Name)
+	return
+}
+
+func recalcTaskSanity(rt *RequestTracker) {
+	for _, item := range rt.stores("tasks").Items() {
+		task := AsTask(item)
+		task.sanityCheck(rt, task, map[string]int{})
+	}
 }
 
 // SaveClean clears validation and returns the object as a KeySaver.
@@ -91,11 +136,11 @@ func (t *Task) genRoot(common *template.Template, e models.ErrorAdder) *template
 // referencing stages.
 func (t *Task) Validate() {
 	t.Task.Validate()
-
 	t.rt.dt.tmplMux.Lock()
 	t.tmplMux.Lock()
 	root := t.genRoot(t.rt.dt.rootTemplate, t)
 	t.rt.dt.tmplMux.Unlock()
+	t.sanityCheck(t.rt, t, map[string]int{})
 	t.SetValid()
 	if t.Useable() {
 		t.rootTemplate = root
@@ -127,13 +172,6 @@ func (t *Task) Validate() {
 	return
 }
 
-// OnLoad initializes the task when loaded from the backing store.
-func (t *Task) OnLoad() error {
-	defer func() { t.rt = nil }()
-	t.Fill()
-	return t.BeforeSave()
-}
-
 // BeforeSave makes sure the Task is valid and returns an error if not.
 // This is used to abort saving invalid objects.
 func (t *Task) BeforeSave() error {
@@ -145,6 +183,16 @@ func (t *Task) BeforeSave() error {
 		return t.MakeError(422, ValidationError, t)
 	}
 	return nil
+}
+
+func (t *Task) OnLoad() error {
+	defer func() { t.rt = nil }()
+	t.Fill()
+	return t.BeforeSave()
+}
+
+func (t *Task) AfterSave() {
+	recalcTaskSanity(t.rt)
 }
 
 type taskHaver interface {
@@ -164,6 +212,10 @@ func (t *Task) BeforeDelete() error {
 		}
 	}
 	return e.HasError()
+}
+
+func (t *Task) AfterDelete() {
+	recalcTaskSanity(t.rt)
 }
 
 func (t *Task) renderInfo() ([]models.TemplateInfo, []string) {
