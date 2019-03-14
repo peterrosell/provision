@@ -344,10 +344,12 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 			}
 			user := fe.authSource.GetUser(fe, c, string(userpass[0]), string(userpass[1]))
 			if user == nil {
+				fe.rt(c).Auditf("Failed Authenticated (no user) user %s from %s", userpass[0], c.ClientIP())
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
 			if !user.CheckPassword(string(userpass[1])) {
+				fe.rt(c).Auditf("Failed Authenticated (bad password) user %s from %s", userpass[0], c.ClientIP())
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
