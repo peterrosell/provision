@@ -10,7 +10,9 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 
+	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
@@ -183,6 +185,7 @@ type DataStack struct {
 
 	fileRoot   string
 	LayerIndex []string
+	Validated  bool
 }
 
 func CleanUpStore(st store.Store) error {
@@ -200,6 +203,45 @@ func CleanUpStore(st store.Store) error {
 	default:
 		return nil
 	}
+}
+
+// This must be locked with ALL locks on the source datatracker from the caller.
+func (d *DataStack) Validate(
+	fileRoot string,
+	secrets store.Store,
+	logger logger.Logger) (hard, soft error) {
+	res := &DataTracker{
+		Backend:           d,
+		Secrets:           secrets,
+		FileRoot:          fileRoot,
+		LogRoot:           "baddir",
+		StaticPort:        1,
+		ApiPort:           2,
+		Logger:            logger,
+		defaultPrefs:      map[string]string{},
+		runningPrefs:      map[string]string{},
+		tokenManager:      NewJwtManager([]byte{}, JwtConfig{Method: jwt.SigningMethodHS256}),
+		prefMux:           &sync.Mutex{},
+		allMux:            &sync.RWMutex{},
+		FS:                NewFS(".", logger),
+		tmplMux:           &sync.Mutex{},
+		GlobalProfileName: "global",
+		thunks:            make([]func(), 0),
+		thunkMux:          &sync.Mutex{},
+		publishers:        &Publishers{},
+		macAddrMap:        map[string]string{},
+		macAddrMux:        &sync.RWMutex{},
+		secretsMux:        &sync.Mutex{},
+	}
+
+	// Load stores.
+	rt := res.Request(logger)
+	rt.AllLocked(func(d Stores) {
+		a, b := res.rebuildCache(rt)
+		hard, soft = a.HasError(), b.HasError()
+	})
+	d.Validated = hard == nil
+	return
 }
 
 func (d *DataStack) Clone() *DataStack {
@@ -339,11 +381,9 @@ func (d *DataStack) rebuild(oldStore, secrets store.Store,
 		}
 		return nil, models.NewError("ValidationError", 422, err.Error()), nil
 	}
-	hard, soft := ValidateDataTrackerStore(d.fileRoot, d, secrets, logger)
+	hard, soft := d.Validate(d.fileRoot, secrets, logger)
 	if hard == nil && oldStore != nil {
 		CleanUpStore(oldStore)
-	}
-	if hard != nil {
 	}
 	return d, hard, soft
 }
