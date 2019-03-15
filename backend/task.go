@@ -10,11 +10,6 @@ import (
 	"github.com/digitalrebar/store"
 )
 
-var (
-	taskSanityMap = map[string][]string{}
-	taskSanityMux = &sync.Mutex{}
-)
-
 // Task is a thing that can run on a Machine.
 type Task struct {
 	*models.Task
