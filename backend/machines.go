@@ -621,6 +621,54 @@ func (n *Machine) OnLoad() error {
 	return err
 }
 
+func (n *Machine) expandTaskPrerequisites(current []string, e *models.Error) (res []string) {
+	res = []string{}
+	cEnv := n.BootEnv
+	seenTasks := map[string]struct{}{}
+	for i, ent := range current {
+		prefix, action := "task", ""
+		parts := strings.SplitN(ent, ":", 2)
+		if len(parts) == 1 {
+			action = ent
+		} else {
+			prefix = parts[0]
+			action = parts[1]
+		}
+		switch prefix {
+		case "bootenv":
+			if cEnv != action {
+				seenTasks = map[string]struct{}{}
+			}
+			cEnv = action
+		case "task":
+			if n.CurrentTask <= i {
+				vv := n.rt.find("tasks", action)
+				if vv != nil {
+					task := AsTask(vv)
+					if !task.Available {
+						e.AddError(task)
+						return
+					}
+					prereqs, sane := task.sanityCheck(n.rt, n, map[string]int{})
+					if !sane {
+						return
+					}
+					for _, prereq := range prereqs {
+						if _, ok := seenTasks[prereq]; ok {
+							continue
+						}
+						seenTasks[prereq] = struct{}{}
+						res = append(res, prereq)
+					}
+				}
+			}
+			seenTasks[action] = struct{}{}
+		}
+		res = append(res, ent)
+	}
+	return
+}
+
 func (n *Machine) validateChangeWorkflow(oldm *Machine, e *models.Error) (newStage, newEnv string) {
 	if oldm.Workflow == n.Workflow {
 		return
@@ -668,7 +716,7 @@ func (n *Machine) validateChangeWorkflow(oldm *Machine, e *models.Error) (newSta
 		taskList = append(taskList, stage.Tasks...)
 		firstStage = false
 	}
-	n.Tasks = taskList
+	n.Tasks = n.expandTaskPrerequisites(taskList, e)
 	return
 }
 
@@ -707,11 +755,11 @@ func (n *Machine) validateChangeStage(oldm *Machine, e *models.Error) {
 		// changing stage does not imply changing the task list.
 		return
 	}
-	if len(stage.Tasks) > 0 || !n.inCreate {
-		n.Tasks = make([]string, len(stage.Tasks))
-		copy(n.Tasks, stage.Tasks)
-	}
 	n.CurrentTask = -1
+	if len(stage.Tasks) > 0 || !n.inCreate {
+		n.Tasks = append([]string{}, stage.Tasks...)
+	}
+	n.Tasks = n.expandTaskPrerequisites(n.Tasks, e)
 }
 
 func (n *Machine) validateChangeEnv(oldm *Machine, e *models.Error) {
@@ -759,16 +807,14 @@ func (n *Machine) oldOnChange(oldm *Machine, e *models.Error) {
 	}
 }
 
-func (n *Machine) resetCurrentTask(oldm *Machine, e *models.Error) {
-	found := false
-	target := oldm.CurrentTask
-	n.rt.dt.Infof("Machine %s asked to reset CurrentTask from %d to %d", n.UUID(), target, n.CurrentTask)
-	for lBound := oldm.CurrentTask; lBound > -1; lBound-- {
-		if lBound >= len(n.Tasks) {
-			lBound = len(n.Tasks) - 1
+func (n *Machine) findLastBootenvChange(tasks []string, current int) (res int, found bool) {
+	res = current
+	for idx := current; idx > -1; idx-- {
+		if idx >= len(tasks) {
+			idx = len(tasks) - 1
 			continue
 		}
-		thing := n.Tasks[lBound]
+		thing := tasks[idx]
 		if !strings.HasPrefix(thing, "stage:") {
 			continue
 		}
@@ -781,13 +827,21 @@ func (n *Machine) resetCurrentTask(oldm *Machine, e *models.Error) {
 			continue
 		}
 		if stage.BootEnv == n.BootEnv {
-			target = lBound
+			res = idx
 			found = true
 			continue
 		}
 		break
 	}
-	if found {
+	if !found {
+		res = 0
+	}
+	return
+}
+
+func (n *Machine) resetCurrentTask(oldm *Machine, e *models.Error) {
+	n.rt.dt.Infof("Machine %s asked to reset CurrentTask from %d to %d", n.UUID(), oldm.CurrentTask, n.CurrentTask)
+	if target, found := n.findLastBootenvChange(n.Tasks, oldm.CurrentTask); found {
 		n.CurrentTask = target
 	}
 	n.rt.Infof("Resetting CurrentTask from %d to %d", oldm.CurrentTask, n.CurrentTask)
@@ -799,8 +853,8 @@ func (n *Machine) OnChange(oldThing store.KeySaver) error {
 	n.oldStage = oldm.Stage
 	n.oldWorkflow = oldm.Workflow
 	n.oldMachine = oldm
-	oldPast, _, oldFuture := oldm.SplitTasks()
-	newPast, _, newFuture := n.SplitTasks()
+	oldPast, oldPresent, oldFuture := oldm.SplitTasks()
+	newPast, newPresent, newFuture := n.SplitTasks()
 	e := &models.Error{
 		Code:  http.StatusUnprocessableEntity,
 		Type:  ValidationError,
@@ -847,6 +901,9 @@ func (n *Machine) OnChange(oldThing store.KeySaver) error {
 			}
 			if !reflect.DeepEqual(oldFuture, newFuture) {
 				e.Errorf("Cannot change tasks that are past the next stage transition")
+			}
+			if !reflect.DeepEqual(oldPresent, newPresent) {
+				n.Tasks = n.expandTaskPrerequisites(n.Tasks, e)
 			}
 		} else if !reflect.DeepEqual(n.Tasks, oldm.Tasks) &&
 			len(oldm.Tasks) > 0 &&
