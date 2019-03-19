@@ -409,7 +409,7 @@ func (d *DataStack) buildStack(fixup FixerUpper, newStore store.Store, logger lo
 		for _, layerPrereq := range layerPrereqs {
 			ver, ok := versions[layerPrereq]
 			if !ok {
-				ret.Errorf("Layer %s has %s as a prerequisite, but %s does not have a version!", checkingLayer, layerPrereq, layerPrereq)
+				ret.Errorf("Layer %s has %s as a prerequisite, but %s does not exist!", checkingLayer, layerPrereq, layerPrereq)
 				continue
 			}
 			if !checks[layerPrereq](ver) {
