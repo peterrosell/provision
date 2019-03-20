@@ -1,5 +1,5 @@
-hash: 858db33e2632d0fc8bbb527b44e2897e2ec6353f92ee4e443231d2a8dc6d91eb
-updated: 2019-02-06T21:13:31.799809-06:00
+hash: af9ed335c9cdfe959a9e6b32181810540c171913976d4b3900562275fdad91b6
+updated: 2019-03-19T10:51:11.053018698-05:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -55,6 +55,8 @@ imports:
   - binding
   - json
   - render
+- name: github.com/gofunky/semver
+  version: b182ca44e05aea9918247472dc1cf6658577f423
 - name: github.com/golang/protobuf
   version: f5983d50c82d70eaa88c17080245cc871558081f
   subpackages:
@@ -257,6 +259,6 @@ imports:
 - name: gopkg.in/olahol/melody.v1
   version: d521390733761fe1db13de575c253afd5c743085
 - name: gopkg.in/yaml.v2
-  version: 51d6538a90f86fe93ac480b35f37b2be17fef232
+  version: 5420a8b6744d3b0345ab293f6fcba19c978f1183
   repo: https://github.com/go-yaml/yaml
 testImports: []

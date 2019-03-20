@@ -56,3 +56,4 @@ import:
 - package: github.com/kardianos/osext
 - package: github.com/mholt/archiver
   version: ^3.1.0
+- package: github.com/gofunky/semver
