@@ -168,7 +168,7 @@ imports:
   - nfs
   - xfs
 - name: github.com/rackn/gohai
-  version: e1a26cf76707eadab12ce42f0d2c3425178d4fc9
+  version: 5053e7f1fa367302732ffcd47b99fb07254499d9
   subpackages:
   - plugins/dmi
   - plugins/net
