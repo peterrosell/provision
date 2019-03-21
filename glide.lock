@@ -1,5 +1,5 @@
-hash: af9ed335c9cdfe959a9e6b32181810540c171913976d4b3900562275fdad91b6
-updated: 2019-03-19T10:51:11.053018698-05:00
+hash: 4301ffbffa1f64e6facc37ca624e05a0e3677495941a59b90ded18441730227c
+updated: 2019-03-21T15:25:08.940893559-05:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -174,6 +174,13 @@ imports:
   - plugins/net
   - plugins/storage
   - plugins/system
+- name: github.com/rackn/netwrangler
+  version: 431e475ccf1c4969f30a75ab858f5047c1986042
+  subpackages:
+  - netplan
+  - rhel
+  - systemd
+  - util
 - name: github.com/russross/blackfriday
   version: 11635eb403ff09dbc3a6b5a007ab5ab09151c229
 - name: github.com/spf13/cobra
