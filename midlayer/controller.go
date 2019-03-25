@@ -151,6 +151,12 @@ func (pc *PluginController) Shutdown(ctx context.Context) error {
 
 func (pc *PluginController) Publish(e *models.Event) error {
 	switch e.Type {
+	case "contents":
+		if e.Key == "rackn-license" {
+			pc.NoPublish().Tracef("PluginController Publish Event license started: %v\n", e)
+			pc.events <- e
+			pc.NoPublish().Tracef("PluginController Publish Event license finished: %v\n", e)
+		}
 	case "plugins", "plugin", "plugin_provider", "plugin_providers":
 		pc.NoPublish().Tracef("PluginController Publish Event started: %v\n", e)
 		pc.events <- e
