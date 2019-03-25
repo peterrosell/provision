@@ -85,6 +85,8 @@ func (pc *PluginController) handleEvent(event *models.Event) {
 			defer pc.lock.Unlock()
 			pc.importPluginProvider(rt, event.Key)
 		}
+	case "contents":
+		pc.rereadPluginProviders()
 	}
 }
 
