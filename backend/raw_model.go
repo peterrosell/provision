@@ -69,25 +69,26 @@ func (r *RawModel) Indexes() map[string]index.Maker {
 		}
 
 		var iii *index.Maker
+		sfield := field
 
 		switch t {
 		case "string":
 			ii := index.Make(
 				unique,
 				"string",
-				func(i, j models.Model) bool { return fix(i).getStringValue(field) < fix(j).getStringValue(field) },
+				func(i, j models.Model) bool { return fix(i).getStringValue(sfield) < fix(j).getStringValue(sfield) },
 				func(ref models.Model) (gte, gt index.Test) {
-					refField := fix(ref).getStringValue(field)
+					refField := fix(ref).getStringValue(sfield)
 					return func(s models.Model) bool {
-							return fix(s).getStringValue(field) >= refField
+							return fix(s).getStringValue(sfield) >= refField
 						},
 						func(s models.Model) bool {
-							return fix(s).getStringValue(field) > refField
+							return fix(s).getStringValue(sfield) > refField
 						}
 				},
 				func(s string) (models.Model, error) {
 					rm := fix(r.New())
-					(*rm.RawModel)[field] = s
+					(*rm.RawModel)[sfield] = s
 					return rm, nil
 				})
 			iii = &ii
@@ -96,25 +97,25 @@ func (r *RawModel) Indexes() map[string]index.Maker {
 				unique,
 				"boolean",
 				func(i, j models.Model) bool {
-					return (!fix(i).getBooleanValue(field)) && fix(j).getBooleanValue(field)
+					return (!fix(i).getBooleanValue(sfield)) && fix(j).getBooleanValue(sfield)
 				},
 				func(ref models.Model) (gte, gt index.Test) {
-					avail := fix(ref).getBooleanValue(field)
+					avail := fix(ref).getBooleanValue(sfield)
 					return func(s models.Model) bool {
-							v := fix(s).getBooleanValue(field)
+							v := fix(s).getBooleanValue(sfield)
 							return v || (v == avail)
 						},
 						func(s models.Model) bool {
-							return fix(s).getBooleanValue(field) && !avail
+							return fix(s).getBooleanValue(sfield) && !avail
 						}
 				},
 				func(s string) (models.Model, error) {
 					res := fix(r.New())
 					switch s {
 					case "true":
-						(*res.RawModel)[field] = true
+						(*res.RawModel)[sfield] = true
 					case "false":
-						(*res.RawModel)[field] = false
+						(*res.RawModel)[sfield] = false
 					default:
 						return nil, errors.New("Runnable must be true or false")
 					}
@@ -124,7 +125,7 @@ func (r *RawModel) Indexes() map[string]index.Maker {
 		}
 
 		if iii != nil {
-			idxs[field] = *iii
+			idxs[sfield] = *iii
 		}
 	}
 

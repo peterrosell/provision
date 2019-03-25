@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/digitalrebar/provision/backend"
+	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/galthaus/gzip"
 	"github.com/gin-gonic/gin"
@@ -28,18 +29,34 @@ func (fe *Frontend) getEndpoint(c *gin.Context, id string) *backend.RawModel {
 	if !found {
 		return nil
 	}
+
 	rt := fe.rt(c, "endpoints")
 	var res *backend.RawModel
+	params := map[string][]string{
+		"HaId": []string{id},
+	}
 	rt.Do(func(d backend.Stores) {
-		if u := rt.Find("endpoints", id); u != nil {
-			res = u.(*backend.RawModel)
+		ref := &backend.RawModel{RawModel: &models.RawModel{"Type": "endpoints"}}
+		filters, err := fe.processFilters(rt, d, ref, params)
+		if err != nil {
+			return
+		}
+		mainIndex := &d(ref.Prefix()).Index
+		idx, err := index.All(filters...)(mainIndex)
+		if err != nil {
+			return
+		}
+
+		items := idx.Items()
+		for _, item := range items {
+			res = item.(*backend.RawModel)
+			return
 		}
 	})
 	return res
 }
 
 func (fe *Frontend) getEndpointUrl(c *gin.Context, id, rest string) (string, string, bool) {
-
 	nrest := rest
 	done := false
 	for !done {
@@ -52,7 +69,12 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id, rest string) (string, str
 		e, _ := res.GetStringField("Manager")
 		if e == "" {
 			p := res.GetParams()
-			s, ok := p["manager/url"].(string)
+
+			s, ok := p["manager/forward-url"].(string)
+			if ok && s != "" {
+				return s, nrest, ok
+			}
+			s, ok = p["manager/url"].(string)
 			return s, nrest, ok
 		}
 
@@ -60,7 +82,11 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id, rest string) (string, str
 		for _, myid := range fe.DrpIds {
 			if e == myid {
 				p := res.GetParams()
-				s, ok := p["manager/url"].(string)
+				s, ok := p["manager/forward-url"].(string)
+				if ok && s != "" {
+					return s, nrest, ok
+				}
+				s, ok = p["manager/url"].(string)
 				return s, nrest, ok
 			}
 		}
