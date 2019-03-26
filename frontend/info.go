@@ -78,7 +78,7 @@ func (f *Frontend) InitInfoApi() {
 	//       500: ErrorResponse
 	f.ApiGroup.GET("/info",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "info", "get", "") {
+			if !f.assureSimpleAuth(c, f.rt(c), "info", "get", "") {
 				return
 			}
 			info, err := f.GetInfo(c)

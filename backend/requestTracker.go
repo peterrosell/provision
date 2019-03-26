@@ -37,6 +37,14 @@ type RequestTracker struct {
 	// This is used by the publish system to prevent dead locks.
 	// The d Stores are assumed to be NOT locked and not Present.
 	toPublishAfter []func()
+	Claims         models.ClaimsList
+}
+
+func (rt *RequestTracker) HasClaim(scope, action, specific string) bool {
+	if len(rt.Claims) == 0 {
+		return false
+	}
+	return rt.Claims.Match(models.MakeRole("", scope, action, specific).Compile())
 }
 
 func (rt *RequestTracker) unlocker(u func()) {

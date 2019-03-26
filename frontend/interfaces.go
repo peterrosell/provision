@@ -80,7 +80,7 @@ func (f *Frontend) InitInterfaceApi() {
 	f.ApiGroup.GET("/interfaces/:name",
 		func(c *gin.Context) {
 			name := c.Param(`name`)
-			if !f.assureSimpleAuth(c, "interfaces", "get", name) {
+			if !f.assureSimpleAuth(c, f.rt(c), "interfaces", "get", name) {
 				return
 			}
 			err := &models.Error{

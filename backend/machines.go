@@ -25,8 +25,7 @@ type Machine struct {
 	oldBootEnv, oldStage, oldWorkflow      string
 	oldMachine                             *Machine
 	changeStageAllowed, inCreate, inRunner bool
-
-	toDeRegister, toRegister renderers
+	toDeRegister, toRegister               renderers
 }
 
 func (n *Machine) SetReadOnly(b bool) {
@@ -35,6 +34,10 @@ func (n *Machine) SetReadOnly(b bool) {
 
 func (n *Machine) InRunner() {
 	n.inRunner = true
+}
+
+func (n *Machine) AllowTaskReposition() bool {
+	return n.rt != nil && n.rt.HasClaim(n.Prefix(), "updateTaskList", n.Key())
 }
 
 func (n *Machine) AllowStageChange() {
@@ -861,11 +864,30 @@ func (n *Machine) OnChange(oldThing store.KeySaver) error {
 		Model: n.Prefix(),
 		Key:   n.Key(),
 	}
-	if !n.inRunner &&
-		len(oldm.Tasks) > 0 &&
-		!(oldm.CurrentTask == n.CurrentTask || n.CurrentTask == -1) {
-		e.Errorf("Cannot change CurrentTask from %d to %d", oldm.CurrentTask, n.CurrentTask)
-		return e
+	if n.inRunner {
+		return nil
+	}
+	if n.CurrentTask != oldm.CurrentTask && n.CurrentTask > -1 && len(n.Tasks) > 0 {
+		if !n.AllowTaskReposition() {
+			e.Errorf("Cannot change CurrentTask from %d to %d (reposition not allowed)", oldm.CurrentTask, n.CurrentTask)
+			return e
+		}
+		if !reflect.DeepEqual(oldm.Tasks, n.Tasks) {
+			e.Errorf("Cannot change task list and current task at the same time")
+			return e
+		}
+		if oldm.CurrentTask < n.CurrentTask {
+			e.Errorf("Cannot advance CurrentTask from %d to %d without running jobs", oldm.CurrentTask, n.CurrentTask)
+			return e
+		}
+		lBound, found := n.findLastBootenvChange(n.Tasks, oldm.CurrentTask)
+		if !found {
+			lBound = -1
+		}
+		if n.CurrentTask < lBound {
+			e.Errorf("Cannot change CurrentTask from %d to %d past %d", oldm.CurrentTask, n.CurrentTask, lBound)
+			return e
+		}
 	}
 	newStage, newEnv := n.validateChangeWorkflow(oldm, e)
 	if newStage != "" {

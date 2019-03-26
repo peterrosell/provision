@@ -295,7 +295,8 @@ func (f *Frontend) InitJobApi() {
 				c.JSON(http.StatusBadRequest, models.NewError(c.Request.Method, http.StatusBadRequest, "Create request must have Machine field"))
 				return
 			}
-			if !f.assureSimpleAuth(c, "jobs", "create", b.AuthKey()) {
+			rt := f.rt(c, b.Locks("create")...)
+			if !f.assureSimpleAuth(c, rt, "jobs", "create", b.AuthKey()) {
 				return
 			}
 			if b.Uuid == nil || len(b.Uuid) == 0 {
@@ -305,7 +306,6 @@ func (f *Frontend) InitJobApi() {
 				Code: http.StatusNoContent,
 			}
 			var thunk func(*models.Error) *backend.Job
-			rt := f.rt(c, b.Locks("create")...)
 			rt.Do(func(_ backend.Stores) {
 				b, thunk = realCreateJob(f, rt, b, err)
 			})
@@ -451,7 +451,7 @@ func (f *Frontend) InitJobApi() {
 				return
 			}
 
-			if !f.assureSimpleAuth(c, "jobs", "actions", j.AuthKey()) {
+			if !f.assureSimpleAuth(c, rt, "jobs", "actions", j.AuthKey()) {
 				return
 			}
 			rt.Debugf("Rendering jobs for %s os %s", uuid, c.Query("os"))
@@ -509,7 +509,7 @@ func (f *Frontend) InitJobApi() {
 				return
 			}
 
-			if !f.assureSimpleAuth(c, "jobs", "log", j.AuthKey()) {
+			if !f.assureSimpleAuth(c, rt, "jobs", "log", j.AuthKey()) {
 				return
 			}
 
@@ -568,7 +568,7 @@ func (f *Frontend) InitJobApi() {
 				return
 			}
 
-			if !f.assureSimpleAuth(c, "jobs", "log", j.AuthKey()) {
+			if !f.assureSimpleAuth(c, rt, "jobs", "log", j.AuthKey()) {
 				return
 			}
 

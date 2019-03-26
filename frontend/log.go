@@ -29,7 +29,7 @@ func (f *Frontend) InitLogApi() {
 	//       500: ErrorResponse
 	f.ApiGroup.GET("/logs",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "logs", "get", "") {
+			if !f.assureSimpleAuth(c, f.rt(c), "logs", "get", "") {
 				return
 			}
 			c.JSON(http.StatusOK, f.Logger.Buffer().Lines(-1))

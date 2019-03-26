@@ -25,14 +25,14 @@ func (f *Frontend) makeParamEndpoints(obj models.Paramer, idKey string) (
 			f.rt(c, obj.(Lockable).Locks(op)...),
 			trimmer(c.Param("key"))
 	}
-	viewAuth := func(c *gin.Context, key string) bool {
-		if !f.assureSimpleAuth(c, obj.Prefix(), "get", key) {
+	viewAuth := func(c *gin.Context, rt *backend.RequestTracker, key string) bool {
+		if !f.assureSimpleAuth(c, rt, obj.Prefix(), "get", key) {
 			return false
 		}
 		if !f.wantDecodeSecure(c) {
 			return true
 		}
-		return f.assureSimpleAuth(c, obj.Prefix(), "getSecure", key)
+		return f.assureSimpleAuth(c, rt, obj.Prefix(), "getSecure", key)
 	}
 	mutator := func(c *gin.Context,
 		rt *backend.RequestTracker,
@@ -64,7 +64,7 @@ func (f *Frontend) makeParamEndpoints(obj models.Paramer, idKey string) (
 		patch, err := models.GenPatch(orig, changed, false)
 		if err != nil {
 			patchErr.AddError(err)
-		} else if !f.assureAuthUpdate(c, obj.Prefix(), "update", id, patch) {
+		} else if !f.assureAuthUpdate(c, rt, obj.Prefix(), "update", id, patch) {
 			return nil
 		} else {
 			rt.Do(func(_ backend.Stores) {
@@ -80,7 +80,7 @@ func (f *Frontend) makeParamEndpoints(obj models.Paramer, idKey string) (
 	}
 	return /* getAll */ func(c *gin.Context) {
 			id, rt, _ := idrtkey(c, "get")
-			if !viewAuth(c, id) {
+			if !viewAuth(c, rt, id) {
 				return
 			}
 			var params map[string]interface{}
@@ -95,7 +95,7 @@ func (f *Frontend) makeParamEndpoints(obj models.Paramer, idKey string) (
 		},
 		/* getOne */ func(c *gin.Context) {
 			id, rt, key := idrtkey(c, "get")
-			if !viewAuth(c, id) {
+			if !viewAuth(c, rt, id) {
 				return
 			}
 			ob := f.Find(c, rt, obj.Prefix(), id)
@@ -198,7 +198,7 @@ func (f *Frontend) makeParamEndpoints(obj models.Paramer, idKey string) (
 		},
 		/* getPubKey */ func(c *gin.Context) {
 			id, rt, _ := idrtkey(c, "get")
-			if !f.assureSimpleAuth(c, obj.Prefix(), "updateSecure", id) {
+			if !f.assureSimpleAuth(c, rt, obj.Prefix(), "updateSecure", id) {
 				return
 			}
 			ob := f.Find(c, rt, obj.Prefix(), id)

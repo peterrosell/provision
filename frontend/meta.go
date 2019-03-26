@@ -68,14 +68,14 @@ func (f *Frontend) InitMetaApi() {
 	f.ApiGroup.GET("/meta/:type/*id",
 		func(c *gin.Context) {
 			prefix, id := c.Param(`type`), strings.TrimPrefix(c.Param(`id`), "/")
-			if !f.assureSimpleAuth(c, prefix, "get", id) {
-				return
-			}
 			ref := getMetaFor(c, prefix)
 			if ref == nil {
 				return
 			}
 			rt := f.rt(c, ref.(Lockable).Locks("get")...)
+			if !f.assureSimpleAuth(c, rt, prefix, "get", id) {
+				return
+			}
 			res := f.Find(c, rt, prefix, id)
 			if res == nil {
 				return
@@ -152,7 +152,7 @@ func (f *Frontend) InitMetaApi() {
 			patch, err := models.GenPatch(mh, changed, false)
 			if err != nil {
 				patchErr.AddError(err)
-			} else if !f.assureAuthUpdate(c, prefix, "update", id, patch) {
+			} else if !f.assureAuthUpdate(c, rt, prefix, "update", id, patch) {
 				return
 			} else {
 				rt.Do(func(_ backend.Stores) {

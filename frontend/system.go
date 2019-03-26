@@ -130,7 +130,7 @@ func (f *Frontend) InitSystemApi() {
 				Key:   "upgrade",
 				Type:  c.Request.Method,
 			}
-			if !f.assureSimpleAuth(c, "system", "upgrade", "*") {
+			if !f.assureSimpleAuth(c, f.rt(c), "system", "upgrade", "*") {
 				return
 			}
 			var copied int64

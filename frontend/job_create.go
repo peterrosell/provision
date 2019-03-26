@@ -220,16 +220,17 @@ func realCreateJob(f *Frontend,
 	// Figure out what task to run next.  This is almost always the same as the current
 	// task
 	taskToRun := m.CurrentTask
-	if cj.CurrentIndex != m.CurrentTask &&
-		!(cj.State == "finished" || cj.State == "failed") {
-		rt.Infof("Machine %s Task list has been reset to %d from %d, failing current job %s",
-			cj.Machine.String(),
-			m.CurrentTask,
-			cj.CurrentIndex,
-			cj.Uuid.String())
-		cj.State = "failed"
-		cj.ExitState = "failed"
-		rt.Update(cj)
+	if cj.CurrentIndex != m.CurrentTask {
+		if !(cj.State == "finished" || cj.State == "failed") {
+			rt.Infof("Machine %s Task list has been reset to %d from %d, failing current job %s",
+				cj.Machine.String(),
+				m.CurrentTask,
+				cj.CurrentIndex,
+				cj.Uuid.String())
+			cj.State = "failed"
+			cj.ExitState = "failed"
+			rt.Update(cj)
+		}
 	} else {
 		rt.Infof("Machine %s is evaluating task list at %d", b.Machine.String(), m.CurrentTask)
 		switch cj.State {
@@ -241,9 +242,9 @@ func realCreateJob(f *Frontend,
 			return cj, nil
 		case "finished":
 			// Advance to the next task
+			taskToRun++
 			rt.Infof("Machine %s task %s at %d is finished, advancing to %d",
 				cj.Machine.String(), cj.Task, m.CurrentTask, taskToRun)
-			taskToRun++
 		case "failed":
 			rt.Infof("Machine %s task %s at %d is failed, retrying",
 				cj.Machine.String(), cj.Task, m.CurrentTask)

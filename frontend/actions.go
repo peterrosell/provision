@@ -43,10 +43,11 @@ func (f *Frontend) makeActionEndpoints(cmdSet string, obj models.Model, idKey st
 		if id == "" {
 			id = "global"
 		}
+		rt := f.rt(c, obj.(Lockable).Locks("actions")...)
 		return id,
-			f.rt(c, obj.(Lockable).Locks("actions")...),
+			rt,
 			c.Param("cmd"),
-			f.assureSimpleAuth(c, cmdSet, op, id)
+			f.assureSimpleAuth(c, rt, cmdSet, op, id)
 	}
 
 	return /* allActions */ func(c *gin.Context) {

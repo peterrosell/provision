@@ -27,7 +27,7 @@ func (f *Frontend) InitObjectsApi() {
 	//       403: NoContentResponse
 	f.ApiGroup.GET("/objects",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "objects", "list", "") {
+			if !f.assureSimpleAuth(c, f.rt(c), "objects", "list", "") {
 				return
 			}
 			objPrefixes := f.dt.GetObjectTypes()
