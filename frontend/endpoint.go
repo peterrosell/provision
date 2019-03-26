@@ -8,8 +8,10 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sync"
 
 	"github.com/digitalrebar/provision/backend"
+	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/galthaus/gzip"
 	"github.com/gin-gonic/gin"
@@ -27,18 +29,34 @@ func (fe *Frontend) getEndpoint(c *gin.Context, id string) *backend.RawModel {
 	if !found {
 		return nil
 	}
+
 	rt := fe.rt(c, "endpoints")
 	var res *backend.RawModel
+	params := map[string][]string{
+		"HaId": []string{id},
+	}
 	rt.Do(func(d backend.Stores) {
-		if u := rt.Find("endpoints", id); u != nil {
-			res = u.(*backend.RawModel)
+		ref := &backend.RawModel{RawModel: &models.RawModel{"Type": "endpoints"}}
+		filters, err := fe.processFilters(rt, d, ref, params)
+		if err != nil {
+			return
+		}
+		mainIndex := &d(ref.Prefix()).Index
+		idx, err := index.All(filters...)(mainIndex)
+		if err != nil {
+			return
+		}
+
+		items := idx.Items()
+		for _, item := range items {
+			res = item.(*backend.RawModel)
+			return
 		}
 	})
 	return res
 }
 
 func (fe *Frontend) getEndpointUrl(c *gin.Context, id, rest string) (string, string, bool) {
-
 	nrest := rest
 	done := false
 	for !done {
@@ -51,7 +69,12 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id, rest string) (string, str
 		e, _ := res.GetStringField("Manager")
 		if e == "" {
 			p := res.GetParams()
-			s, ok := p["manager/url"].(string)
+
+			s, ok := p["manager/forward-url"].(string)
+			if ok && s != "" {
+				return s, nrest, ok
+			}
+			s, ok = p["manager/url"].(string)
 			return s, nrest, ok
 		}
 
@@ -59,7 +82,11 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id, rest string) (string, str
 		for _, myid := range fe.DrpIds {
 			if e == myid {
 				p := res.GetParams()
-				s, ok := p["manager/url"].(string)
+				s, ok := p["manager/forward-url"].(string)
+				if ok && s != "" {
+					return s, nrest, ok
+				}
+				s, ok = p["manager/url"].(string)
 				return s, nrest, ok
 			}
 		}
@@ -71,16 +98,25 @@ func (fe *Frontend) getEndpointUrl(c *gin.Context, id, rest string) (string, str
 	return "", rest, false
 }
 
+var proxyMap map[string]*httputil.ReverseProxy = map[string]*httputil.ReverseProxy{}
+var proxyMutex = &sync.Mutex{}
+
 func (fe *Frontend) forwardRequest(c *gin.Context, id, rest string, newBody interface{}) bool {
 	if ep, nrest, ok := fe.getEndpointUrl(c, id, rest); ok {
 		// parse the url
 		turl, _ := url.Parse(ep)
 
-		// create the reverse proxy
-		proxy := httputil.NewSingleHostReverseProxy(turl)
-		proxy.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // client uses self-signed cert
+		// reuse/create the reverse proxy
+		proxyMutex.Lock()
+		proxy, ok := proxyMap[turl.String()]
+		if !ok {
+			proxy = httputil.NewSingleHostReverseProxy(turl)
+			proxy.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // client uses self-signed cert
+			}
+			proxyMap[turl.String()] = proxy
 		}
+		proxyMutex.Unlock()
 
 		// Update the headers to allow for SSL redirection
 		req := c.Request
@@ -90,7 +126,9 @@ func (fe *Frontend) forwardRequest(c *gin.Context, id, rest string, newBody inte
 			req.URL.Path = nrest
 		}
 		req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
+		req.Header.Set("Connection", "close")
 		req.Host = turl.Host
+		req.Close = true
 
 		if newBody != nil {
 			jstr, jerr := json.Marshal(newBody)

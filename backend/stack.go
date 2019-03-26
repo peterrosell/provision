@@ -10,10 +10,13 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 
+	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
+	"github.com/gofunky/semver"
 )
 
 func BasicContent() store.Store {
@@ -165,7 +168,7 @@ exit
 	res.(*store.Memory).SetMetaData(map[string]string{
 		"Name":        "BasicStore",
 		"Description": "Default objects that must be present",
-		"Version":     "Unversioned",
+		"Version":     "3.12.0",
 		"Type":        "default",
 	})
 	return res
@@ -183,6 +186,7 @@ type DataStack struct {
 
 	fileRoot   string
 	LayerIndex []string
+	Validated  bool
 }
 
 func CleanUpStore(st store.Store) error {
@@ -200,6 +204,45 @@ func CleanUpStore(st store.Store) error {
 	default:
 		return nil
 	}
+}
+
+// This must be locked with ALL locks on the source datatracker from the caller.
+func (d *DataStack) Validate(
+	fileRoot string,
+	secrets store.Store,
+	logger logger.Logger) (hard, soft error) {
+	res := &DataTracker{
+		Backend:           d,
+		Secrets:           secrets,
+		FileRoot:          fileRoot,
+		LogRoot:           "baddir",
+		StaticPort:        1,
+		ApiPort:           2,
+		Logger:            logger,
+		defaultPrefs:      map[string]string{},
+		runningPrefs:      map[string]string{},
+		tokenManager:      NewJwtManager([]byte{}, JwtConfig{Method: jwt.SigningMethodHS256}),
+		prefMux:           &sync.Mutex{},
+		allMux:            &sync.RWMutex{},
+		FS:                NewFS(".", logger),
+		tmplMux:           &sync.Mutex{},
+		GlobalProfileName: "global",
+		thunks:            make([]func(), 0),
+		thunkMux:          &sync.Mutex{},
+		publishers:        &Publishers{},
+		macAddrMap:        map[string]string{},
+		macAddrMux:        &sync.RWMutex{},
+		secretsMux:        &sync.Mutex{},
+	}
+
+	// Load stores.
+	rt := res.Request(logger)
+	rt.AllLocked(func(d Stores) {
+		a, b := res.rebuildCache(rt)
+		hard, soft = a.HasError(), b.HasError()
+	})
+	d.Validated = hard == nil
+	return
 }
 
 func (d *DataStack) Clone() *DataStack {
@@ -236,17 +279,36 @@ func (d *DataStack) Clone() *DataStack {
 type FixerUpper func(*DataStack, store.Store, logger.Logger) error
 
 func (d *DataStack) buildStack(fixup FixerUpper, newStore store.Store, logger logger.Logger) error {
+	prereqs := map[string]map[string]semver.Range{}
+	versions := map[string]semver.Version{}
+	ret := &models.Error{
+		Model: "contents",
+		Type:  "STORE_ERROR",
+		Code:  http.StatusUnprocessableEntity,
+	}
 	if ns, ok := newStore.(store.MetaSaver); ok {
-		ret := &models.Error{
-			Model: "contents",
-			Type:  "STORE_ERROR",
-			Code:  http.StatusUnprocessableEntity,
-		}
 		if ns.MetaData()["Name"] == "" {
 			ret.Errorf("Content Store must have a name")
 		}
-		if ns.MetaData()["RequiredFeatures"] != "" {
-			stackFeatures := strings.Split(ns.MetaData()["RequiredFeatures"], ",")
+	}
+
+	versionCheck := func(ns store.Store, altname string) {
+		ms, ok := ns.(store.MetaSaver)
+		if !ok {
+			ret.Errorf("Store being verion checked for %s does not have metadata!", altname)
+			return
+		}
+		name := ms.MetaData()["Name"]
+		if name == "" {
+			ret.Errorf("Store at %s has no Name metadata", altname)
+			return
+		}
+		if _, ok := versions[name]; ok {
+			ret.Errorf("A store named %s exists in the datastack twice!", name)
+			return
+		}
+		if ms.MetaData()["RequiredFeatures"] != "" {
+			stackFeatures := strings.Split(ms.MetaData()["RequiredFeatures"], ",")
 			info := &models.Info{}
 			info.Fill()
 			ofMap := map[string]struct{}{}
@@ -257,33 +319,44 @@ func (d *DataStack) buildStack(fixup FixerUpper, newStore store.Store, logger lo
 				if _, ok := ofMap[strings.TrimSpace(strings.ToLower(f))]; ok {
 					continue
 				}
-				ret.Errorf("dr-provision missing required feature %s", f)
+				ret.Errorf("Content layer %s requires feature %s, but dr-provision does not provide it", name, f)
 			}
 		}
-		if ret.ContainsError() {
-			return ret
+		ver := "0.0.0"
+		var err error
+		prereqs[name], err = models.ParseContentPrerequisites(ms.MetaData()["Prerequisites"])
+		if err != nil {
+			ret.Errorf("Layer %s: error parsing prerequisites %s: %v", name, ms.MetaData()["Prerequisites"], err)
+		}
+		if v := ms.MetaData()["Version"]; v != "" {
+			ver = strings.SplitN(v, "-", 2)[0]
+		}
+		versions[name], err = semver.ParseTolerant(ver)
+		if err != nil {
+			ret.Errorf("Layer %s: invalid version %s: %v", name, ver, err)
 		}
 	}
-	wrapperFixup := func(ns store.Store, f1, f2 bool) error {
+
+	wrapperFixup := func(ns store.Store, altname string, f1, f2 bool) {
 		if fixup != nil && newStore == ns {
 			if err := fixup(d, ns, logger); err != nil {
-				return err
+				ret.AddError(err)
+				return
 			}
 		}
+		versionCheck(ns, altname)
 		if err := d.Push(ns, f1, f2); err != nil {
-			return err
+			ret.AddError(err)
 		}
-		return nil
 	}
 	d.LayerIndex = []string{"writable"}
+	versionCheck(d.writeContent, "writable")
 	if err := d.Push(d.writeContent, false, true); err != nil {
-		return err
+		ret.AddError(err)
 	}
 	if d.localContent != nil {
 		d.LayerIndex = append(d.LayerIndex, "localOverride")
-		if err := wrapperFixup(d.localContent, false, false); err != nil {
-			return err
-		}
+		wrapperFixup(d.localContent, "localOverride", false, false)
 	}
 
 	// Sort Names
@@ -295,16 +368,12 @@ func (d *DataStack) buildStack(fixup FixerUpper, newStore store.Store, logger lo
 
 	for _, k := range saas {
 		d.LayerIndex = append(d.LayerIndex, "content-"+k)
-		if err := wrapperFixup(d.saasContents[k], true, false); err != nil {
-			return err
-		}
+		wrapperFixup(d.saasContents[k], "content-"+k, true, false)
 	}
 
 	if d.defaultContent != nil {
 		d.LayerIndex = append(d.LayerIndex, "localDefault")
-		if err := wrapperFixup(d.defaultContent, false, false); err != nil {
-			return err
-		}
+		wrapperFixup(d.defaultContent, "localDefault", false, false)
 	}
 
 	plugins := make([]string, 0, len(d.pluginContents))
@@ -315,18 +384,41 @@ func (d *DataStack) buildStack(fixup FixerUpper, newStore store.Store, logger lo
 
 	for _, k := range plugins {
 		d.LayerIndex = append(d.LayerIndex, "plugin-"+k)
-		if err := wrapperFixup(d.pluginContents[k], true, false); err != nil {
-			return err
-		}
+		wrapperFixup(d.pluginContents[k], "plugin-"+k, true, false)
 	}
 	d.LayerIndex = append(d.LayerIndex, "basic")
+	versionCheck(d.basicContent, "basic")
 	if err := d.Push(d.basicContent, false, false); err != nil {
 		if err = fixBasic(d, d.basicContent, logger); err == nil {
-			return d.Push(d.basicContent, false, false)
+			ret.AddError(d.Push(d.basicContent, false, false))
 		}
-		return err
+		ret.AddError(err)
 	}
-	return nil
+	checkingLayers := make([]string, 0, len(prereqs))
+	for k := range prereqs {
+		checkingLayers = append(checkingLayers, k)
+	}
+	sort.Strings(checkingLayers)
+	for _, checkingLayer := range checkingLayers {
+		checks := prereqs[checkingLayer]
+		layerPrereqs := make([]string, 0, len(checks))
+		for k := range checks {
+			layerPrereqs = append(layerPrereqs, k)
+		}
+		sort.Strings(layerPrereqs)
+		for _, layerPrereq := range layerPrereqs {
+			ver, ok := versions[layerPrereq]
+			if !ok {
+				ret.Errorf("Layer %s has %s as a prerequisite, but %s does not exist!", checkingLayer, layerPrereq, layerPrereq)
+				continue
+			}
+			if !checks[layerPrereq](ver) {
+				ret.Errorf("Layer %s prerequisite test on %s failed", checkingLayer, layerPrereq)
+				continue
+			}
+		}
+	}
+	return ret.HasError()
 }
 
 func (d *DataStack) rebuild(oldStore, secrets store.Store,
@@ -339,11 +431,9 @@ func (d *DataStack) rebuild(oldStore, secrets store.Store,
 		}
 		return nil, models.NewError("ValidationError", 422, err.Error()), nil
 	}
-	hard, soft := ValidateDataTrackerStore(d.fileRoot, d, secrets, logger)
+	hard, soft := d.Validate(d.fileRoot, secrets, logger)
 	if hard == nil && oldStore != nil {
 		CleanUpStore(oldStore)
-	}
-	if hard != nil {
 	}
 	return d, hard, soft
 }
@@ -446,7 +536,7 @@ func DefaultDataStack(
 		}
 	}
 	if md, ok := backendStore.(store.MetaSaver); ok {
-		data := map[string]string{"Name": "BackingStore", "Description": "Writable backing store", "Version": "user"}
+		data := map[string]string{"Name": "BackingStore", "Description": "Writable backing store", "Version": "0.0.0"}
 		md.SetMetaData(data)
 	}
 	dtStore.writeContent = backendStore
@@ -458,11 +548,8 @@ func DefaultDataStack(
 		}
 		dtStore.localContent = etcStore
 		if md, ok := etcStore.(store.MetaSaver); ok {
-			d := md.MetaData()
-			if _, ok := d["Name"]; !ok {
-				data := map[string]string{"Name": "LocalStore", "Description": "Local Override Store", "Version": "user"}
-				md.SetMetaData(data)
-			}
+			data := map[string]string{"Name": "LocalStore", "Description": "Local Override Store", "Version": "0.0.0"}
+			md.SetMetaData(data)
 		}
 	}
 
@@ -509,14 +596,8 @@ func DefaultDataStack(
 		}
 		dtStore.defaultContent = defaultStore
 		if md, ok := defaultStore.(store.MetaSaver); ok {
-			d := md.MetaData()
-			if _, ok := d["Name"]; !ok {
-				data := map[string]string{"Name": "DefaultStore", "Description": "Initial Default Content", "Version": "user", "Type": "default"}
-				md.SetMetaData(data)
-			} else {
-				d["Type"] = "default"
-				md.SetMetaData(d)
-			}
+			data := map[string]string{"Name": "DefaultStore", "Description": "Initial Default Content", "Version": "0.0.0", "Type": "default"}
+			md.SetMetaData(data)
 		}
 	}
 	return dtStore, dtStore.buildStack(nil, nil, logger)

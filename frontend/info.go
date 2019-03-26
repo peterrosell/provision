@@ -22,6 +22,7 @@ func (f *Frontend) GetInfo(c *gin.Context) (*models.Info, *models.Error) {
 	i := &models.Info{
 		Version:            provision.RSVersion,
 		Id:                 f.DrpIds[0],
+		HaId:               f.DrpIds[2],
 		ApiPort:            f.ApiPort,
 		FilePort:           f.ProvPort,
 		TftpPort:           f.TftpPort,

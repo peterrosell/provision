@@ -577,57 +577,43 @@ func (p *DataTracker) LocalIP(remote net.IP) string {
 
 func (p *DataTracker) regenSecureParams(
 	rt *RequestTracker,
-	hard, soft *models.Error) {
-	p.Debugf("Scanning for params to secure")
-	secure := map[string]struct{}{}
-	for _, obj := range p.objs["params"].Items() {
-		param := obj.(*Param)
+	paramer models.Paramer,
+	hard, soft *models.Error) models.Paramer {
+	params := paramer.GetParams()
+	pubkey, err := rt.PublicKeyFor(paramer)
+	if err != nil {
+		hard.Errorf("Error getting public key for %s:%s: %v", paramer.Prefix(), paramer.Key(), err)
+		return nil
+	}
+	secureParams := map[string]interface{}{}
+	for k, v := range params {
+		pThing := rt.Find("params", k)
+		if pThing == nil {
+			continue
+		}
+		param := AsParam(pThing)
 		if !param.Secure {
 			continue
 		}
-		secure[param.Name] = struct{}{}
-	}
-	for _, m := range models.All() {
-		if _, ok := m.(models.Paramer); !ok {
+		secureV := &models.SecureData{}
+		if err := models.Remarshal(v, secureV); err == nil {
 			continue
 		}
-		for _, obj := range p.objs[m.Prefix()].Items() {
-			paramer := obj.(models.Paramer)
-			params := paramer.GetParams()
-			pubkey, err := rt.PublicKeyFor(obj)
-			if err != nil {
-				hard.Errorf("Error getting public key for %s:%s: %v", obj.Prefix(), obj.Key(), err)
-				continue
-			}
-			secureParams := map[string]interface{}{}
-			for k, v := range params {
-				if _, ok := secure[k]; !ok {
-					continue
-				}
-				secureV := &models.SecureData{}
-				if err := models.Remarshal(v, secureV); err == nil {
-					continue
-				}
-				if err := secureV.Marshal(pubkey, v); err != nil {
-					hard.Errorf("Error marshalling secure data: %v", err)
-					continue
-				}
-				p.Infof("Securing param %s on %s:%s", k, obj.Prefix(), obj.Key())
-				secureParams[k] = secureV
-			}
-			if len(secureParams) == 0 {
-				continue
-			}
-			for k, v := range secureParams {
-				params[k] = v
-			}
-			paramer.SetParams(params)
-			if _, err := rt.Save(paramer); err != nil {
-				hard.Errorf("Error saving %s:%s with secured params: %v", obj.Prefix(), obj.Key(), err)
-				continue
-			}
+		if err := secureV.Marshal(pubkey, v); err != nil {
+			hard.Errorf("Error marshalling secure data: %v", err)
+			continue
 		}
+		p.Infof("Securing param %s on %s:%s", k, paramer.Prefix(), paramer.Key())
+		secureParams[k] = secureV
 	}
+	if len(secureParams) == 0 {
+		return nil
+	}
+	for k, v := range secureParams {
+		params[k] = v
+	}
+	paramer.SetParams(params)
+	return paramer
 }
 
 func (p *DataTracker) reportErrors(prefix string, obj models.Model, hard *models.Error) {
@@ -672,25 +658,57 @@ func (p *DataTracker) reportErrors(prefix string, obj models.Model, hard *models
 func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.Error) {
 	hard = &models.Error{Code: 500, Type: "Failed to load backing objects from cache"}
 	soft = &models.Error{Code: 422, Type: ValidationError}
+	toSave := []store.KeySaver{}
 	p.objs = map[string]*Store{}
 	objs := allKeySavers()
+	// First pass -- just load the objects without validating them
 	for _, obj := range objs {
 		prefix := obj.Prefix()
 		bk := p.Backend.GetSub(prefix)
 		p.objs[prefix] = &Store{backingStore: bk}
-		storeObjs, err := store.List(bk, toBackend(obj, loadRT))
-		if err != nil {
-			// Make fake index to keep others from failing and exploding.
-			res := make([]models.Model, 0)
-			p.objs[prefix].Index = *index.Create(res)
+		keys, err := bk.Keys()
+		res := make([]models.Model, len(keys))
+		if err == nil {
+			tmpl := obj.(store.KeySaver)
+			for i := range keys {
+				v := toBackend(tmpl.New(), loadRT)
+				if err = bk.Load(keys[i], v); err != nil {
+					p.reportErrors(prefix, v, hard)
+				}
+				res[i] = v
+			}
+		} else {
 			p.reportErrors(prefix, obj, hard)
-			continue
 		}
-		res := make([]models.Model, len(storeObjs))
-		for i := range storeObjs {
-			res[i] = models.Model(storeObjs[i])
-			if v, ok := res[i].(models.Validator); ok && v.Useable() {
-				soft.AddError(v.HasError())
+		p.objs[prefix].Index = *index.Create(res)
+	}
+	if hard.ContainsError() {
+		return
+	}
+	// Second pass -- now that everything is loaded, validate them all.
+	for _, obj := range objs {
+		prefix := obj.Prefix()
+		bk := p.Backend.GetSub(prefix)
+		res := loadRT.stores(prefix).Items()
+		for i := range res {
+			if v, ok := res[i].(validator); ok {
+				v.setRT(loadRT)
+			}
+			if v, ok := res[i].(models.Paramer); ok {
+				ts := p.regenSecureParams(loadRT, v, hard, soft)
+				if ts != nil {
+					toSave = append(toSave, ts.(store.KeySaver))
+				}
+			}
+			if v, ok := res[i].(store.LoadHooker); ok {
+				v.OnLoad()
+			}
+			if v, ok := res[i].(models.Validator); ok {
+				if !v.Useable() {
+					hard.AddError(v.HasError())
+				} else {
+					soft.AddError(v.HasError())
+				}
 			}
 		}
 		if prefix == "tasks" {
@@ -717,8 +735,6 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 				}
 			}
 		}
-
-		p.objs[prefix].Index = *index.Create(res)
 		if prefix == "bootenvs" {
 			for _, thing := range p.objs[prefix].Items() {
 				benv := AsBootEnv(thing)
@@ -758,7 +774,12 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 			soft.Errorf("Failed to reload %s: %v", pre, e)
 		}
 	}
-	p.regenSecureParams(loadRT, hard, soft)
+	if !hard.ContainsError() {
+		for _, item := range toSave {
+			_, err := loadRT.Save(item)
+			soft.AddError(err)
+		}
+	}
 	p.loadLicense(loadRT)
 	return
 }
@@ -774,44 +795,6 @@ func (p *DataTracker) GetObjectTypes() []string {
 	}
 	sort.Strings(sobjs)
 	return sobjs
-}
-
-// This must be locked with ALL locks on the source datatracker from the caller.
-func ValidateDataTrackerStore(fileRoot string,
-	backend *DataStack,
-	secrets store.Store,
-	logger logger.Logger) (hard, soft error) {
-	res := &DataTracker{
-		Backend:           backend,
-		Secrets:           secrets,
-		FileRoot:          fileRoot,
-		LogRoot:           "baddir",
-		StaticPort:        1,
-		ApiPort:           2,
-		Logger:            logger,
-		defaultPrefs:      map[string]string{},
-		runningPrefs:      map[string]string{},
-		tokenManager:      NewJwtManager([]byte{}, JwtConfig{Method: jwt.SigningMethodHS256}),
-		prefMux:           &sync.Mutex{},
-		allMux:            &sync.RWMutex{},
-		FS:                NewFS(".", logger),
-		tmplMux:           &sync.Mutex{},
-		GlobalProfileName: "global",
-		thunks:            make([]func(), 0),
-		thunkMux:          &sync.Mutex{},
-		publishers:        &Publishers{},
-		macAddrMap:        map[string]string{},
-		macAddrMux:        &sync.RWMutex{},
-		secretsMux:        &sync.Mutex{},
-	}
-
-	// Load stores.
-	rt := res.Request(logger)
-	rt.AllLocked(func(d Stores) {
-		a, b := res.rebuildCache(rt)
-		hard, soft = a.HasError(), b.HasError()
-	})
-	return
 }
 
 func (p *DataTracker) addStoreType(prefix string, schema interface{}, rt *RequestTracker, soft *models.Error) error {

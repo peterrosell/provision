@@ -14,7 +14,9 @@ fi
 
 if [[ $BASE == tip || $TAG == tip ]] ; then
     Extra="-tip"
-    TAG=$(git describe --tags --abbrev=1000 tip^2)
+    set +e
+    TAG=$(git describe --tags --abbrev=1000 tip^1)
+    set -e
     if [[ $TAG =~ $tag_re ]]; then
         BASE="${BASH_REMATCH[1]}"
         if [[ $AHEAD ]] ; then
@@ -28,6 +30,10 @@ if [[ $BASE == tip || $TAG == tip ]] ; then
     commit=$(git show $BASE | head -1 | awk '{ print $2 }')
     REAL_VER=$(git tag --points-at $commit | grep -v stable)
     TAG="${REAL_VER}-${AHEAD}-g${GITHASH}"
+fi
+
+if [[ $TAG == "tip--g" ]] ; then
+    TAG=tip
 fi
 
 if [[ $GITHASH == "" ]] ; then

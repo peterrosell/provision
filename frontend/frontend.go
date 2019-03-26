@@ -344,10 +344,12 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 			}
 			user := fe.authSource.GetUser(fe, c, string(userpass[0]), string(userpass[1]))
 			if user == nil {
+				fe.rt(c).Auditf("Failed Authenticated (no user) user %s from %s", userpass[0], c.ClientIP())
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
 			if !user.CheckPassword(string(userpass[1])) {
+				fe.rt(c).Auditf("Failed Authenticated (bad password) user %s from %s", userpass[0], c.ClientIP())
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
@@ -356,7 +358,7 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 		} else if hdrParts[0] == "Bearer" {
 			t, err := fe.dt.GetToken(string(hdrParts[1]))
 			if err != nil {
-				fe.l(c).Warnf("No DRP authentication token from %s", c.ClientIP())
+				fe.l(c).Auditf("No DRP authentication token from %s", c.ClientIP())
 				c.Header("WWW-Authenticate", "dr-provision")
 				c.AbortWithStatus(http.StatusForbidden)
 				return
@@ -402,6 +404,14 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		userString := token.GrantorClaims.UserId
+		if userString == "" {
+			userString = token.GrantorClaims.MachineUuid
+		}
+		if userString == "" {
+			userString = "Unknown User"
+		}
+		fe.rt(c).Auditf("Failed Authenticated user %s from %s", userString, c.ClientIP())
 		err := &models.Error{
 			Type: "AUTH",
 			Code: http.StatusForbidden,
