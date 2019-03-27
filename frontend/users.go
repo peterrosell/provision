@@ -334,7 +334,7 @@ func (f *Frontend) InitUserApi() {
 			if !f.assureSimpleAuth(c, "users", "token", userName) {
 				return
 			}
-			claim.AddSecrets(grantorSecret, userSecret, "")
+			claim.AddSecrets(userSecret, grantorSecret, "")
 
 			if t, err := f.dt.SealClaims(claim); err != nil {
 				ne, ok := err.(*models.Error)
