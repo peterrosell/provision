@@ -31,14 +31,16 @@ function got_trap() {
   echo ""
   echo "UNMOUNT:  $UNMOUNT"
   echo " REMOVE:  rm -rf $BLD.*"
+  GOT_TRAP="yes"
 }
 
 function cleanup(){
+  [[ -n "$GOT_TRAP" ]] && exit
   echo "DRP Contents created in:  $BLD"
   if mount | grep -q "$ISO_MNT"
   then
     [[ -n "$UNMOUNT" ]] && echo "Unmounting ISO '$ISO'"
-    [[ -n "$UNMOUNT" ]] && $UNMOUNT
+    [[ -n "$UNMOUNT" ]] && $UNMOUNT && rmdir $ISO_MNT
   fi
 }
 
@@ -118,7 +120,43 @@ case $(uname -s) in
   *) xiterr 1 "Unsupported system type '$(uname -s)'" ;;
 esac
 
+# I regret relying on vendors to add appropriate metadata in their
+# ISO build pipeline...
+
+# some vendors seem to wontonly inject spaces in to their
+# ISO meta data fields ... thanks guys
+TITLE=$(echo $TITLE | tr -d '[:space:]')
+
+# CISCO FIXUPS
+# fixup title because Cisco doesn't know how to burn an ISO
+# with decent metadata information
+if echo "$ISO" | grep -qi cisco
+then
+  TITLE=$(echo $TITLE | sed 's/custo$/custom/')
+  { echo "$TITLE" | grep -qi "cisco"; } || TITLE="$TITLE"
+  echo "Changing TITLE because ... CISCO ... to: $TITLE"
+fi
+# since they alco can't spell, fix mispellings in ISO metadata
+
+# HITACHI FIXUPS
+# add specific HItachi product line info and "hitachi" since they
+# don't specity that in the metadata
+if echo "$ISO" | grep -qi hitachi
+then
+  HIT=$(echo "$ISO" | sed 's/^.*hitachi\(.*\).iso/hitachi\1/g')
+  TITLE=$(echo $TITLE | sed 's/cust$/custom/')
+  { echo "$TITLE" | grep -qi "hitachi"; } || TITLE="$TITLE-$HIT"
+  echo "Changing TITLE because ... HITACHI ... to: $TITLE"
+fi
+
+# generic fixups
+[[ "$TITLE" =~ esxi-.* ]] || TITLE="esxi-$TITLE"
+TITLE=$(echo $TITLE | sed 's/^[-_~\.*\*]*\(.*\)[-_~\.*\*]/\1/')
+
+BUNDLE="$BLD/vmware-$TITLE.yaml"
+
 echo "Setting DRP Content build directory to:  $BLD"
+echo "FINAL DRP Content TITLE set to:  $TITLE"
 
 ###
 #  Build our content meta info files
@@ -155,15 +193,15 @@ check_files $ISO_MNT/mboot.c32 $ISO_MNT/boot.cfg
 T_YAML="$BLD/bootenvs/$TITLE.yaml"
 cat <<BENV > $T_YAML
 ---
-Name: esxi-$TITLE-install
-Description: Install BootEnv for ESXi 6.7.0update1
+Name: $TITLE-install
+Description: Install BootEnv for $TITLE
 Documentation: ""
 Meta:
   color: yellow
   icon: zip
   title: RackN Content
 OS:
-  Name: esxi-$TITLE
+  Name: $TITLE
   Family: vmware
   Codename: esxi
   Version: custom
@@ -192,7 +230,7 @@ Templates:
   - ID: esxi-install-py3.ks.tmpl
     Name: compute.ks
     Path: '{{.Machine.Path}}/compute.ks'
-  - ID: esxi-$TITLE.boot.cfg.tmpl
+  - ID: $TITLE.boot.cfg.tmpl
     Name: boot.cfg
     Path: '{{.Env.PathFor "tftp" ""}}/{{.Machine.Path}}/boot.cfg'
 BENV
@@ -207,7 +245,7 @@ MODULES=$(grep "^modules=" $ISO_MNT/boot.cfg| sed -e 's:^modules=::' -e 's:/::g'
 MODULES=$(echo "$MODULES" | sed 's: --- tools.t00:{{ if eq (.Param \"esxi/skip-tools\") false -}} --- tools.t00{{end}}:')
 
 check_files $ISO_MNT/$KERNEL
-B_TMPL="$BLD/templates/esxi-$TITLE.boot.cfg.tmpl"
+B_TMPL="$BLD/templates/$TITLE.boot.cfg.tmpl"
 cat <<BOOT > $B_TMPL
 bootstate=0
 title=Loading ESXi installer for $TITLE
@@ -225,11 +263,11 @@ echo "Built ESXi boot.cfg template file '$B_TMPL'"
 ###
 #  build the stage for our workflow
 ###
-S_YAML="$BLD/stages/esxi-$TITLE.yaml"
+S_YAML="$BLD/stages/$TITLE.yaml"
 cat <<STAGE > $S_YAML
 ---
-Name: esxi-$TITLE-install
-BootEnv: esxi-$TITLE-install
+Name: $TITLE-install
+BootEnv: $TITLE-install
 Description: "Stage for custom ESXi $TITLE"
 ReadOnly: true
 Reboot: false
@@ -249,10 +287,10 @@ echo "Built stage yaml file '$S_YAML'"
 ###
 #  build the workflow for our installer
 ###
-W_YAML="$BLD/workflows/esxi-$TITLE-install.yaml"
+W_YAML="$BLD/workflows/$TITLE-install.yaml"
 cat <<WF > $W_YAML
 ---
-Name: esxi-$TITLE-install
+Name: $TITLE-install
 Description: "Install custom ESXi $TITLE"
 Documentation: ""
 Meta:
@@ -261,7 +299,7 @@ Meta:
   title: RackN Content
 ReadOnly: true
 Stages:
-  - esxi-$TITLE-install
+  - $TITLE-install
   - finish-install
   - complete
 WF
@@ -273,9 +311,12 @@ DRPCLI=$(which drpcli) || true
 if [[ -n "$DRPCLI" ]]
 then
   echo "Running 'drpcli' bundle operation ... "
-  drpcli contents bundle ./$TITLE.yaml
+  drpcli contents bundle $BUNDLE
 else
   echo "No 'drpcli' binary found in PATH ('$PATH')"
   echo "Not running 'drpcli contents bundle...' operation."
+  echo ""
+  echo "EXAMPLE BUNDLE:  drpcli contents bundle $BUNDLE"
 fi
+echo "EXAMPLE UPLOAD:  drpcli contents upload $BUNDLE"
 
