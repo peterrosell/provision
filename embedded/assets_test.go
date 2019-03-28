@@ -22,6 +22,7 @@ func TestExtractAssets(t *testing.T) {
 	files := []string{
 		"ALL-LICENSE",
 		"explode_iso.sh",
+		"make-esxi-bootenv.sh",
 		"files/jq",
 		"files/drpcli.amd64.linux",
 		"files/drpcli.amd64.windows",

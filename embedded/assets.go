@@ -70,7 +70,8 @@ func ExtractAssets(replaceRoot, fileRoot string) error {
 		"drpcli.amd64.windows": "files",
 
 		// General ISO things
-		"explode_iso.sh": "",
+		"explode_iso.sh":       "",
+		"make-esxi-bootenv.sh": "",
 
 		// Sledgehammer things
 		"jq": "files",
