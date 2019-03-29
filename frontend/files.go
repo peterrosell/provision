@@ -80,7 +80,7 @@ func (f *Frontend) InitFileApi() {
 			if pathPart == "" {
 				pathPart = "/"
 			}
-			if !f.assureSimpleAuth(c, "files", "list", pathPart) {
+			if !f.assureSimpleAuth(c, f.rt(c), "files", "list", pathPart) {
 				return
 			}
 			ents, err := ioutil.ReadDir(path.Join(f.FileRoot, "files", path.Clean(pathPart)))
@@ -118,7 +118,7 @@ func (f *Frontend) InitFileApi() {
 	//       404: ErrorResponse
 	f.ApiGroup.GET("/files/*path",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "files", "get", c.Param(`path`)) {
+			if !f.assureSimpleAuth(c, f.rt(c), "files", "get", c.Param(`path`)) {
 				return
 			}
 			fileName := path.Join(f.FileRoot, `files`, path.Clean(c.Param(`path`)))
@@ -167,7 +167,7 @@ func (f *Frontend) InitFileApi() {
 				Type:  c.Request.Method,
 			}
 			name := c.Param(`path`)
-			if !f.assureSimpleAuth(c, "files", "post", name) {
+			if !f.assureSimpleAuth(c, f.rt(c), "files", "post", name) {
 				return
 			}
 			var copied int64
@@ -299,7 +299,7 @@ func (f *Frontend) InitFileApi() {
 				Key:   name,
 				Type:  c.Request.Method,
 			}
-			if !f.assureSimpleAuth(c, "files", "delete", name) {
+			if !f.assureSimpleAuth(c, f.rt(c), "files", "delete", name) {
 				return
 			}
 			fileName := path.Join(f.FileRoot, `files`, name)

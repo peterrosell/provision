@@ -29,7 +29,8 @@ func (f *Frontend) InitEventApi() {
 	//       422: ErrorResponse
 	f.ApiGroup.POST("/events",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "events", "post", "*") {
+			rt := f.rt(c)
+			if !f.assureSimpleAuth(c, rt, "events", "post", "*") {
 				return
 			}
 			event := models.Event{}
@@ -37,7 +38,7 @@ func (f *Frontend) InitEventApi() {
 				return
 			}
 
-			if err := f.rt(c).PublishEvent(&event); err != nil {
+			if err := rt.PublishEvent(&event); err != nil {
 				be, ok := err.(*models.Error)
 				if ok {
 					c.JSON(be.Code, be)

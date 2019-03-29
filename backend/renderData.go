@@ -683,7 +683,7 @@ func (r *RenderData) GenerateToken() string {
 			ttl = time.Second * time.Duration(mttl)
 		}
 		t, _ = NewClaim(r.Machine.Key(), grantor, ttl).
-			AddRawClaim("machines", "*", r.Machine.Key()).
+			AddRawClaim("machines", "get, actions, update, patch, action, getSecure, updateSecure", r.Machine.Key()).
 			AddRawClaim("params", "get", "*").
 			AddRawClaim("stages", "get", "*").
 			AddRawClaim("jobs", "create", r.Machine.Key()).
@@ -720,7 +720,7 @@ func (r *RenderData) GenerateInfiniteToken() string {
 
 	ttl := time.Hour * 24 * 7 * 52 * 3
 	t, _ := NewClaim(r.Machine.Key(), grantor, ttl).
-		AddRawClaim("machines", "*", r.Machine.Key()).
+		AddRawClaim("machines", "get, actions, update, patch, action, getSecure, updateSecure", r.Machine.Key()).
 		AddRawClaim("params", "get", "*").
 		AddRawClaim("stages", "get", "*").
 		AddRawClaim("jobs", "create", r.Machine.Key()).

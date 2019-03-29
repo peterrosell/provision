@@ -36,7 +36,7 @@ func (f *Frontend) InitPrefApi() {
 	//        403: NoContentResponse
 	f.ApiGroup.GET("/prefs",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "prefs", "list", "") {
+			if !f.assureSimpleAuth(c, f.rt(c), "prefs", "list", "") {
 				return
 			}
 			c.JSON(http.StatusOK, f.dt.Prefs())
@@ -66,6 +66,8 @@ func (f *Frontend) InitPrefApi() {
 				Code:  http.StatusBadRequest,
 			}
 			restartPlugins := false
+			obj := &backend.Pref{}
+			rt := f.rt(c, obj.Locks("update")...)
 			// Filter unknown preferences here
 			for k := range prefs {
 				if k == "baseTokenSecret" || k == "systemGrantorSecret" {
@@ -73,7 +75,7 @@ func (f *Frontend) InitPrefApi() {
 				}
 				switch k {
 				case "baseTokenSecret":
-					if !f.assureSimpleAuth(c, "prefs", "post", k) {
+					if !f.assureSimpleAuth(c, rt, "prefs", "post", k) {
 						return
 					}
 					if len(prefs[k]) != 32 {
@@ -81,11 +83,11 @@ func (f *Frontend) InitPrefApi() {
 					}
 				case "defaultBootEnv", "unknownBootEnv", "defaultStage", "defaultWorkflow", "systemGrantorSecret",
 					"debugRenderer", "debugDhcp", "debugBootEnv", "debugFrontend", "debugPlugins", "logLevel":
-					if !f.assureSimpleAuth(c, "prefs", "post", k) {
+					if !f.assureSimpleAuth(c, rt, "prefs", "post", k) {
 						return
 					}
 				case "knownTokenTimeout", "unknownTokenTimeout":
-					if !f.assureSimpleAuth(c, "prefs", "post", k) {
+					if !f.assureSimpleAuth(c, rt, "prefs", "post", k) {
 						return
 					}
 					if _, e := strconv.Atoi(prefs[k]); e != nil {
@@ -96,8 +98,6 @@ func (f *Frontend) InitPrefApi() {
 				}
 			}
 			if !err.ContainsError() {
-				obj := &backend.Pref{}
-				rt := f.rt(c, obj.Locks("update")...)
 				rt.Do(func(d backend.Stores) {
 					err.AddError(f.dt.SetPrefs(rt, prefs))
 				})

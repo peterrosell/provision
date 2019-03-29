@@ -257,12 +257,12 @@ func (f *Frontend) InitPluginApi() {
 			if !assureDecode(c, b) {
 				return
 			}
-			if !f.assureSimpleAuth(c, b.Prefix(), "create", "") {
+			rt := f.rt(c, b.Locks("create")...)
+			if !f.assureSimpleAuth(c, rt, b.Prefix(), "create", "") {
 				return
 			}
 			var err error
 			var res models.Model
-			rt := f.rt(c, b.Locks("create")...)
 			rt.Do(func(d backend.Stores) {
 				if _, err = rt.Create(b); err != nil {
 					return

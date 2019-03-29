@@ -331,7 +331,7 @@ func (f *Frontend) InitUserApi() {
 				c.JSON(err.Code, err)
 				return
 			}
-			if !f.assureSimpleAuth(c, "users", "token", userName) {
+			if !f.assureSimpleAuth(c, rt, "users", "token", userName) {
 				return
 			}
 			claim.AddSecrets(userSecret, grantorSecret, "")
@@ -411,7 +411,9 @@ func (f *Frontend) InitUserApi() {
 	//       422: ErrorResponse
 	f.ApiGroup.PUT("/users/:name/password",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "users", "password", c.Param("name")) {
+			ref := &backend.User{}
+			rt := f.rt(c, ref.Locks("update")...)
+			if !f.assureSimpleAuth(c, rt, "users", "password", c.Param("name")) {
 				return
 			}
 			var userPassword models.UserPassword
@@ -420,8 +422,6 @@ func (f *Frontend) InitUserApi() {
 			}
 			var user *models.User
 			var err *models.Error
-			ref := &backend.User{}
-			rt := f.rt(c, ref.Locks("update")...)
 			rt.Do(func(d backend.Stores) {
 				res := &models.Error{
 					Type:  c.Request.Method,

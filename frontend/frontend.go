@@ -50,7 +50,7 @@ type Lockable interface {
 type authBlob struct {
 	f                           *Frontend
 	claim                       *backend.DrpCustomClaims
-	claimsList                  []models.Claims
+	claimsList                  models.ClaimsList
 	tenantMembers               map[string]map[string]struct{}
 	currentUser, currentGrantor *models.User
 	currentMachine              *models.Machine
@@ -135,12 +135,7 @@ func (a *authBlob) Find(rt *backend.RequestTracker, prefix, key string) models.M
 }
 
 func (a *authBlob) matchClaim(wanted models.Claims) bool {
-	for i := range a.claimsList {
-		if a.claimsList[i].Contains(wanted) {
-			return true
-		}
-	}
-	return false
+	return a.claimsList.Match(wanted)
 }
 
 func (a *authBlob) isLicensed(scope, action string) bool {
@@ -208,11 +203,13 @@ func (f *Frontend) Find(c *gin.Context, rt *backend.RequestTracker, prefix, key 
 	return res
 }
 
-func (f *Frontend) rt(c *gin.Context, locks ...string) *backend.RequestTracker {
+func (f *Frontend) rt(c *gin.Context, locks ...string) (res *backend.RequestTracker) {
 	if c != nil {
-		return f.dt.Request(f.l(c), locks...)
+		res = f.dt.Request(f.l(c), locks...)
+	} else {
+		res = f.dt.Request(f.Logger, locks...)
 	}
-	return f.dt.Request(f.Logger, locks...)
+	return
 }
 
 type AuthSource interface {
@@ -693,14 +690,16 @@ func assureContentType(c *gin.Context, ct string) bool {
 }
 
 func (f *Frontend) assureAuth(c *gin.Context,
+	rt *backend.RequestTracker,
 	wantsClaims models.Claims,
 	scope, action, specific string) bool {
 	auth := f.getAuth(c)
+	rt.Claims = auth.claimsList
 	if auth.matchClaim(wantsClaims) && auth.isLicensed(scope, action) {
 		f.Logger.Tracef("assureAuth: claims '%s:%s:%s' granted", scope, action, specific)
 		return true
 	}
-	f.rt(c).Auditf("Failed auth '%s' '%s' '%s' - %s",
+	rt.Auditf("Failed auth '%s' '%s' '%s' - %s",
 		scope, action, specific, c.ClientIP())
 	var res *models.Error
 	switch action {
@@ -731,12 +730,13 @@ func (f *Frontend) assureAuth(c *gin.Context,
 //
 // THIS MUST NOT BE CALLED UNDER LOCKS!
 //
-func (f *Frontend) assureSimpleAuth(c *gin.Context, scope, action, specific string) bool {
+func (f *Frontend) assureSimpleAuth(c *gin.Context, rt *backend.RequestTracker, scope, action, specific string) bool {
 	wantsClaims := models.MakeRole("", scope, action, specific).Compile()
-	return f.assureAuth(c, wantsClaims, scope, action, specific)
+	return f.assureAuth(c, rt, wantsClaims, scope, action, specific)
 }
 
 func (f *Frontend) assureAuthUpdate(c *gin.Context,
+	rt *backend.RequestTracker,
 	scope, action, specific string,
 	patch jsonpatch2.Patch) bool {
 	claims := []string{}
@@ -752,15 +752,15 @@ func (f *Frontend) assureAuthUpdate(c *gin.Context,
 		}
 	}
 	wantsClaims := models.MakeRole("", claims...).Compile()
-	return f.assureAuth(c, wantsClaims, scope, action, specific)
+	return f.assureAuth(c, rt, wantsClaims, scope, action, specific)
 }
 
 func (f *Frontend) wantDecodeSecure(c *gin.Context) bool {
 	return c.Query("decode") == "true"
 }
 
-func (f *Frontend) assureDecodeAuth(c *gin.Context, prefix, key string) bool {
-	return f.assureSimpleAuth(c, prefix, "getSecure", key)
+func (f *Frontend) assureDecodeAuth(c *gin.Context, rt *backend.RequestTracker, prefix, key string) bool {
+	return f.assureSimpleAuth(c, rt, prefix, "getSecure", key)
 }
 
 func assureDecode(c *gin.Context, val interface{}) bool {
@@ -1027,7 +1027,8 @@ func (f *Frontend) list(c *gin.Context, ref store.KeySaver, statsOnly bool) {
 		f.emptyList(c, statsOnly)
 		return
 	}
-	if f.wantDecodeSecure(c) && !f.assureDecodeAuth(c, ref.Prefix(), "") {
+	rt := f.rt(c, ref.(Lockable).Locks("get")...)
+	if f.wantDecodeSecure(c) && !f.assureDecodeAuth(c, rt, ref.Prefix(), "") {
 		return
 	}
 	res := &models.Error{
@@ -1038,7 +1039,6 @@ func (f *Frontend) list(c *gin.Context, ref store.KeySaver, statsOnly bool) {
 	var err error
 	slim := c.Query("slim")
 
-	rt := f.rt(c, ref.(Lockable).Locks("get")...)
 	rt.Do(func(d backend.Stores) {
 		var filters []index.Filter
 		filters, err = f.processFilters(rt, d, ref, c.Request.URL.Query())
@@ -1110,10 +1110,10 @@ func (f *Frontend) Fetch(c *gin.Context, ref store.KeySaver, key string) {
 		return
 	}
 	aref, _ := res.(backend.AuthSaver)
-	if !f.assureSimpleAuth(c, prefix, "get", aref.AuthKey()) {
+	if !f.assureSimpleAuth(c, rt, prefix, "get", aref.AuthKey()) {
 		return
 	}
-	if f.wantDecodeSecure(c) && !f.assureDecodeAuth(c, prefix, key) {
+	if f.wantDecodeSecure(c) && !f.assureDecodeAuth(c, rt, prefix, key) {
 		return
 	}
 	rt.Do(func(_ backend.Stores) {
@@ -1123,17 +1123,17 @@ func (f *Frontend) Fetch(c *gin.Context, ref store.KeySaver, key string) {
 }
 
 func (f *Frontend) create(c *gin.Context, val store.KeySaver) {
-	if !f.assureSimpleAuth(c, val.Prefix(), "create", "") {
-		return
-	}
-	var err error
-	var res models.Model
 	tenant := f.getAuth(c).currentTenant
 	locks := val.(Lockable).Locks("create")
 	if tenant != "" {
 		locks = append(locks, "tenants")
 	}
 	rt := f.rt(c, locks...)
+	if !f.assureSimpleAuth(c, rt, val.Prefix(), "create", "") {
+		return
+	}
+	var err error
+	var res models.Model
 	rt.Do(func(d backend.Stores) {
 		_, err = rt.Create(val)
 		if err == nil {
@@ -1187,7 +1187,7 @@ func (f *Frontend) Patch(c *gin.Context, ref store.KeySaver, key string) {
 		return
 	}
 	authKey = tref.(backend.AuthSaver).AuthKey()
-	if authKey != "" && !f.assureAuthUpdate(c, ref.Prefix(), "patch", authKey, patch) {
+	if authKey != "" && !f.assureAuthUpdate(c, rt, ref.Prefix(), "patch", authKey, patch) {
 		return
 	}
 
@@ -1240,7 +1240,7 @@ func (f *Frontend) Update(c *gin.Context, ref store.KeySaver, key string) {
 	if err != nil {
 		jsonError(c, err, http.StatusBadRequest, "")
 	}
-	if !f.assureAuthUpdate(c, ref.Prefix(), "update", authKey, patch) {
+	if !f.assureAuthUpdate(c, rt, ref.Prefix(), "update", authKey, patch) {
 		return
 	}
 	var res models.Model
@@ -1273,7 +1273,7 @@ func (f *Frontend) Remove(c *gin.Context, ref store.KeySaver, key string) {
 	if fok, mok := f.processRequestWithForwarding(c, res, nil); fok || mok {
 		return
 	}
-	if !f.assureSimpleAuth(c, ref.Prefix(), "delete", res.(backend.AuthSaver).AuthKey()) {
+	if !f.assureSimpleAuth(c, rt, ref.Prefix(), "delete", res.(backend.AuthSaver).AuthKey()) {
 		return
 	}
 	rt.Do(func(d backend.Stores) {

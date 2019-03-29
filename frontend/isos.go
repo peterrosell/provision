@@ -76,7 +76,7 @@ func (f *Frontend) InitIsoApi() {
 	//       404: ErrorResponse
 	f.ApiGroup.GET("/isos",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "isos", "list", "") {
+			if !f.assureSimpleAuth(c, f.rt(c), "isos", "list", "") {
 				return
 			}
 			ents, err := ioutil.ReadDir(path.Join(f.FileRoot, "isos"))
@@ -117,7 +117,7 @@ func (f *Frontend) InitIsoApi() {
 	//       404: ErrorResponse
 	f.ApiGroup.GET("/isos/:name",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "isos", "get", c.Param(`name`)) {
+			if !f.assureSimpleAuth(c, f.rt(c), "isos", "get", c.Param(`name`)) {
 				return
 			}
 			fileName := path.Join(f.FileRoot, `isos`, path.Clean(c.Param(`name`)))
@@ -157,7 +157,7 @@ func (f *Frontend) InitIsoApi() {
 	//       507: ErrorResponse
 	f.ApiGroup.POST("/isos/:name",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "isos", "post", c.Param(`name`)) {
+			if !f.assureSimpleAuth(c, f.rt(c), "isos", "post", c.Param(`name`)) {
 				return
 			}
 			uploadIso(f, c, f.FileRoot, c.Param(`name`), f.dt)
@@ -177,7 +177,7 @@ func (f *Frontend) InitIsoApi() {
 	f.ApiGroup.DELETE("/isos/:name",
 		func(c *gin.Context) {
 			name := c.Param(`name`)
-			if !f.assureSimpleAuth(c, "isos", "delete", name) {
+			if !f.assureSimpleAuth(c, f.rt(c), "isos", "delete", name) {
 				return
 			}
 			isoName := path.Join(f.FileRoot, `isos`, path.Base(name))

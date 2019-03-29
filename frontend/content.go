@@ -177,12 +177,12 @@ func (f *Frontend) InitContentApi() {
 	//       500: ErrorResponse
 	f.ApiGroup.GET("/contents",
 		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, "contents", "list", "") {
+			rt := f.rt(c)
+			if !f.assureSimpleAuth(c, rt, "contents", "list", "") {
 				return
 			}
 
 			contents := []*models.ContentSummary{}
-			rt := f.rt(c)
 			rt.AllLocked(func(d backend.Stores) {
 				for _, st := range f.dt.Backend.Layers() {
 					cs := buildSummary(st)
@@ -212,10 +212,10 @@ func (f *Frontend) InitContentApi() {
 	f.ApiGroup.GET("/contents/:name",
 		func(c *gin.Context) {
 			name := c.Param(`name`)
-			if !f.assureSimpleAuth(c, "contents", "get", name) {
+			rt := f.rt(c)
+			if !f.assureSimpleAuth(c, rt, "contents", "get", name) {
 				return
 			}
-			rt := f.rt(c)
 			rt.AllLocked(func(d backend.Stores) {
 				if cst := f.findContent(name); cst == nil {
 					res := &models.Error{
@@ -259,11 +259,11 @@ func (f *Frontend) InitContentApi() {
 			if !assureDecode(c, content) {
 				return
 			}
-			if !f.assureSimpleAuth(c, "contents", "create", content.AuthKey()) {
+			rt := f.rt(c)
+			if !f.assureSimpleAuth(c, rt, "contents", "create", content.AuthKey()) {
 				return
 			}
 			name := content.Meta.Name
-			rt := f.rt(c)
 			res := &models.Error{
 				Model: "contents",
 				Key:   name,
@@ -327,7 +327,8 @@ func (f *Frontend) InitContentApi() {
 			if !assureDecode(c, content) {
 				return
 			}
-			if !f.assureSimpleAuth(c, "contents", "update", content.AuthKey()) {
+			rt := f.rt(c)
+			if !f.assureSimpleAuth(c, rt, "contents", "update", content.AuthKey()) {
 				return
 			}
 			name := c.Param(`name`)
@@ -343,7 +344,6 @@ func (f *Frontend) InitContentApi() {
 				c.JSON(http.StatusBadRequest, res)
 				return
 			}
-			rt := f.rt(c)
 			rt.AllLocked(func(d backend.Stores) {
 				if cst := f.findContent(name); cst == nil {
 					res.Code = http.StatusNotFound
@@ -397,7 +397,8 @@ func (f *Frontend) InitContentApi() {
 	f.ApiGroup.DELETE("/contents/:name",
 		func(c *gin.Context) {
 			name := c.Param(`name`)
-			if !f.assureSimpleAuth(c, "contents", "delete", name) {
+			rt := f.rt(c)
+			if !f.assureSimpleAuth(c, rt, "contents", "delete", name) {
 				return
 			}
 			res := &models.Error{
@@ -407,7 +408,6 @@ func (f *Frontend) InitContentApi() {
 				Code:  http.StatusNotFound,
 			}
 
-			rt := f.rt(c)
 			rt.AllLocked(func(d backend.Stores) {
 				cst := f.findContent(name)
 				if cst == nil {
