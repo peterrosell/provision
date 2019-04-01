@@ -214,20 +214,22 @@ func (l *Lease) Validate() {
 	l.AddError(index.CheckUnique(l, idx))
 	leases := AsLeases(idx)
 	validateIP4(l, l.Addr)
-	if l.Token == "" {
-		l.Errorf("Lease Token cannot be empty!")
-	}
-	if l.Strategy == "" {
-		l.Errorf("Lease Strategy cannot be empty!")
-	}
-	for i := range leases {
-		if leases[i].Addr.Equal(l.Addr) {
-			continue
+	if l.State != "INVALID" {
+		if l.Token == "" {
+			l.Errorf("Lease Token cannot be empty!")
 		}
-		if leases[i].Token == l.Token &&
-			leases[i].Strategy == l.Strategy {
-			l.Errorf("Lease %s alreay has Strategy %s: Token %s", leases[i].Key(), l.Strategy, l.Token)
-			break
+		if l.Strategy == "" {
+			l.Errorf("Lease Strategy cannot be empty!")
+		}
+		for i := range leases {
+			if leases[i].Addr.Equal(l.Addr) {
+				continue
+			}
+			if leases[i].Token == l.Token &&
+				leases[i].Strategy == l.Strategy {
+				l.Errorf("Lease %s alreay has Strategy %s: Token %s", leases[i].Key(), l.Strategy, l.Token)
+				break
+			}
 		}
 	}
 	l.SetValid()
