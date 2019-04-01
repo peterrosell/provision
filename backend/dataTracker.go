@@ -700,6 +700,12 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 					toSave = append(toSave, ts.(store.KeySaver))
 				}
 			}
+			if prefix == "leases" {
+				lease := AsLease(res[i])
+				if lease.State == "PROBE" {
+					lease.Invalidate()
+				}
+			}
 			if v, ok := res[i].(store.LoadHooker); ok {
 				v.OnLoad()
 			}
