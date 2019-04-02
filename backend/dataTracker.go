@@ -733,8 +733,8 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 						if obj.HasFeature("original-exit-codes") {
 							obj.RemoveFeature("sane-exit-codes")
 						}
-						if !obj.HasFeature("sane-exit-codes") {
-							obj.AddFeature("original-exit-codes")
+						if !obj.HasFeature("original-exit-codes") {
+							obj.AddFeature("sane-exit-codes")
 						}
 						res[i] = obj
 					}
