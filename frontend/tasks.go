@@ -220,7 +220,7 @@ func (f *Frontend) InitTaskApi() {
 			}
 			// All newly created tasks are assumed to have sane-exit-codes if not specified.
 			b.Fill()
-			if !b.HasFeature("original-exit-codes") && !b.HasFeature("sane-exit-codes") {
+			if !b.HasFeature("original-exit-codes") {
 				b.AddFeature("sane-exit-codes")
 			}
 			f.create(c, b)

@@ -171,8 +171,8 @@ func (t *Task) Validate() {
 // This is used to abort saving invalid objects.
 func (t *Task) BeforeSave() error {
 	t.Validate()
-	if !t.HasFeature("sane-exit-codes") {
-		t.AddFeature("original-exit-codes")
+	if !t.HasFeature("original-exit-codes") {
+		t.AddFeature("sane-exit-codes")
 	}
 	if !t.Useable() {
 		return t.MakeError(422, ValidationError, t)
