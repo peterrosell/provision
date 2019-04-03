@@ -47,6 +47,7 @@ import (
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/frontend"
 	"github.com/digitalrebar/provision/midlayer"
+	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/provision/utils"
 	"github.com/digitalrebar/store"
 )
@@ -126,25 +127,17 @@ func mkdir(d string) error {
 	return os.MkdirAll(d, 0755)
 }
 
-// Server takes the start up options and runs a DRP server.  This function
-// will not return unless an error or shutdown signal is received.
-func Server(cOpts *ProgOpts) {
-	localLogger := log.New(os.Stderr, "dr-provision", log.LstdFlags|log.Lmicroseconds|log.LUTC)
-	localLogger.Fatalf(server(localLogger, cOpts))
-}
-
-func server(localLogger *log.Logger, cOpts *ProgOpts) string {
-	onlyICanReadThings()
+func processArgs(localLogger *log.Logger, cOpts *ProgOpts) {
 	var err error
 
 	if cOpts.VersionFlag {
-		return fmt.Sprintf("Version: %s", provision.RSVersion)
+		localLogger.Fatalf("Version: %s", provision.RSVersion)
 	}
 	localLogger.Printf("Version: %s\n", provision.RSVersion)
 
 	// Make base root dir
 	if err = mkdir(cOpts.BaseRoot); err != nil {
-		return fmt.Sprintf("Error creating required directory %s: %v", cOpts.BaseRoot, err)
+		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.BaseRoot, err)
 	}
 
 	// Make other dirs as needed - adjust the dirs as well.
@@ -167,7 +160,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		cOpts.PluginCommRoot = filepath.Join(cOpts.BaseRoot, cOpts.PluginCommRoot)
 	}
 	if len(cOpts.PluginCommRoot) > 70 {
-		return fmt.Sprintf("PluginCommRoot Must be less than 70 characters")
+		localLogger.Fatalf("PluginCommRoot Must be less than 70 characters")
 	}
 	if cOpts.BackEndType == "directory" && strings.IndexRune(cOpts.DataRoot, filepath.Separator) != 0 {
 		cOpts.DataRoot = filepath.Join(cOpts.BaseRoot, cOpts.DataRoot)
@@ -188,79 +181,171 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		cOpts.LocalUI = filepath.Join(cOpts.BaseRoot, cOpts.LocalUI)
 	}
 	if err = mkdir(path.Join(cOpts.FileRoot, "isos")); err != nil {
-		return fmt.Sprintf("Error creating required directory %s: %v", cOpts.FileRoot, err)
+		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.FileRoot, err)
 	}
 	if err = mkdir(path.Join(cOpts.FileRoot, "files")); err != nil {
-		return fmt.Sprintf("Error creating required directory %s: %v", cOpts.FileRoot, err)
+		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.FileRoot, err)
 	}
 	if err = mkdir(cOpts.ReplaceRoot); err != nil {
-		return fmt.Sprintf("Error creating required directory %s: %v", cOpts.ReplaceRoot, err)
+		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.ReplaceRoot, err)
 	}
 	if err = mkdir(cOpts.PluginRoot); err != nil {
-		return fmt.Sprintf("Error creating required directory %s: %v", cOpts.PluginRoot, err)
+		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.PluginRoot, err)
 	}
 	if err = mkdir(cOpts.PluginCommRoot); err != nil {
-		return fmt.Sprintf("Error creating required directory %s: %v", cOpts.PluginCommRoot, err)
+		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.PluginCommRoot, err)
 	}
 	if cOpts.BackEndType == "directory" {
 		if err = mkdir(cOpts.DataRoot); err != nil {
-			return fmt.Sprintf("Error creating required directory %s: %v", cOpts.DataRoot, err)
+			localLogger.Fatalf("Error creating required directory %s: %v", cOpts.DataRoot, err)
 		}
 	}
 	if err = mkdir(cOpts.LogRoot); err != nil {
-		return fmt.Sprintf("Error creating required directory %s: %v", cOpts.LogRoot, err)
+		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.LogRoot, err)
 	}
 	if err = mkdir(cOpts.LocalUI); err != nil {
-		return fmt.Sprintf("Error creating required directory %s: %v", cOpts.LocalUI, err)
+		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.LocalUI, err)
 	}
 	if err = mkdir(cOpts.SaasContentRoot); err != nil {
-		return fmt.Sprintf("Error creating required directory %s: %v", cOpts.SaasContentRoot, err)
+		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.SaasContentRoot, err)
 	}
 	if cOpts.SecretsType == "directory" {
 		if err = mkdir(cOpts.SecretsRoot); err != nil {
-			return fmt.Sprintf("Error creating required directory %s: %v", cOpts.SecretsRoot, err)
+			localLogger.Fatalf("Error creating required directory %s: %v", cOpts.SecretsRoot, err)
 		}
 	}
 	// Validate HA args - Assumes a local consul server running talking to the "cluster"
 	if cOpts.HaEnabled {
 		if cOpts.SecretsType != "consul" || cOpts.BackEndType != "consul" {
-			return fmt.Sprintf("Error: HA must be run on consul backends: %s, %s", cOpts.SecretsType, cOpts.BackEndType)
+			localLogger.Fatalf("Error: HA must be run on consul backends: %s, %s", cOpts.SecretsType, cOpts.BackEndType)
 		}
 
 		if cOpts.HaAddress == "" {
-			return "Error: HA must specify a VIP that DRP will move around"
+			localLogger.Fatalf("Error: HA must specify a VIP that DRP will move around")
 		}
 
 		if cOpts.HaInterface == "" {
-			return "Error: HA must specify an interface for the VIP that DRP will move around"
+			localLogger.Fatalf("Error: HA must specify an interface for the VIP that DRP will move around")
 		}
 
 		ip := net.ParseIP(cOpts.HaAddress)
 		if ip == nil {
-			return fmt.Sprintf("Error: HA must be an IP address: %s", cOpts.HaAddress)
+			localLogger.Fatalf("Error: HA must be an IP address: %s", cOpts.HaAddress)
 		}
 
 		if cOpts.OurAddress != "" {
 			oip := net.ParseIP(cOpts.OurAddress)
 			if oip == nil {
-				return fmt.Sprintf("Error: OurAddress must be an IP address: %s", cOpts.OurAddress)
+				localLogger.Fatalf("Error: OurAddress must be an IP address: %s", cOpts.OurAddress)
 			}
 			if !oip.Equal(ip) {
-				return fmt.Sprintf("Error: HA Address must match OurAddress. %s != %s", cOpts.HaAddress, cOpts.OurAddress)
+				localLogger.Fatalf("Error: HA Address must match OurAddress. %s != %s", cOpts.HaAddress, cOpts.OurAddress)
 			}
 		} else {
 			cOpts.OurAddress = cOpts.HaAddress
 		}
 	}
 
-	localLogger.Printf("Extracting Default Assets\n")
 	if EmbeddedAssetsExtractFunc != nil {
 		localLogger.Printf("Extracting Default Assets\n")
 		if err := EmbeddedAssetsExtractFunc(cOpts.ReplaceRoot, cOpts.FileRoot); err != nil {
-			return fmt.Sprintf("Unable to extract assets: %v", err)
+			localLogger.Fatalf("Unable to extract assets: %v", err)
 		}
 	}
+}
 
+func makeLogBuffer(localLogger *log.Logger, cOpts *ProgOpts) *logger.Buffer {
+	logLevel, err := logger.ParseLevel(cOpts.DefaultLogLevel)
+	if err != nil {
+		localLogger.Printf("Invalid log level %s", cOpts.DefaultLogLevel)
+		localLogger.Fatalf("Try one of `trace`,`debug`,`info`,`warn`,`error`,`fatal`,`panic`")
+	}
+	return logger.New(localLogger).SetDefaultLevel(logLevel)
+}
+
+func waitOnApi(cOpts *ProgOpts) {
+	// Wait for Api to come up
+	for count := 0; count < 5; count++ {
+		if count > 0 {
+			log.Printf("Waiting for API (%d) to come up...\n", count)
+		}
+		timeout := time.Duration(5 * time.Second)
+		tr := &http.Transport{
+			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+			TLSHandshakeTimeout:   5 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		}
+		client := &http.Client{Transport: tr, Timeout: timeout}
+		if _, err := client.Get(fmt.Sprintf("https://127.0.0.1:%d/api/v3", cOpts.ApiPort)); err == nil {
+			break
+		}
+	}
+}
+
+func bootstrapPlugins(
+	localLogger *log.Logger,
+	l logger.Logger,
+	cOpts *ProgOpts,
+	secretStore store.Store) (*midlayer.PluginController, map[string]*models.PluginProvider, error) {
+	scratchStore, err := backend.InitDataStack(cOpts.SaasContentRoot, cOpts.FileRoot, l)
+	if err != nil {
+		return nil, nil, err
+	}
+	// This is intended to jsut serve license information to the plugins for define
+	publishers := backend.NewPublishers(localLogger)
+	dt := backend.NewDataTracker(scratchStore,
+		secretStore,
+		cOpts.FileRoot,
+		cOpts.LogRoot,
+		"127.0.0.1",
+		cOpts.ForceStatic,
+		cOpts.StaticPort,
+		cOpts.ApiPort,
+		cOpts.HaId,
+		l,
+		map[string]string{
+			"debugBootEnv":        cOpts.DebugBootEnv,
+			"debugDhcp":           cOpts.DebugDhcp,
+			"debugRenderer":       cOpts.DebugRenderer,
+			"debugFrontend":       cOpts.DebugFrontend,
+			"debugPlugins":        cOpts.DebugPlugins,
+			"defaultStage":        cOpts.DefaultStage,
+			"logLevel":            cOpts.DefaultLogLevel,
+			"defaultBootEnv":      cOpts.DefaultBootEnv,
+			"unknownBootEnv":      cOpts.UnknownBootEnv,
+			"knownTokenTimeout":   fmt.Sprintf("%d", cOpts.KnownTokenTimeout),
+			"unknownTokenTimeout": fmt.Sprintf("%d", cOpts.UnknownTokenTimeout),
+			"baseTokenSecret":     cOpts.BaseTokenSecret,
+			"systemGrantorSecret": cOpts.SystemGrantorSecret,
+		},
+		publishers)
+	pc, err := midlayer.InitPluginController(cOpts.PluginRoot, cOpts.PluginCommRoot, l)
+	if err != nil {
+		return nil, nil, err
+	}
+	fe := frontend.NewFrontend(dt, l,
+		"127.0.0.1",
+		cOpts.ApiPort, cOpts.StaticPort, cOpts.DhcpPort, cOpts.BinlPort,
+		cOpts.FileRoot,
+		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, []string{cOpts.DrpId, cOpts.DrpId, cOpts.HaId}, pc,
+		cOpts.DisableDHCP, cOpts.DisableTftpServer, cOpts.DisableProvisioner, cOpts.DisableBINL,
+		cOpts.SaasContentRoot)
+	srv := &http.Server{
+		TLSConfig: &tls.Config{},
+		Addr:      fmt.Sprintf("127.0.0.1:%d", cOpts.ApiPort),
+		Handler:   fe.MgmtApi,
+	}
+	go srv.ListenAndServeTLS(cOpts.TlsCertFile, cOpts.TlsKeyFile)
+	defer srv.Shutdown(context.Background())
+	waitOnApi(cOpts)
+	rt := dt.Request(l)
+	providers, err := pc.Define(rt, cOpts.FileRoot)
+	return pc, providers, err
+}
+
+func server(localLogger *log.Logger, cOpts *ProgOpts) {
+	onlyICanReadThings()
+	processArgs(localLogger, cOpts)
 	services := make([]midlayer.Service, 0, 0)
 
 	// HA waits here.
@@ -271,52 +356,25 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 		services = append(services, leader)
 
 		if err := midlayer.AddIP(cOpts.HaAddress, cOpts.HaInterface); err != nil {
-			return fmt.Sprintf("Unable to add address: %v", err)
+			localLogger.Fatalf("Unable to add address: %v", err)
 		}
 	}
-
-	logLevel, err := logger.ParseLevel(cOpts.DefaultLogLevel)
-	if err != nil {
-		localLogger.Printf("Invalid log level %s", cOpts.DefaultLogLevel)
-		return fmt.Sprintf("Try one of `trace`,`debug`,`info`,`warn`,`error`,`fatal`,`panic`")
-	}
-	buf := logger.New(localLogger).SetDefaultLevel(logLevel)
-
-	localLogger.Printf("Starting metrics server")
-	svc, err := midlayer.ServeMetrics(fmt.Sprintf(":%d", cOpts.MetricsPort), buf.Log("metrics"))
-	if err != nil {
-		return fmt.Sprintf("Error starting metrics server: %v", err)
-	}
-	services = append(services, svc)
-
-	if cOpts.PromGwUrl != "" {
-		ppg := utils.NewPrometheusPushGateway(buf.Log("promgateway"), cOpts.PromGwUrl,
-			fmt.Sprintf("http://127.0.0.1:%d/metrics", cOpts.MetricsPort),
-			time.Duration(cOpts.PromInterval)*time.Second)
-		services = append(services, ppg)
-	}
-
-	// Make data store
-	dtStore, err := backend.DefaultDataStack(cOpts.DataRoot, cOpts.BackEndType,
-		cOpts.LocalContent, cOpts.DefaultContent, cOpts.SaasContentRoot, cOpts.FileRoot,
-		buf.Log("backend"))
-	if err != nil {
-		return fmt.Sprintf("Unable to create DataStack: %v", err)
-	}
+	buf := makeLogBuffer(localLogger, cOpts)
 	var secretStore store.Store
+	var err error
 	if u, perr := url.Parse(cOpts.SecretsType); perr == nil && u.Scheme != "" {
 		secretStore, err = store.Open(cOpts.SecretsType)
 	} else {
 		secretStore, err = store.Open(fmt.Sprintf("%s://%s", cOpts.SecretsType, cOpts.SecretsRoot))
 	}
 	if err != nil {
-		return fmt.Sprintf("Unable to open secrets store: %v", err)
+		localLogger.Fatalf("Unable to open secrets store: %v", err)
 	}
 
 	// No DrpId - get a mac address
 	intfs, err := net.Interfaces()
 	if err != nil {
-		return fmt.Sprintf("Error getting interfaces for DrpId: %v", err)
+		localLogger.Fatalf("Error getting interfaces for DrpId: %v", err)
 	}
 
 	var localId string
@@ -339,7 +397,40 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	if cOpts.HaId == "" {
 		cOpts.HaId = cOpts.DrpId
 	}
+	pc, providers, err := bootstrapPlugins(localLogger, buf.Log("bootstrap"), cOpts, secretStore)
+	if err != nil {
+		localLogger.Fatalf("Error bootstrapping plugins: %v", err)
+	}
+	providerStores := map[string]store.Store{}
+	for k, v := range providers {
+		if ps, err := v.Store(); err != nil {
+			localLogger.Fatalf("Error getting Store from plugin %s: %v", k, err)
+		} else {
+			providerStores[k] = ps
+		}
+	}
 
+	localLogger.Printf("Starting metrics server")
+	svc, err := midlayer.ServeMetrics(fmt.Sprintf(":%d", cOpts.MetricsPort), buf.Log("metrics"))
+	if err != nil {
+		localLogger.Fatalf("Error starting metrics server: %v", err)
+	}
+	services = append(services, svc)
+
+	if cOpts.PromGwUrl != "" {
+		ppg := utils.NewPrometheusPushGateway(buf.Log("promgateway"), cOpts.PromGwUrl,
+			fmt.Sprintf("http://127.0.0.1:%d/metrics", cOpts.MetricsPort),
+			time.Duration(cOpts.PromInterval)*time.Second)
+		services = append(services, ppg)
+	}
+
+	// Make data store
+	dtStore, err := backend.DefaultDataStack(cOpts.DataRoot, cOpts.BackEndType,
+		cOpts.LocalContent, cOpts.DefaultContent, cOpts.SaasContentRoot, cOpts.FileRoot,
+		buf.Log("backend"), providerStores)
+	if err != nil {
+		localLogger.Fatalf("Unable to create DataStack: %v", err)
+	}
 	// We have a backend, now get default assets
 	publishers := backend.NewPublishers(localLogger)
 
@@ -373,11 +464,6 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	if cOpts.CleanupCorrupt {
 		dt.Cleanup = true
 	}
-
-	pc, err := midlayer.InitPluginController(cOpts.PluginRoot, cOpts.PluginCommRoot, dt, publishers)
-	if err != nil {
-		return fmt.Sprintf("Error starting plugin service: %v", err)
-	}
 	services = append(services, pc)
 
 	fe := frontend.NewFrontend(dt, buf.Log("frontend"),
@@ -393,12 +479,9 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	backend.SetLogPublisher(buf, publishers)
 	pc.AddStorageType = fe.AddStorageType
 
-	// Start the controller now that we have a frontend to front.
-	pc.StartRouter(fe.ApiGroup)
-
 	if _, err := os.Stat(cOpts.TlsCertFile); os.IsNotExist(err) {
 		if err = buildKeys(cOpts.CurveOrBits, cOpts.TlsCertFile, cOpts.TlsKeyFile); err != nil {
-			return fmt.Sprintf("Error building certs: %v", err)
+			localLogger.Fatalf("Error building certs: %v", err)
 		}
 	}
 
@@ -410,7 +493,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 			buf.Log("static"),
 			publishers)
 		if err != nil {
-			return fmt.Sprintf("Error starting TFTP server: %v", err)
+			localLogger.Fatalf("Error starting TFTP server: %v", err)
 		}
 		services = append(services, svc)
 	}
@@ -422,7 +505,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 			dt.FS, buf.Log("static"),
 			publishers)
 		if err != nil {
-			return fmt.Sprintf("Error starting static file server: %v", err)
+			localLogger.Fatalf("Error starting static file server: %v", err)
 		}
 		services = append(services, svc)
 	}
@@ -438,7 +521,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 			false,
 			cOpts.FakePinger)
 		if err != nil {
-			return fmt.Sprintf("Error starting DHCP server: %v", err)
+			localLogger.Fatalf("Error starting DHCP server: %v", err)
 		}
 		services = append(services, svc)
 
@@ -453,7 +536,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 				true,
 				cOpts.FakePinger)
 			if err != nil {
-				return fmt.Sprintf("Error starting PXE/BINL server: %v", err)
+				localLogger.Fatalf("Error starting PXE/BINL server: %v", err)
 			}
 			services = append(services, svc)
 		}
@@ -508,28 +591,9 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	watchDone := make(chan struct{})
 
 	go func() {
-		// Wait for Api to come up
-		for count := 0; count < 5; count++ {
-			if count > 0 {
-				log.Printf("Waiting for API (%d) to come up...\n", count)
-			}
-			timeout := time.Duration(5 * time.Second)
-			tr := &http.Transport{
-				TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-				TLSHandshakeTimeout:   5 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
-			}
-			client := &http.Client{Transport: tr, Timeout: timeout}
-			if _, err := client.Get(fmt.Sprintf("https://127.0.0.1:%d/api/v3", cOpts.ApiPort)); err == nil {
-				break
-			}
-		}
-
+		waitOnApi(cOpts)
 		// Start the controller now that we have a frontend to front.
-		if err := pc.StartController(); err != nil {
-			log.Printf("Error starting plugin service: %v", err)
-			ch <- syscall.SIGTERM
-		}
+		pc.Start(dt, fe.ApiGroup, providers, publishers)
 
 		for {
 			s := <-ch
@@ -549,14 +613,33 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 				os.Exit(1)
 			case syscall.SIGHUP:
 				localLogger.Println("Reloading data stores...")
+				rt := dt.Request(dt.Logger)
+				providers, err = pc.Define(rt, cOpts.FileRoot)
+				if err != nil {
+					localLogger.Printf("Unable to load data stores from plugins: %v", err)
+					continue
+				}
+				providerStores = map[string]store.Store{}
+				xit := false
+				for k, v := range providers {
+					if ps, err := v.Store(); err != nil {
+						localLogger.Printf("Error getting Store from plugin %s: %v", k, err)
+						xit = true
+					} else {
+						providerStores[k] = ps
+					}
+				}
+				if xit {
+					continue
+				}
 				// Make data store - THIS IS BAD if datastore is memory.
 				dtStore, err := backend.DefaultDataStack(cOpts.DataRoot, cOpts.BackEndType,
 					cOpts.LocalContent, cOpts.DefaultContent, cOpts.SaasContentRoot, cOpts.FileRoot,
-					buf.Log("backend"))
+					buf.Log("backend"), providerStores)
 				if err != nil {
 					localLogger.Printf("Unable to create new DataStack on SIGHUP: %v", err)
 				} else {
-					rt := dt.Request(dt.Logger)
+
 					rt.AllLocked(func(d backend.Stores) {
 						dt.ReplaceBackend(rt, dtStore)
 					})
@@ -602,5 +685,12 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) string {
 	if err != nil {
 		log.Printf("Error starting watcher service: %v", err)
 	}
-	return "Exiting"
+	localLogger.Fatalf("Exiting")
+}
+
+// Server takes the start up options and runs a DRP server.  This function
+// will not return unless an error or shutdown signal is received.
+func Server(cOpts *ProgOpts) {
+	localLogger := log.New(os.Stderr, "dr-provision", log.LstdFlags|log.Lmicroseconds|log.LUTC)
+	server(localLogger, cOpts)
 }

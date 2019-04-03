@@ -47,41 +47,22 @@ func (pc *PluginController) Request(locks ...string) *backend.RequestTracker {
 }
 
 /*
- * Create contoller and start an event listener.
+ * Create controller and start an event listener.
  */
-func InitPluginController(pluginDir, pluginCommDir string, dt *backend.DataTracker, pubs *backend.Publishers) (pc *PluginController, err error) {
-	dt.Logger.Debugf("Starting Plugin Controller\n")
+func InitPluginController(pluginDir, pluginCommDir string, l logger.Logger) (pc *PluginController, err error) {
+	err = os.MkdirAll(pluginCommDir, 0755)
+	if err != nil {
+		return
+	}
+	l.Debugf("Creating Plugin Controller\n")
 	pc = &PluginController{
-		Logger:             dt.Logger.Switch("plugin"),
+		Logger:             l.Switch("plugin"),
 		pluginDir:          pluginDir,
 		pluginCommDir:      pluginCommDir,
-		dt:                 dt,
-		publishers:         pubs,
 		AvailableProviders: make(map[string]*models.PluginProvider, 0),
 		runningPlugins:     make(map[string]*RunningPlugin, 0),
 		lock:               &sync.Mutex{},
 	}
-
-	pc.Actions = NewActions()
-	pubs.Add(pc)
-
-	pc.done = make(chan bool)
-	pc.finished = make(chan bool)
-	pc.events = make(chan *models.Event, 1000)
-
-	go func() {
-		done := false
-		for !done {
-			select {
-			case event := <-pc.events:
-				pc.handleEvent(event)
-			case <-pc.done:
-				done = true
-			}
-		}
-		pc.finished <- true
-	}()
-	dt.Logger.Debugf("Returning Plugin Controller: %v\n", err)
 	return
 }
 
@@ -102,37 +83,103 @@ func ReverseProxy(pc *PluginController) gin.HandlerFunc {
 	}
 }
 
-func (pc *PluginController) StartRouter(apiGroup *gin.RouterGroup) {
-	apiGroup.Any("/plugin-apis/:plugin/*path", ReverseProxy(pc))
+func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, provider, contentDir string) *models.PluginProvider {
+	pc.Infof("Importing plugin provider: %s\n", provider)
+	cmd := exec.Command(pc.pluginDir+"/"+provider, "define")
+
+	// Setup env vars to run plugin - auth should be parameters.
+	claims := backend.NewClaim(provider, "system", time.Hour*1).
+		AddRawClaim("*", "get", "*").
+		AddSecrets("", "", "")
+	token, _ := rt.SealClaims(claims)
+	apiURL := rt.ApiURL(net.ParseIP("127.0.0.1"))
+	staticURL := rt.FileURL(net.ParseIP("127.0.0.1"))
+
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("RS_ENDPOINT=%s", apiURL))
+	env = append(env, fmt.Sprintf("RS_FILESERVER=%s", staticURL))
+	env = append(env, fmt.Sprintf("RS_TOKEN=%s", token))
+	cmd.Env = env
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		pc.Errorf("Skipping %s because %s: %s\n", provider, err, string(out))
+		return nil
+	}
+	pp := &models.PluginProvider{}
+	err = json.Unmarshal(out, pp)
+	if err != nil {
+		pc.Errorf("Skipping %s because of bad json: %s\n%s\n", provider, err, out)
+		return nil
+	}
+	pp.Fill()
+
+	if pp.PluginVersion != 2 {
+		pc.Errorf("Skipping %s because of bad version: %d\n", provider, pp.PluginVersion)
+		return nil
+	}
+	for _, aa := range pp.AvailableActions {
+		aa.Provider = pp.Name
+	}
+	out, err = exec.Command(
+		path.Join(pc.pluginDir, provider),
+		"unpack",
+		path.Join(contentDir, "files", "plugin_providers", pp.Name)).CombinedOutput()
+	if err != nil {
+		pc.Errorf("Unpack for %s failed: %v", pp.Name, err)
+		pc.Errorf("%s", out)
+		return nil
+	}
+	return pp
 }
 
-func (pc *PluginController) StartController() error {
-	pc.Debugf("Starting Start Plugin Controller:\n")
-
-	pc.StartPlugins()
-	err := pc.rereadPluginProviders()
-	return err
-}
-
-func (pc *PluginController) rereadPluginProviders() error {
-	rt := pc.Request()
+func (pc *PluginController) Define(rt *backend.RequestTracker, contentDir string) (map[string]*models.PluginProvider, error) {
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
-	// Walk plugin dir contents with lock
+	providers := map[string]*models.PluginProvider{}
 	files, err := ioutil.ReadDir(pc.pluginDir)
 	if err != nil {
-		pc.Tracef("walkPlugDir: finished ReadDir error: %v\n", err)
-		return err
+		pc.Tracef("PluginController Define: finished ReadDir error: %v\n", err)
+		return providers, err
 	}
 	for _, f := range files {
-		pc.Debugf("Walk plugin importing: %s\n", f.Name())
-		err = pc.importPluginProvider(rt, f.Name())
-		if err != nil {
-			pc.Tracef("walkPlugDir: importing %s error: %v\n", f.Name(), err)
+		pc.Debugf("PluginController Define: getting definition for %s\n", f.Name())
+		pp := pc.definePluginProvider(rt, f.Name(), contentDir)
+		if pp != nil {
+			providers[f.Name()] = pp
 		}
 	}
-	pc.Debugf("Finishing Rereading Plugin Providers: %v\n", err)
-	return err
+	return providers, nil
+}
+
+func (pc *PluginController) Start(
+	dt *backend.DataTracker,
+	apiGroup *gin.RouterGroup,
+	providers map[string]*models.PluginProvider,
+	pubs *backend.Publishers) {
+	pc.Actions = NewActions()
+	pc.publishers = pubs
+	pubs.Add(pc)
+
+	pc.done = make(chan bool)
+	pc.finished = make(chan bool)
+	pc.events = make(chan *models.Event, 1000)
+
+	go func() {
+		done := false
+		for !done {
+			select {
+			case event := <-pc.events:
+				pc.handleEvent(event)
+			case <-pc.done:
+				done = true
+			}
+		}
+		pc.finished <- true
+	}()
+	pc.Debugf("Starting Plugin Controller:\n")
+	apiGroup.Any("/plugin-apis/:plugin/*path", ReverseProxy(pc))
+	pc.StartPlugins(dt, providers)
 }
 
 func (pc *PluginController) Shutdown(ctx context.Context) error {
@@ -208,44 +255,6 @@ func (pc *PluginController) GetPluginProviders() []*models.PluginProvider {
 	return answer
 }
 
-func (pc *PluginController) buildNewStore(content *models.Content) (newStore store.Store, err error) {
-	filename := fmt.Sprintf("memory:///")
-
-	newStore, err = store.Open(filename)
-	if err != nil {
-		return
-	}
-
-	if md, ok := newStore.(store.MetaSaver); ok {
-		data := map[string]string{
-			"Name":          content.Meta.Name,
-			"Source":        content.Meta.Source,
-			"Description":   content.Meta.Description,
-			"Documentation": content.Meta.Documentation,
-			"Version":       content.Meta.Version,
-			"Type":          content.Meta.Type,
-		}
-		md.SetMetaData(data)
-	}
-
-	for prefix, objs := range content.Sections {
-		var sub store.Store
-		sub, err = newStore.MakeSub(prefix)
-		if err != nil {
-			return
-		}
-
-		for k, obj := range objs {
-			err = sub.Save(k, obj)
-			if err != nil {
-				return
-			}
-		}
-	}
-
-	return
-}
-
 func forceParamRemoval(d *backend.DataStack, l store.Store, logger logger.Logger) error {
 	toRemove := [][]string{}
 	layer0 := d.Layers()[0]
@@ -272,119 +281,6 @@ func forceParamRemoval(d *backend.DataStack, l store.Store, logger logger.Logger
 	for _, item := range toRemove {
 		dSub := d.Subs()[item[0]]
 		dSub.Remove(item[1])
-	}
-	return nil
-}
-
-// Try to add to available - Must lock before calling
-func (pc *PluginController) importPluginProvider(rt *backend.RequestTracker, provider string) error {
-	pc.Infof("Importing plugin provider: %s\n", provider)
-
-	cmd := exec.Command(pc.pluginDir+"/"+provider, "define")
-
-	// Setup env vars to run plugin - auth should be parameters.
-	claims := backend.NewClaim(provider, "system", time.Hour*1).
-		AddRawClaim("*", "*", "*").
-		AddSecrets("", "", "")
-	token, _ := rt.SealClaims(claims)
-	apiURL := rt.ApiURL(net.ParseIP("0.0.0.0"))
-	staticURL := rt.FileURL(net.ParseIP("0.0.0.0"))
-
-	env := os.Environ()
-	env = append(env, fmt.Sprintf("RS_ENDPOINT=%s", apiURL))
-	env = append(env, fmt.Sprintf("RS_FILESERVER=%s", staticURL))
-	env = append(env, fmt.Sprintf("RS_TOKEN=%s", token))
-	cmd.Env = env
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		pc.Errorf("Skipping %s because %s: %s\n", provider, err, string(out))
-		return fmt.Errorf("Skipping %s because %s: %s\n", provider, err, string(out))
-	}
-	pp := &models.PluginProvider{}
-	err = json.Unmarshal(out, pp)
-	if err != nil {
-		pc.Errorf("Skipping %s because of bad json: %s\n%s\n", provider, err, out)
-		return fmt.Errorf("Skipping %s because of bad json: %s\n%s\n", provider, err, out)
-	}
-	pp.Fill()
-
-	if pp.PluginVersion != 2 {
-		pc.Errorf("Skipping %s because of bad version: %d\n", provider, pp.PluginVersion)
-		return fmt.Errorf("Skipping %s because of bad version: %d\n", provider, pp.PluginVersion)
-	}
-
-	content := &models.Content{}
-	content.Fill()
-
-	if pp.Content != "" {
-		codec := store.YamlCodec
-		if err := codec.Decode([]byte(pp.Content), content); err != nil {
-			return err
-		}
-	}
-	cName := pp.Name
-	content.Meta.Name = cName
-
-	if content.Meta.Version == "" || content.Meta.Version == "Unspecified" {
-		content.Meta.Version = pp.Version
-	}
-	if content.Meta.Description == "" {
-		content.Meta.Description = fmt.Sprintf("Content layer for %s plugin provider", pp.Name)
-	}
-	if content.Meta.Source == "" {
-		content.Meta.Source = "FromPluginProvider"
-	}
-	if content.Meta.Documentation == "" {
-		content.Meta.Documentation = "Unspecified"
-	}
-	content.Meta.Type = "plugin"
-
-	pc.Tracef("Building new datastore for: %s\n", provider)
-	ns, err := pc.buildNewStore(content)
-	if err != nil {
-		pc.Errorf("Skipping %s because of bad store: %v\n", pp.Name, err)
-		return err
-	}
-	pc.Tracef("Replacing new datastore for: %s\n", provider)
-	rt.AllLocked(func(d backend.Stores) {
-		l := rt.Logger.Level()
-		rt.Logger.SetLevel(logger.Fatal)
-		defer rt.Logger.SetLevel(l)
-
-		ds := pc.dt.Backend
-		nbs, hard, _ := ds.AddReplacePluginLayer(cName, ns, pc.dt.Secrets, pc.dt.Logger, forceParamRemoval)
-		if hard != nil {
-			rt.Errorf("Skipping %s because of bad store errors: %v\n", pp.Name, hard)
-			err = hard
-			return
-		}
-		pc.dt.ReplaceBackend(rt, nbs)
-	})
-	pc.Tracef("Completed replacing new datastore for: %s\n", provider)
-	if err != nil {
-		return err
-	}
-
-	if _, ok := pc.AvailableProviders[pp.Name]; !ok {
-		pc.Infof("Adding plugin provider: %s\n", pp.Name)
-		pp.Fill()
-		pc.AvailableProviders[pp.Name] = pp
-		for _, aa := range pp.AvailableActions {
-			aa.Provider = pp.Name
-		}
-		out, err = exec.Command(
-			path.Join(pc.pluginDir, provider),
-			"unpack",
-			path.Join(pc.dt.FileRoot, "files", "plugin_providers", pp.Name)).CombinedOutput()
-		if err != nil {
-			pc.Errorf("Unpack for %s failed: %v", pp.Name, err)
-			pc.Errorf("%s", out)
-		}
-		rt.Publish("plugin_providers", "create", pp.Name, pp)
-		return nil
-	} else {
-		pc.Infof("Already exists plugin provider: %s\n", pp.Name)
 	}
 	return nil
 }
@@ -493,15 +389,30 @@ func (pc *PluginController) UploadPluginProvider(c *gin.Context, fileRoot, name 
 	defer pc.lock.Unlock()
 	// If it is here, remove it.
 	rt := pc.Request()
-	pc.removePluginProvider(rt, name)
-
-	var berr *models.Error
-	err = pc.importPluginProvider(rt, name)
-	if err != nil {
-		berr = models.NewError("API ERROR", http.StatusBadRequest,
-			fmt.Sprintf("Import plugin failed %s: %v", name, err))
+	pp := pc.definePluginProvider(rt, name, pc.dt.FileRoot)
+	if pp == nil {
+		return nil, models.NewError("API ERROR", http.StatusBadRequest,
+			fmt.Sprintf("Import plugin failed %s: define failed", name))
 	}
-	return &models.PluginProviderUploadInfo{Path: name, Size: copied}, berr
+	ns, err := pp.Store()
+	if err != nil {
+		return nil, models.NewError("API ERROR", http.StatusBadRequest,
+			fmt.Sprintf("Import plugin failed %s: bad store: %v", name, err))
+	}
+	rt.AllLocked(func(d backend.Stores) {
+		ds := pc.dt.Backend
+		nbs, hard, _ := ds.AddReplacePluginLayer(name, ns, pc.dt.Secrets, pc.dt.Logger, forceParamRemoval)
+		if hard != nil {
+			rt.Errorf("Skipping %s because of bad store errors: %v\n", pp.Name, hard)
+			err = hard
+			return
+		}
+		pc.dt.ReplaceBackend(rt, nbs)
+	})
+	pc.AvailableProviders[name] = pp
+	pc.allPlugins(name, "stop")
+	pc.allPlugins(name, "start")
+	return &models.PluginProviderUploadInfo{Path: name, Size: copied}, nil
 }
 
 func (pc *PluginController) RemovePluginProvider(name string) error {

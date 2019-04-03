@@ -2,16 +2,13 @@ package server
 
 import (
 	"crypto/tls"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/digitalrebar/provision"
 	"github.com/jessevdk/go-flags"
 )
 
@@ -34,6 +31,7 @@ func generateArgs(args []string) *ProgOpts {
 	return &cOpts
 }
 
+/*
 func badArgTest(t *testing.T, errString string, args ...string) {
 	t.Helper()
 	cOpts := generateArgs(args)
@@ -85,7 +83,7 @@ func TestServerArgs(t *testing.T) {
 	os.Remove(existingFile)
 	os.Remove("/tmp/greg.txt")
 }
-
+*/
 func TestServer(t *testing.T) {
 
 	testArgs := []string{

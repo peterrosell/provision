@@ -509,13 +509,68 @@ func fixBasic(d *DataStack, l store.Store, logger logger.Logger) error {
 	return nil
 }
 
-func DefaultDataStack(
-	dataRoot, backendType, localContent, defaultContent, saasDir, fileRoot string,
-	logger logger.Logger) (*DataStack, error) {
+// InitDataStack creates a DataStack that has an empty Writable store and just the
+// rackn-license layer, if applicable.  It is intended to be used on initial startup to
+// let the plugins define themselves so we can getr their content layers.
+func InitDataStack(saasDir, fileRoot string, logger logger.Logger) (*DataStack, error) {
 	dtStore := &DataStack{
 		StackedStore:   store.StackedStore{},
 		saasContents:   map[string]store.Store{},
 		pluginContents: map[string]store.Store{},
+		fileRoot:       fileRoot,
+	}
+	dtStore.Open(store.DefaultCodec)
+	dtStore.basicContent = BasicContent()
+	dtStore.writeContent, _ = store.Open("memory:///")
+	if md, ok := dtStore.writeContent.(store.MetaSaver); ok {
+		data := map[string]string{"Name": "BackingStore", "Description": "Writable backing store", "Version": "0.0.0"}
+		md.SetMetaData(data)
+	}
+	if saasDir != "" {
+		err := filepath.Walk(saasDir, func(filepath string, info os.FileInfo, err error) error {
+			if !info.IsDir() {
+				ext := path.Ext(filepath)
+				codec := "unknown"
+				if ext == ".yaml" || ext == ".yml" {
+					codec = "yaml"
+				} else if ext == ".json" {
+					codec = "json"
+				}
+				if codec == "unknown" {
+					// Skip unknown codecs
+					return nil
+				}
+
+				fs, err := store.Open(fmt.Sprintf("file://%s?codec=%s", filepath, codec))
+				if err != nil {
+					return fmt.Errorf("Failed to open saas content: %s: %v", filepath, err)
+				}
+
+				mst, _ := fs.(store.MetaSaver)
+				md := mst.MetaData()
+				name := md["Name"]
+				if name != "rackn-license" {
+					return nil
+				}
+				dtStore.saasContents[name] = fs
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return dtStore, dtStore.buildStack(nil, nil, logger)
+}
+
+func DefaultDataStack(
+	dataRoot, backendType, localContent, defaultContent, saasDir, fileRoot string,
+	logger logger.Logger,
+	pluginStores map[string]store.Store) (*DataStack, error) {
+	dtStore := &DataStack{
+		StackedStore:   store.StackedStore{},
+		saasContents:   map[string]store.Store{},
+		pluginContents: pluginStores,
 		fileRoot:       fileRoot,
 	}
 
