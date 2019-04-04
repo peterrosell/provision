@@ -154,7 +154,6 @@ func (pc *PluginController) Define(rt *backend.RequestTracker, contentDir string
 
 func (pc *PluginController) Start(
 	dt *backend.DataTracker,
-	apiGroup *gin.RouterGroup,
 	providers map[string]*models.PluginProvider,
 	pubs *backend.Publishers) {
 	pc.Actions = NewActions()
@@ -178,7 +177,6 @@ func (pc *PluginController) Start(
 		pc.finished <- true
 	}()
 	pc.Debugf("Starting Plugin Controller:\n")
-	apiGroup.Any("/plugin-apis/:plugin/*path", ReverseProxy(pc))
 	pc.StartPlugins(dt, providers)
 }
 

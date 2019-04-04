@@ -593,7 +593,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 	go func() {
 		waitOnApi(cOpts)
 		// Start the controller now that we have a frontend to front.
-		pc.Start(dt, fe.ApiGroup, providers, publishers)
+		pc.Start(dt, providers, publishers)
 
 		for {
 			s := <-ch
@@ -667,6 +667,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 
 	go func() {
 		localLogger.Printf("Starting API server")
+		fe.ApiGroup.Any("/plugin-apis/:plugin/*path", midlayer.ReverseProxy(pc))
 		if err = srv.ListenAndServeTLS(cOpts.TlsCertFile, cOpts.TlsKeyFile); err != http.ErrServerClosed {
 			// Stop the service gracefully.
 			for _, svc := range services {
