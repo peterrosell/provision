@@ -127,17 +127,17 @@ func mkdir(d string) error {
 	return os.MkdirAll(d, 0755)
 }
 
-func processArgs(localLogger *log.Logger, cOpts *ProgOpts) {
+func processArgs(localLogger *log.Logger, cOpts *ProgOpts) error {
 	var err error
 
 	if cOpts.VersionFlag {
-		localLogger.Fatalf("Version: %s", provision.RSVersion)
+		return fmt.Errorf("Version: %s", provision.RSVersion)
 	}
 	localLogger.Printf("Version: %s\n", provision.RSVersion)
 
 	// Make base root dir
 	if err = mkdir(cOpts.BaseRoot); err != nil {
-		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.BaseRoot, err)
+		return fmt.Errorf("Error creating required directory %s: %v", cOpts.BaseRoot, err)
 	}
 
 	// Make other dirs as needed - adjust the dirs as well.
@@ -160,7 +160,7 @@ func processArgs(localLogger *log.Logger, cOpts *ProgOpts) {
 		cOpts.PluginCommRoot = filepath.Join(cOpts.BaseRoot, cOpts.PluginCommRoot)
 	}
 	if len(cOpts.PluginCommRoot) > 70 {
-		localLogger.Fatalf("PluginCommRoot Must be less than 70 characters")
+		return fmt.Errorf("PluginCommRoot Must be less than 70 characters")
 	}
 	if cOpts.BackEndType == "directory" && strings.IndexRune(cOpts.DataRoot, filepath.Separator) != 0 {
 		cOpts.DataRoot = filepath.Join(cOpts.BaseRoot, cOpts.DataRoot)
@@ -181,65 +181,65 @@ func processArgs(localLogger *log.Logger, cOpts *ProgOpts) {
 		cOpts.LocalUI = filepath.Join(cOpts.BaseRoot, cOpts.LocalUI)
 	}
 	if err = mkdir(path.Join(cOpts.FileRoot, "isos")); err != nil {
-		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.FileRoot, err)
+		return fmt.Errorf("Error creating required directory %s: %v", cOpts.FileRoot, err)
 	}
 	if err = mkdir(path.Join(cOpts.FileRoot, "files")); err != nil {
-		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.FileRoot, err)
+		return fmt.Errorf("Error creating required directory %s: %v", cOpts.FileRoot, err)
 	}
 	if err = mkdir(cOpts.ReplaceRoot); err != nil {
-		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.ReplaceRoot, err)
+		return fmt.Errorf("Error creating required directory %s: %v", cOpts.ReplaceRoot, err)
 	}
 	if err = mkdir(cOpts.PluginRoot); err != nil {
-		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.PluginRoot, err)
+		return fmt.Errorf("Error creating required directory %s: %v", cOpts.PluginRoot, err)
 	}
 	if err = mkdir(cOpts.PluginCommRoot); err != nil {
-		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.PluginCommRoot, err)
+		return fmt.Errorf("Error creating required directory %s: %v", cOpts.PluginCommRoot, err)
 	}
 	if cOpts.BackEndType == "directory" {
 		if err = mkdir(cOpts.DataRoot); err != nil {
-			localLogger.Fatalf("Error creating required directory %s: %v", cOpts.DataRoot, err)
+			return fmt.Errorf("Error creating required directory %s: %v", cOpts.DataRoot, err)
 		}
 	}
 	if err = mkdir(cOpts.LogRoot); err != nil {
-		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.LogRoot, err)
+		return fmt.Errorf("Error creating required directory %s: %v", cOpts.LogRoot, err)
 	}
 	if err = mkdir(cOpts.LocalUI); err != nil {
-		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.LocalUI, err)
+		return fmt.Errorf("Error creating required directory %s: %v", cOpts.LocalUI, err)
 	}
 	if err = mkdir(cOpts.SaasContentRoot); err != nil {
-		localLogger.Fatalf("Error creating required directory %s: %v", cOpts.SaasContentRoot, err)
+		return fmt.Errorf("Error creating required directory %s: %v", cOpts.SaasContentRoot, err)
 	}
 	if cOpts.SecretsType == "directory" {
 		if err = mkdir(cOpts.SecretsRoot); err != nil {
-			localLogger.Fatalf("Error creating required directory %s: %v", cOpts.SecretsRoot, err)
+			return fmt.Errorf("Error creating required directory %s: %v", cOpts.SecretsRoot, err)
 		}
 	}
 	// Validate HA args - Assumes a local consul server running talking to the "cluster"
 	if cOpts.HaEnabled {
 		if cOpts.SecretsType != "consul" || cOpts.BackEndType != "consul" {
-			localLogger.Fatalf("Error: HA must be run on consul backends: %s, %s", cOpts.SecretsType, cOpts.BackEndType)
+			return fmt.Errorf("Error: HA must be run on consul backends: %s, %s", cOpts.SecretsType, cOpts.BackEndType)
 		}
 
 		if cOpts.HaAddress == "" {
-			localLogger.Fatalf("Error: HA must specify a VIP that DRP will move around")
+			return fmt.Errorf("Error: HA must specify a VIP that DRP will move around")
 		}
 
 		if cOpts.HaInterface == "" {
-			localLogger.Fatalf("Error: HA must specify an interface for the VIP that DRP will move around")
+			return fmt.Errorf("Error: HA must specify an interface for the VIP that DRP will move around")
 		}
 
 		ip := net.ParseIP(cOpts.HaAddress)
 		if ip == nil {
-			localLogger.Fatalf("Error: HA must be an IP address: %s", cOpts.HaAddress)
+			return fmt.Errorf("Error: HA must be an IP address: %s", cOpts.HaAddress)
 		}
 
 		if cOpts.OurAddress != "" {
 			oip := net.ParseIP(cOpts.OurAddress)
 			if oip == nil {
-				localLogger.Fatalf("Error: OurAddress must be an IP address: %s", cOpts.OurAddress)
+				return fmt.Errorf("Error: OurAddress must be an IP address: %s", cOpts.OurAddress)
 			}
 			if !oip.Equal(ip) {
-				localLogger.Fatalf("Error: HA Address must match OurAddress. %s != %s", cOpts.HaAddress, cOpts.OurAddress)
+				return fmt.Errorf("Error: HA Address must match OurAddress. %s != %s", cOpts.HaAddress, cOpts.OurAddress)
 			}
 		} else {
 			cOpts.OurAddress = cOpts.HaAddress
@@ -249,18 +249,19 @@ func processArgs(localLogger *log.Logger, cOpts *ProgOpts) {
 	if EmbeddedAssetsExtractFunc != nil {
 		localLogger.Printf("Extracting Default Assets\n")
 		if err := EmbeddedAssetsExtractFunc(cOpts.ReplaceRoot, cOpts.FileRoot); err != nil {
-			localLogger.Fatalf("Unable to extract assets: %v", err)
+			return fmt.Errorf("Unable to extract assets: %v", err)
 		}
 	}
+	return nil
 }
 
-func makeLogBuffer(localLogger *log.Logger, cOpts *ProgOpts) *logger.Buffer {
+func makeLogBuffer(localLogger *log.Logger, cOpts *ProgOpts) (*logger.Buffer, error) {
 	logLevel, err := logger.ParseLevel(cOpts.DefaultLogLevel)
 	if err != nil {
 		localLogger.Printf("Invalid log level %s", cOpts.DefaultLogLevel)
-		localLogger.Fatalf("Try one of `trace`,`debug`,`info`,`warn`,`error`,`fatal`,`panic`")
+		return nil, fmt.Errorf("Try one of `trace`,`debug`,`info`,`warn`,`error`,`fatal`,`panic`")
 	}
-	return logger.New(localLogger).SetDefaultLevel(logLevel)
+	return logger.New(localLogger).SetDefaultLevel(logLevel), nil
 }
 
 func waitOnApi(cOpts *ProgOpts) {
@@ -343,9 +344,11 @@ func bootstrapPlugins(
 	return pc, providers, err
 }
 
-func server(localLogger *log.Logger, cOpts *ProgOpts) {
+func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	onlyICanReadThings()
-	processArgs(localLogger, cOpts)
+	if err := processArgs(localLogger, cOpts); err != nil {
+		return err
+	}
 	services := make([]midlayer.Service, 0, 0)
 
 	// HA waits here.
@@ -356,25 +359,27 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 		services = append(services, leader)
 
 		if err := midlayer.AddIP(cOpts.HaAddress, cOpts.HaInterface); err != nil {
-			localLogger.Fatalf("Unable to add address: %v", err)
+			return fmt.Errorf("Unable to add address: %v", err)
 		}
 	}
-	buf := makeLogBuffer(localLogger, cOpts)
+	buf, err := makeLogBuffer(localLogger, cOpts)
+	if err != nil {
+		return err
+	}
 	var secretStore store.Store
-	var err error
 	if u, perr := url.Parse(cOpts.SecretsType); perr == nil && u.Scheme != "" {
 		secretStore, err = store.Open(cOpts.SecretsType)
 	} else {
 		secretStore, err = store.Open(fmt.Sprintf("%s://%s", cOpts.SecretsType, cOpts.SecretsRoot))
 	}
 	if err != nil {
-		localLogger.Fatalf("Unable to open secrets store: %v", err)
+		return fmt.Errorf("Unable to open secrets store: %v", err)
 	}
 
 	// No DrpId - get a mac address
 	intfs, err := net.Interfaces()
 	if err != nil {
-		localLogger.Fatalf("Error getting interfaces for DrpId: %v", err)
+		return fmt.Errorf("Error getting interfaces for DrpId: %v", err)
 	}
 
 	var localId string
@@ -399,12 +404,12 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 	}
 	pc, providers, err := bootstrapPlugins(localLogger, buf.Log("bootstrap"), cOpts, secretStore)
 	if err != nil {
-		localLogger.Fatalf("Error bootstrapping plugins: %v", err)
+		return fmt.Errorf("Error bootstrapping plugins: %v", err)
 	}
 	providerStores := map[string]store.Store{}
 	for k, v := range providers {
 		if ps, err := v.Store(); err != nil {
-			localLogger.Fatalf("Error getting Store from plugin %s: %v", k, err)
+			return fmt.Errorf("Error getting Store from plugin %s: %v", k, err)
 		} else {
 			providerStores[k] = ps
 		}
@@ -413,7 +418,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 	localLogger.Printf("Starting metrics server")
 	svc, err := midlayer.ServeMetrics(fmt.Sprintf(":%d", cOpts.MetricsPort), buf.Log("metrics"))
 	if err != nil {
-		localLogger.Fatalf("Error starting metrics server: %v", err)
+		return fmt.Errorf("Error starting metrics server: %v", err)
 	}
 	services = append(services, svc)
 
@@ -429,7 +434,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 		cOpts.LocalContent, cOpts.DefaultContent, cOpts.SaasContentRoot, cOpts.FileRoot,
 		buf.Log("backend"), providerStores)
 	if err != nil {
-		localLogger.Fatalf("Unable to create DataStack: %v", err)
+		return fmt.Errorf("Unable to create DataStack: %v", err)
 	}
 	// We have a backend, now get default assets
 	publishers := backend.NewPublishers(localLogger)
@@ -481,7 +486,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 
 	if _, err := os.Stat(cOpts.TlsCertFile); os.IsNotExist(err) {
 		if err = buildKeys(cOpts.CurveOrBits, cOpts.TlsCertFile, cOpts.TlsKeyFile); err != nil {
-			localLogger.Fatalf("Error building certs: %v", err)
+			return fmt.Errorf("Error building certs: %v", err)
 		}
 	}
 
@@ -493,7 +498,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 			buf.Log("static"),
 			publishers)
 		if err != nil {
-			localLogger.Fatalf("Error starting TFTP server: %v", err)
+			return fmt.Errorf("Error starting TFTP server: %v", err)
 		}
 		services = append(services, svc)
 	}
@@ -505,7 +510,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 			dt.FS, buf.Log("static"),
 			publishers)
 		if err != nil {
-			localLogger.Fatalf("Error starting static file server: %v", err)
+			return fmt.Errorf("Error starting static file server: %v", err)
 		}
 		services = append(services, svc)
 	}
@@ -521,7 +526,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 			false,
 			cOpts.FakePinger)
 		if err != nil {
-			localLogger.Fatalf("Error starting DHCP server: %v", err)
+			return fmt.Errorf("Error starting DHCP server: %v", err)
 		}
 		services = append(services, svc)
 
@@ -536,7 +541,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 				true,
 				cOpts.FakePinger)
 			if err != nil {
-				localLogger.Fatalf("Error starting PXE/BINL server: %v", err)
+				return fmt.Errorf("Error starting PXE/BINL server: %v", err)
 			}
 			services = append(services, svc)
 		}
@@ -684,14 +689,17 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) {
 
 	err = watchSelf(localLogger, watchDone, services)
 	if err != nil {
-		log.Printf("Error starting watcher service: %v", err)
+		err = fmt.Errorf("Error starting watcher service: %v", err)
 	}
-	localLogger.Fatalf("Exiting")
+	return err
 }
 
 // Server takes the start up options and runs a DRP server.  This function
 // will not return unless an error or shutdown signal is received.
 func Server(cOpts *ProgOpts) {
 	localLogger := log.New(os.Stderr, "dr-provision", log.LstdFlags|log.Lmicroseconds|log.LUTC)
-	server(localLogger, cOpts)
+	if err := server(localLogger, cOpts); err != nil {
+		localLogger.Fatalln(err.Error())
+	}
+	localLogger.Printf("Exiting")
 }
