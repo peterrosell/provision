@@ -74,46 +74,60 @@ func (pc *PluginController) handleEvent(event *models.Event) {
 		}
 	// These generate events which get handled above.
 	case "plugin_providers", "plugin_provider":
+		pc.lock.Lock()
+		defer pc.lock.Unlock()
 		switch event.Action {
 		case "create":
 			pc.allPlugins(event.Key, "start")
 		case "delete":
 			pc.allPlugins(event.Key, "stop")
 		case "retry":
-			rt := pc.Request()
-			pc.lock.Lock()
-			defer pc.lock.Unlock()
-			pc.importPluginProvider(rt, event.Key)
+			pc.Panicf("Should never happen")
 		}
 	case "contents":
-		pc.rereadPluginProviders()
+		pc.lock.Lock()
+		defer pc.lock.Unlock()
+		providers, err := pc.define(pc.Request(), pc.dt.FileRoot)
+		if err != nil {
+			return
+		}
+		toStop, toStart := []*models.PluginProvider{}, []*models.PluginProvider{}
+		for k, v := range pc.AvailableProviders {
+			if _, ok := providers[k]; !ok {
+				toStop = append(toStop, v)
+			}
+		}
+		for k, v := range providers {
+			if _, ok := pc.AvailableProviders[k]; !ok {
+				toStart = append(toStart, v)
+			}
+		}
+		for _, v := range toStop {
+			pc.allPlugins(v.Name, "stop")
+			delete(pc.AvailableProviders, v.Name)
+		}
+		for _, v := range toStart {
+			pc.AvailableProviders[v.Name] = v
+			pc.allPlugins(v.Name, "start")
+		}
 	}
 }
 
-func (pc *PluginController) StartPlugins() {
+func (pc *PluginController) StartPlugins(dt *backend.DataTracker, providers map[string]*models.PluginProvider) {
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
+	pc.dt = dt
+
+	pc.AvailableProviders = providers
 
 	// Get all the plugins that have this as provider
 	ref := &backend.Plugin{}
 	rt := pc.Request(ref.Locks("get")...)
 	rt.Do(func(d backend.Stores) {
-		var idx *index.Index
-		idx, err := index.All([]index.Filter{index.Native()}...)(&d(ref.Prefix()).Index)
-		if err != nil {
-			return
-		}
-		arr := idx.Items()
-		for _, res := range arr {
-			plugin := res.(*backend.Plugin)
-			// If we don't know about this plugin yet, create it on the running list
-			if _, ok := pc.runningPlugins[plugin.Name]; !ok {
-				rt.PublishEvent(models.EventFor(plugin, "create"))
-			}
-			rt.PublishEvent(models.EventFor(plugin, "start"))
+		for k, v := range providers {
+			rt.Publish("plugin_providers", "create", k, v)
 		}
 	})
-	return
 }
 
 func (pc *PluginController) RestartPlugins() {
@@ -145,9 +159,6 @@ func (pc *PluginController) RestartPlugins() {
 }
 
 func (pc *PluginController) allPlugins(provider, action string) (err error) {
-	pc.lock.Lock()
-	defer pc.lock.Unlock()
-
 	// Get all the plugins that have this as provider
 	ref := &backend.Plugin{}
 	rt := pc.Request(ref.Locks("get")...)

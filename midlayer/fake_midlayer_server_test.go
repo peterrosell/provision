@@ -38,7 +38,7 @@ func fakeServer() error {
 	baseLog := log.New(os.Stdout, "dt", 0)
 	l := logger.New(baseLog).Log("backend")
 	ss, _ := store.Open("memory:///")
-	s, err := backend.DefaultDataStack("", "memory:///", "", "", "", tmpDir, l)
+	s, err := backend.DefaultDataStack("", "memory:///", "", "", "", tmpDir, l, nil)
 	if err != nil {
 		panic("Cannot happen")
 	}

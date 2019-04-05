@@ -38,8 +38,8 @@ func badArgTest(t *testing.T, errString string, args ...string) {
 	t.Helper()
 	cOpts := generateArgs(args)
 	localLogger := log.New(os.Stderr, "dr-provision", log.LstdFlags|log.Lmicroseconds|log.LUTC)
-	if answer := server(localLogger, cOpts); !strings.HasPrefix(answer, errString) {
-		t.Errorf("Failed to get error string: %s: Got: %s\n", errString, answer)
+	if answer := server(localLogger, cOpts); answer != nil && !strings.HasPrefix(answer.Error(), errString) {
+		t.Errorf("Failed to get error string: %s: Got: %v\n", errString, answer)
 	}
 }
 
