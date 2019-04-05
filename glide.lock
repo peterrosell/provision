@@ -1,5 +1,5 @@
-hash: 4301ffbffa1f64e6facc37ca624e05a0e3677495941a59b90ded18441730227c
-updated: 2019-03-21T15:25:08.940893559-05:00
+hash: c9bad77a8122460cd375ae546049e993dd1034db312a4c9e618a854f59c7d279
+updated: 2019-04-05T17:03:25.81862204-05:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -142,7 +142,8 @@ imports:
   subpackages:
   - internal/xxh32
 - name: github.com/pin/tftp
-  version: d715325c1fc1f1a22a8272a60dc6783a5ab093ba
+  version: 63761733e8e89148d5f165c4a349469bf1fe4b59
+  repo: https://github.com/VictorLowther/tftp
   subpackages:
   - netascii
 - name: github.com/prometheus/client_golang
@@ -266,6 +267,6 @@ imports:
 - name: gopkg.in/olahol/melody.v1
   version: d521390733761fe1db13de575c253afd5c743085
 - name: gopkg.in/yaml.v2
-  version: 5420a8b6744d3b0345ab293f6fcba19c978f1183
+  version: 7b8349ac747c6a24702b762d2c4fd9266cf4f1d6
   repo: https://github.com/go-yaml/yaml
 testImports: []
