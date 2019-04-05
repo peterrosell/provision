@@ -30,7 +30,7 @@ import:
 - package: github.com/dgrijalva/jwt-go
 - package: github.com/pin/tftp
   repo: https://github.com/VictorLowther/tftp
-  version: 63761733e8e89148d5f165c4a349469bf1fe4b59
+  version: ea83d98ac3514e138e312a7ecec437ac283f4596
 - package: github.com/pborman/uuid
 - package: github.com/tylerb/graceful
 - package: github.com/elithrar/simple-scrypt
