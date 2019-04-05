@@ -84,9 +84,32 @@ func (pc *PluginController) handleEvent(event *models.Event) {
 		case "retry":
 			pc.Panicf("Should never happen")
 		}
-
-		//case "contents":
-		//	pc.rereadPluginProviders()
+	case "contents":
+		pc.lock.Lock()
+		defer pc.lock.Unlock()
+		providers, err := pc.define(pc.Request(), pc.dt.FileRoot)
+		if err != nil {
+			return
+		}
+		toStop, toStart := []*models.PluginProvider{}, []*models.PluginProvider{}
+		for k, v := range pc.AvailableProviders {
+			if _, ok := providers[k]; !ok {
+				toStop = append(toStop, v)
+			}
+		}
+		for k, v := range providers {
+			if _, ok := pc.AvailableProviders[k]; !ok {
+				toStart = append(toStart, v)
+			}
+		}
+		for _, v := range toStop {
+			pc.allPlugins(v.Name, "stop")
+			delete(pc.AvailableProviders, v.Name)
+		}
+		for _, v := range toStart {
+			pc.AvailableProviders[v.Name] = v
+			pc.allPlugins(v.Name, "start")
+		}
 	}
 }
 

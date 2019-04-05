@@ -133,9 +133,7 @@ func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, pro
 	return pp
 }
 
-func (pc *PluginController) Define(rt *backend.RequestTracker, contentDir string) (map[string]*models.PluginProvider, error) {
-	pc.lock.Lock()
-	defer pc.lock.Unlock()
+func (pc *PluginController) define(rt *backend.RequestTracker, contentDir string) (map[string]*models.PluginProvider, error) {
 	providers := map[string]*models.PluginProvider{}
 	files, err := ioutil.ReadDir(pc.pluginDir)
 	if err != nil {
@@ -150,6 +148,12 @@ func (pc *PluginController) Define(rt *backend.RequestTracker, contentDir string
 		}
 	}
 	return providers, nil
+}
+
+func (pc *PluginController) Define(rt *backend.RequestTracker, contentDir string) (map[string]*models.PluginProvider, error) {
+	pc.lock.Lock()
+	defer pc.lock.Unlock()
+	return pc.define(rt, contentDir)
 }
 
 func (pc *PluginController) Start(
