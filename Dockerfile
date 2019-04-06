@@ -12,8 +12,12 @@ COPY tools/install.sh .
 # install provision and its deps
 RUN echo "DRP_VERSION=${DRP_VERSION}" && \
     apt-get update && \
-    apt-get install -y sudo curl procps iproute2 ipmitool libarchive-tools p7zip && \
-    ./install.sh --isolated install --drp-version=${DRP_VERSION} --commit=${DRP_COMMIT}
+    apt-get install -y sudo curl procps iproute2 ipmitool libarchive-tools bsdtar p7zip-full
+    
+RUN chown nobody:nogroup /provision
+USER nobody
+
+RUN ./install.sh --isolated install --drp-version=${DRP_VERSION} --commit=${DRP_COMMIT}
 
 # Copy binaries following symlinks. This is used for easier copying from builder image.
 RUN mkdir /provision/binaries && \
@@ -38,3 +42,4 @@ VOLUME ["/provision/drp-data"]
 ENTRYPOINT ["dr-provision", "--base-root=/provision/drp-data", "--local-content=", "--default-content="]
 CMD []
 
+USER nobody

@@ -1,0 +1,22 @@
+.PHONY: container
+container:
+	docker build -t provision .
+
+.PHONY: run-container
+run-container:
+	@docker run -it --rm \
+    --name drp \
+    --read-only \
+	-p 8080:8080 \
+	-p 8091:8091 \
+	-p 8092:8092 \
+	-p 69:1069/udp \
+	-p 67:1067/udp \
+	-p 4011:4011 \
+    -v $(PWD)/drp-data:/provision/drp-data:z \
+    -v $(PWD)/drp-data/server.key:/server.key:ro \
+    -v $(PWD)/drp-data/server.crt:/server.crt:ro \
+	provision \
+        --tftp-port=1069 \
+        --dhcp-port=1067 \
+        --fake-pinger
