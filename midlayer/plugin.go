@@ -81,8 +81,6 @@ func (pc *PluginController) handleEvent(event *models.Event) {
 			pc.allPlugins(event.Key, "start")
 		case "delete":
 			pc.allPlugins(event.Key, "stop")
-		case "retry":
-			pc.Panicf("Should never happen")
 		}
 	case "contents":
 		pc.lock.Lock()
@@ -319,7 +317,6 @@ func (pc *PluginController) startPlugin(mp models.Model) {
 			if plugin.PluginErrors == nil || len(plugin.PluginErrors) == 0 {
 				plugin.PluginErrors = []string{fmt.Sprintf("Missing Plugin Provider: %s", plugin.Provider)}
 				rt.Update(plugin)
-				pc.events <- &models.Event{Action: "retry", Key: plugin.Provider, Type: "plugin_providers"}
 			}
 			return
 		}
