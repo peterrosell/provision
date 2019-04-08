@@ -172,30 +172,20 @@ func (pc *PluginController) allPlugins(provider, action string) (err error) {
 		for _, res := range arr {
 			plugin := res.(*backend.Plugin)
 			if plugin.Provider == provider {
-				// If we don't know about this plugin yet, create it on the running list
-				if _, ok := pc.runningPlugins[plugin.Name]; !ok {
-					if action == "start" {
+				switch action {
+				case "start":
+					if _, ok := pc.runningPlugins[plugin.Name]; !ok {
 						rt.PublishEvent(models.EventFor(plugin, "create"))
 					}
-				}
-				if action == "stop" {
+					rt.PublishEvent(models.EventFor(plugin, "start"))
+				case "stop":
 					rt.PublishEvent(models.EventFor(plugin, "stop"))
+				default:
+					pc.Panicf("Invalid allPlugins call %s:%s", provider, action)
 				}
-				// We even start on stop to get the error in place.
-				rt.PublishEvent(models.EventFor(plugin, "start"))
 			}
 		}
 	})
-
-	// Stop all those that might have disappeared from the database if content provided
-	if action == "stop" {
-		for _, rp := range pc.runningPlugins {
-			if rp.Provider != nil && rp.Provider.Name == provider && rp.Plugin != nil {
-				rt.PublishEvent(models.EventFor(rp.Plugin, "stop"))
-			}
-		}
-	}
-
 	return
 }
 
