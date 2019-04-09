@@ -81,8 +81,6 @@ func (pc *PluginController) handleEvent(event *models.Event) {
 			pc.allPlugins(event.Key, "start")
 		case "delete":
 			pc.allPlugins(event.Key, "stop")
-		case "retry":
-			pc.Panicf("Should never happen")
 		}
 	case "contents":
 		pc.lock.Lock()
@@ -172,30 +170,20 @@ func (pc *PluginController) allPlugins(provider, action string) (err error) {
 		for _, res := range arr {
 			plugin := res.(*backend.Plugin)
 			if plugin.Provider == provider {
-				// If we don't know about this plugin yet, create it on the running list
-				if _, ok := pc.runningPlugins[plugin.Name]; !ok {
-					if action == "start" {
+				switch action {
+				case "start":
+					if _, ok := pc.runningPlugins[plugin.Name]; !ok {
 						rt.PublishEvent(models.EventFor(plugin, "create"))
 					}
-				}
-				if action == "stop" {
+					rt.PublishEvent(models.EventFor(plugin, "start"))
+				case "stop":
 					rt.PublishEvent(models.EventFor(plugin, "stop"))
+				default:
+					pc.Panicf("Invalid allPlugins call %s:%s", provider, action)
 				}
-				// We even start on stop to get the error in place.
-				rt.PublishEvent(models.EventFor(plugin, "start"))
 			}
 		}
 	})
-
-	// Stop all those that might have disappeared from the database if content provided
-	if action == "stop" {
-		for _, rp := range pc.runningPlugins {
-			if rp.Provider != nil && rp.Provider.Name == provider && rp.Plugin != nil {
-				rt.PublishEvent(models.EventFor(rp.Plugin, "stop"))
-			}
-		}
-	}
-
 	return
 }
 
@@ -329,7 +317,6 @@ func (pc *PluginController) startPlugin(mp models.Model) {
 			if plugin.PluginErrors == nil || len(plugin.PluginErrors) == 0 {
 				plugin.PluginErrors = []string{fmt.Sprintf("Missing Plugin Provider: %s", plugin.Provider)}
 				rt.Update(plugin)
-				pc.events <- &models.Event{Action: "retry", Key: plugin.Provider, Type: "plugin_providers"}
 			}
 			return
 		}
