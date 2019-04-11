@@ -267,21 +267,21 @@ func makeLogBuffer(localLogger *log.Logger, cOpts *ProgOpts) (*logger.Buffer, er
 
 func waitOnApi(cOpts *ProgOpts) {
 	// Wait for Api to come up
-	for count := 0; count < 5; count++ {
-		if count > 0 {
-			log.Printf("Waiting for API (%d) to come up...\n", count)
-		}
-		timeout := time.Duration(5 * time.Second)
+	for count := 1; count <= 7; count++ {
+		log.Printf("Waiting for API (%d) to come up...\n", count)
+		timeout := time.Duration(count) * time.Second
 		tr := &http.Transport{
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-			TLSHandshakeTimeout:   5 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+			TLSHandshakeTimeout:   time.Duration(5*count) * time.Second,
+			ExpectContinueTimeout: time.Duration(count) * time.Second,
 		}
 		client := &http.Client{Transport: tr, Timeout: timeout}
 		if _, err := client.Get(fmt.Sprintf("https://127.0.0.1:%d/api/v3", cOpts.ApiPort)); err == nil {
-			break
+			return
 		}
+		time.Sleep(time.Second * time.Duration(count-1))
 	}
+	log.Fatalf("ERROR: API failed to come up in a timely fashion! (we gave it around 31 seconds)")
 }
 
 func bootstrapPlugins(
@@ -385,6 +385,12 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		return fmt.Errorf("Error getting interfaces for DrpId: %v", err)
 	}
 
+	if _, err := os.Stat(cOpts.TlsCertFile); os.IsNotExist(err) {
+		if err = buildKeys(cOpts.CurveOrBits, cOpts.TlsCertFile, cOpts.TlsKeyFile); err != nil {
+			return fmt.Errorf("Error building certs: %v", err)
+		}
+	}
+
 	var localId string
 	for _, intf := range intfs {
 		if (intf.Flags & net.FlagLoopback) == net.FlagLoopback {
@@ -486,12 +492,6 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	fe.NoBinl = cOpts.DisableBINL
 	backend.SetLogPublisher(buf, publishers)
 	pc.AddStorageType = fe.AddStorageType
-
-	if _, err := os.Stat(cOpts.TlsCertFile); os.IsNotExist(err) {
-		if err = buildKeys(cOpts.CurveOrBits, cOpts.TlsCertFile, cOpts.TlsKeyFile); err != nil {
-			return fmt.Errorf("Error building certs: %v", err)
-		}
-	}
 
 	if !cOpts.DisableTftpServer {
 		localLogger.Printf("Starting TFTP server")
