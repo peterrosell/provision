@@ -128,6 +128,7 @@ func mkdir(d string) error {
 }
 
 func processArgs(localLogger *log.Logger, cOpts *ProgOpts) error {
+	localLogger.Printf("Processing arguments")
 	var err error
 
 	if cOpts.VersionFlag {
@@ -288,6 +289,7 @@ func bootstrapPlugins(
 	l logger.Logger,
 	cOpts *ProgOpts,
 	secretStore store.Store) (*midlayer.PluginController, map[string]*models.PluginProvider, error) {
+	localLogger.Printf("Bootstrapping plugins")
 	scratchStore, err := backend.InitDataStack(cOpts.SaasContentRoot, cOpts.FileRoot, l)
 	if err != nil {
 		return nil, nil, err
@@ -341,6 +343,7 @@ func bootstrapPlugins(
 	waitOnApi(cOpts)
 	rt := dt.Request(l)
 	providers, err := pc.Define(rt, cOpts.FileRoot)
+	localLogger.Printf("Plugins bootstrapped")
 	return pc, providers, err
 }
 
