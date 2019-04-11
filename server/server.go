@@ -278,12 +278,10 @@ func waitOnApi(cOpts *ProgOpts) {
 		client := &http.Client{Transport: tr, Timeout: timeout}
 		if _, err := client.Get(fmt.Sprintf("https://127.0.0.1:%d/api/v3", cOpts.ApiPort)); err == nil {
 			return
-		} else {
-			log.Printf("%v", err)
 		}
 		time.Sleep(time.Second * time.Duration(count-1))
 	}
-	log.Fatalf("ERROR: API failed to come up in a timely fashion! (we gave it around 63 seconds)")
+	log.Fatalf("ERROR: API failed to come up in a timely fashion! (we gave it around 31 seconds)")
 }
 
 func bootstrapPlugins(
@@ -387,6 +385,12 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		return fmt.Errorf("Error getting interfaces for DrpId: %v", err)
 	}
 
+	if _, err := os.Stat(cOpts.TlsCertFile); os.IsNotExist(err) {
+		if err = buildKeys(cOpts.CurveOrBits, cOpts.TlsCertFile, cOpts.TlsKeyFile); err != nil {
+			return fmt.Errorf("Error building certs: %v", err)
+		}
+	}
+
 	var localId string
 	for _, intf := range intfs {
 		if (intf.Flags & net.FlagLoopback) == net.FlagLoopback {
@@ -488,12 +492,6 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	fe.NoBinl = cOpts.DisableBINL
 	backend.SetLogPublisher(buf, publishers)
 	pc.AddStorageType = fe.AddStorageType
-
-	if _, err := os.Stat(cOpts.TlsCertFile); os.IsNotExist(err) {
-		if err = buildKeys(cOpts.CurveOrBits, cOpts.TlsCertFile, cOpts.TlsKeyFile); err != nil {
-			return fmt.Errorf("Error building certs: %v", err)
-		}
-	}
 
 	if !cOpts.DisableTftpServer {
 		localLogger.Printf("Starting TFTP server")
