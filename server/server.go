@@ -267,21 +267,23 @@ func makeLogBuffer(localLogger *log.Logger, cOpts *ProgOpts) (*logger.Buffer, er
 
 func waitOnApi(cOpts *ProgOpts) {
 	// Wait for Api to come up
-	for count := 0; count < 5; count++ {
-		if count > 0 {
-			log.Printf("Waiting for API (%d) to come up...\n", count)
-		}
-		timeout := time.Duration(5 * time.Second)
+	for count := 1; count <= 7; count++ {
+		log.Printf("Waiting for API (%d) to come up...\n", count)
+		timeout := time.Duration(count) * time.Second
 		tr := &http.Transport{
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-			TLSHandshakeTimeout:   5 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+			TLSHandshakeTimeout:   time.Duration(5*count) * time.Second,
+			ExpectContinueTimeout: time.Duration(count) * time.Second,
 		}
 		client := &http.Client{Transport: tr, Timeout: timeout}
 		if _, err := client.Get(fmt.Sprintf("https://127.0.0.1:%d/api/v3", cOpts.ApiPort)); err == nil {
-			break
+			return
+		} else {
+			log.Printf("%v", err)
 		}
+		time.Sleep(time.Second * time.Duration(count-1))
 	}
+	log.Fatalf("ERROR: API failed to come up in a timely fashion! (we gave it around 63 seconds)")
 }
 
 func bootstrapPlugins(
