@@ -85,7 +85,7 @@ func ReverseProxy(pc *PluginController) gin.HandlerFunc {
 
 func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, provider, contentDir string) *models.PluginProvider {
 	pc.Infof("Importing plugin provider: %s\n", provider)
-	cmd := exec.Command(pc.pluginDir+"/"+provider, "define")
+	cmd := exec.Command(provider, "define")
 
 	// Setup env vars to run plugin - auth should be parameters.
 	claims := backend.NewClaim(provider, "system", time.Hour*1).
@@ -122,7 +122,7 @@ func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, pro
 		aa.Provider = pp.Name
 	}
 	out, err = exec.Command(
-		path.Join(pc.pluginDir, provider),
+		path.Join(provider),
 		"unpack",
 		path.Join(contentDir, "files", "plugin_providers", pp.Name)).CombinedOutput()
 	if err != nil {
@@ -142,9 +142,9 @@ func (pc *PluginController) define(rt *backend.RequestTracker, contentDir string
 	}
 	for _, f := range files {
 		pc.Debugf("PluginController Define: getting definition for %s\n", f.Name())
-		pp := pc.definePluginProvider(rt, f.Name(), contentDir)
+		pp := pc.definePluginProvider(rt, path.Join(pc.pluginDir, f.Name()), contentDir)
 		if pp != nil {
-			providers[f.Name()] = pp
+			providers[pp.Name] = pp
 		}
 	}
 	return providers, nil
@@ -345,13 +345,13 @@ func (pc *PluginController) UploadPluginProvider(c *gin.Context, fileRoot, name 
 	}
 
 	ppTmpName := path.Join(pc.pluginDir, fmt.Sprintf(`.%s.part`, path.Base(name)))
-	ppName := path.Join(pc.pluginDir, path.Base(name))
 	if _, err := os.Open(ppTmpName); err == nil {
 		return nil, models.NewError("API ERROR", http.StatusConflict,
 			fmt.Sprintf("upload: plugin_provider %s already uploading", name))
 	}
 	tgt, err := os.Create(ppTmpName)
 	defer tgt.Close()
+	defer os.Remove(ppTmpName)
 	if err != nil {
 		return nil, models.NewError("API ERROR", http.StatusConflict,
 			fmt.Sprintf("upload: Unable to upload %s: %v", name, err))
@@ -361,7 +361,6 @@ func (pc *PluginController) UploadPluginProvider(c *gin.Context, fileRoot, name 
 	case `application/octet-stream`:
 		copied, err = io.Copy(tgt, c.Request.Body)
 		if err != nil {
-			os.Remove(ppTmpName)
 			return nil, models.NewError("API ERROR", http.StatusInsufficientStorage,
 				fmt.Sprintf("upload: Failed to upload %s: %v", name, err))
 		}
@@ -377,21 +376,17 @@ func (pc *PluginController) UploadPluginProvider(c *gin.Context, fileRoot, name 
 		copied, err = io.Copy(tgt, file)
 		if err != nil {
 			return nil, models.NewError("API ERROR", http.StatusBadRequest,
-				fmt.Sprintf("upload: iso %s could not save", header.Filename))
+				fmt.Sprintf("upload: plugin provider %s could not save", header.Filename))
 		}
 		file.Close()
 	}
 	tgt.Close()
-
-	os.Remove(ppName)
-	os.Rename(ppTmpName, ppName)
-	os.Chmod(ppName, 0700)
-
+	os.Chmod(ppTmpName, 0700)
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
 	// If it is here, remove it.
 	rt := pc.Request()
-	pp := pc.definePluginProvider(rt, name, pc.dt.FileRoot)
+	pp := pc.definePluginProvider(rt, ppTmpName, pc.dt.FileRoot)
 	if pp == nil {
 		return nil, models.NewError("API ERROR", http.StatusBadRequest,
 			fmt.Sprintf("Import plugin failed %s: define failed", name))
@@ -415,10 +410,13 @@ func (pc *PluginController) UploadPluginProvider(c *gin.Context, fileRoot, name 
 		return nil, models.NewError("API ERROR", http.StatusBadRequest,
 			fmt.Sprintf("Import plugin failed %s: bad plugin: %v", name, err))
 	}
-	pc.AvailableProviders[name] = pp
-	pc.allPlugins(name, "stop")
-	pc.allPlugins(name, "start")
-	return &models.PluginProviderUploadInfo{Path: name, Size: copied}, nil
+	ppName := path.Join(pc.pluginDir, pp.Name)
+	os.Remove(ppName)
+	os.Rename(ppTmpName, ppName)
+	pc.AvailableProviders[pp.Name] = pp
+	pc.allPlugins(pp.Name, "stop")
+	pc.allPlugins(pp.Name, "start")
+	return &models.PluginProviderUploadInfo{Path: pp.Name, Size: copied}, nil
 }
 
 func (pc *PluginController) RemovePluginProvider(name string) error {
