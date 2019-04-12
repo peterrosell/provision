@@ -411,6 +411,10 @@ func (pc *PluginController) UploadPluginProvider(c *gin.Context, fileRoot, name 
 		}
 		pc.dt.ReplaceBackend(rt, nbs)
 	})
+	if err != nil {
+		return nil, models.NewError("API ERROR", http.StatusBadRequest,
+			fmt.Sprintf("Import plugin failed %s: bad plugin: %v", name, err))
+	}
 	pc.AvailableProviders[name] = pp
 	pc.allPlugins(name, "stop")
 	pc.allPlugins(name, "start")
