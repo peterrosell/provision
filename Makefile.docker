@@ -1,22 +1,52 @@
+DRP_VERSION?=stable
+
+TARGET_MACHINE?=amd64
+STATIC_IP?=192.16.1.10
+RS_ENDPOINT?=https://$(STATIC_IP):8092
+
+
+ifeq ($(TARGET_MACHINE), amd64)
+	CPU_ARCH=amd64
+	DOCKERFILE=Dockerfile
+	BASE_IMAGE=debian:stable-slim
+else
+	CPU_ARCH=armv7
+	DOCKERFILE=Dockerfile.$TARGET_MACHINE
+	BASE_IMAGE=balenalib/rpi-raspbian:stretch-20190403
+endif
+
+DRPCLI=docker run -it --rm --entrypoint drpcli provision
+
 .PHONY: container
 container:
-	docker build -t provision .
+#	@echo $(shell awk '/^FROM/ { system( "docker pull " $$2) }' $(DOCKERFILE))
+	docker pull $(BASE_IMAGE)
+	docker build -f $(DOCKERFILE) \
+	--build-arg BASE_IMAGE=$(BASE_IMAGE) \
+	-t provision:latest-$(CPU_ARCH) \
+	.
+
+# Generate SSL cert
+# sudo certbot certonly --manual --preferred-challenges dns -d dhcp-server.100515.info -m peter.rosell@gmail.com
+# Check that TXT entry exists before continuing the certbot validation step
+# dig dhcp-server.100515.info TXT @ns1.afraid.org
 
 .PHONY: run-container
 run-container:
 	@docker run -it --rm \
     --name drp \
     --read-only \
-	-p 8080:8080 \
-	-p 8091:8091 \
-	-p 8092:8092 \
-	-p 69:1069/udp \
-	-p 67:1067/udp \
-	-p 4011:4011 \
+    -p 8080:8080 \
+    -p 8091:8091 \
+    -p 8092:8092 \
+    -p 69:1069/udp \
+    -p 67:1067/udp \
+    -p 4011:4011 \
     -v $(PWD)/drp-data:/provision/drp-data:z \
     -v $(PWD)/drp-data/server.key:/server.key:ro \
     -v $(PWD)/drp-data/server.crt:/server.crt:ro \
-	provision \
+    provision \
         --tftp-port=1069 \
         --dhcp-port=1067 \
-        --fake-pinger
+        --static-ip=$(STATIC_IP) \
+        --force-static

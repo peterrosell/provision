@@ -1,4 +1,6 @@
-FROM debian:stable-slim as builder
+ARG BASE_IMAGE=debian:stable-slim
+ARG BUILD_IMAGE=debian:stable-slim
+FROM $BUILD_IMAGE as builder
 
 ARG DRP_VERSION=stable
 ARG DRP_COMMIT=""
@@ -24,7 +26,7 @@ RUN mkdir /provision/binaries && \
     cp -L /provision/dr-provision /provision/drbundler /provision/drpcli /provision/drpjoin /provision/binaries/
 
 # Build final container
-FROM debian:stable-slim
+FROM $BUILD_IMAGE
 ENV LANG=C.UTF-8
 RUN apt-get update && \
     apt-get install --no-install-recommends -y ca-certificates curl iproute2 ipmitool jq libarchive-tools p7zip && \
@@ -32,6 +34,13 @@ RUN apt-get update && \
     mkdir -p /provision/drp-data
 
 COPY --from=builder /provision/binaries/ /usr/bin/
+
+RUN apt-get update && \
+    apt-get install -y libcap2-bin && \
+    setcap "cap_net_raw,cap_net_bind_service=+ep" /usr/bin/dr-provision && \
+    apt-get remove --purge -y libcap2-bin && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 
 # run the api server so we can install sledgehammer image
 RUN dr-provision --version || true
