@@ -7,11 +7,9 @@ RS_ENDPOINT?=https://$(STATIC_IP):8092
 
 ifeq ($(TARGET_MACHINE), amd64)
 	CPU_ARCH=amd64
-	DOCKERFILE=Dockerfile
 	BASE_IMAGE=debian:stable-slim
 else
 	CPU_ARCH=armv7
-	DOCKERFILE=Dockerfile.$(TARGET_MACHINE)
 	BASE_IMAGE=balenalib/rpi-raspbian:stretch-20190403
 endif
 
@@ -19,9 +17,9 @@ DRPCLI=docker run -it --rm --entrypoint drpcli provision
 
 .PHONY: container
 container:
-#	@echo $(shell awk '/^FROM/ { system( "docker pull " $$2) }' $(DOCKERFILE))
+#	@echo $(shell awk '/^FROM/ { system( "docker pull " $$2) }' Dockerfile)
 	docker pull $(BASE_IMAGE)
-	docker build -f $(DOCKERFILE) \
+	docker build \
 	--build-arg BASE_IMAGE=$(BASE_IMAGE) \
 	-t provision:latest-$(CPU_ARCH) \
 	.
