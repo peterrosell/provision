@@ -12,14 +12,14 @@ ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /provision/
 COPY tools/install.sh .
 # install provision and its deps
-RUN echo "DRP_VERSION=${DRP_VERSION}" && \
+RUN echo "DRP_VERSION=$DRP_VERSION" && \
     apt-get update && \
     apt-get install -y sudo curl procps iproute2 ipmitool libarchive-tools bsdtar p7zip-full
     
 RUN chown nobody:nogroup /provision
 USER nobody
 
-RUN ./install.sh --isolated install --drp-version=${DRP_VERSION} --commit=${DRP_COMMIT}
+RUN ./install.sh --isolated install --drp-version=$DRP_VERSION --commit=$DRP_COMMIT
 
 # Copy binaries following symlinks. This is used for easier copying from builder image.
 RUN mkdir /provision/binaries && \

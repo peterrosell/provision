@@ -1,7 +1,8 @@
 DRP_VERSION?=stable
+DRP_COMMIT?=
 
 TARGET_MACHINE?=amd64
-STATIC_IP?=192.16.1.10
+DRP_IP?=192.168.1.10
 RS_ENDPOINT?=https://$(STATIC_IP):8092
 
 
@@ -13,7 +14,9 @@ else
 	BASE_IMAGE=balenalib/rpi-raspbian:stretch-20190403
 endif
 
-DRPCLI=docker run -it --rm --entrypoint drpcli provision
+DOCKER_IMAGE=provision:latest-$(DRP_VERSION)-$(CPU_ARCH)
+
+DRPCLI=docker run -it --rm --entrypoint drpcli $(DOCKER_IMAGE)
 
 .PHONY: container
 container:
@@ -21,7 +24,9 @@ container:
 	docker pull $(BASE_IMAGE)
 	docker build \
 	--build-arg BASE_IMAGE=$(BASE_IMAGE) \
-	-t provision:latest-$(CPU_ARCH) \
+	--build-arg DRP_VERSION=$(DRP_VERSION) \
+	--build-arg DRP_COMMIT=$(DRP_COMMIT) \
+	-t $(DOCKER_IMAGE) \
 	.
 
 # Generate SSL cert
@@ -43,8 +48,8 @@ run-container:
     -v $(PWD)/drp-data:/provision/drp-data:z \
     -v $(PWD)/drp-data/server.key:/server.key:ro \
     -v $(PWD)/drp-data/server.crt:/server.crt:ro \
-    provision \
+    $(DOCKER_IMAGE) \
         --tftp-port=1069 \
         --dhcp-port=1067 \
-        --static-ip=$(STATIC_IP) \
+        --static-ip=$(DRP_IP) \
         --force-static

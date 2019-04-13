@@ -11,7 +11,7 @@ else
 	DOCKERFILE=Dockerfile.$TARGET_MACHINE
 endif
 
-DOCKER_IMAGE=provision:latest-$(CPU_ARCH)
+DOCKER_IMAGE=provision:latest-$(DRP_VERSION)-$(CPU_ARCH)
 
 DRPCLI=docker run -it --rm --entrypoint drpcli $(DOCKER_IMAGE)
 
