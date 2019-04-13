@@ -1,5 +1,5 @@
 ARG BASE_IMAGE=debian:stable-slim
-ARG BUILD_IMAGE=debian:stable-slim
+ARG BUILD_IMAGE=$BASE_IMAGE
 FROM $BUILD_IMAGE as builder
 
 ARG DRP_VERSION=stable
@@ -26,7 +26,7 @@ RUN mkdir /provision/binaries && \
     cp -L /provision/dr-provision /provision/drbundler /provision/drpcli /provision/drpjoin /provision/binaries/
 
 # Build final container
-FROM $BUILD_IMAGE
+FROM $BASE_IMAGE
 ENV LANG=C.UTF-8
 RUN apt-get update && \
     apt-get install --no-install-recommends -y ca-certificates curl iproute2 ipmitool jq libarchive-tools p7zip && \
