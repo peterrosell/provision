@@ -5,10 +5,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"runtime"
 	"time"
+
+	"github.com/j-keck/arping"
 
 	consul "github.com/hashicorp/consul/api"
 )
@@ -211,26 +214,43 @@ func runCmd(command ...string) ([]byte, []byte, error) {
 	return stdout.Bytes(), stderr.Bytes(), err
 }
 
-func AddIP(ip, iface string) error {
-	cidr := fmt.Sprintf("%s/32", ip)
-	if runtime.GOOS == "darwin" {
-		_, _, err := runCmd("ifconfig", iface, "alias", cidr)
-		return err
-	} else if runtime.GOOS == "linux" {
-		_, _, err := runCmd("ip", "address", "add", cidr, "dev", iface)
+func AddIP(addr, iface string) error {
+	ip, _, err := net.ParseCIDR(addr)
+	if err != nil {
 		return err
 	}
-	return fmt.Errorf("Unsupported platform: %s", runtime.GOOS)
+	var cmd []string
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = []string{"ifconfig", iface, "alias", addr}
+	case "linux":
+		cmd = []string{"ip", "address", "add", addr, "dev", iface}
+	default:
+		return fmt.Errorf("Unsupported platform: %s", runtime.GOOS)
+	}
+	if _, _, err := runCmd(cmd...); err != nil {
+		return err
+	}
+	for i := 0; i < 5; i++ {
+		if err := arping.GratuitousArpOverIfaceByName(ip, iface); err != nil {
+			return err
+		}
+		time.Sleep(time.Millisecond * 50)
+	}
+	return nil
 }
 
-func RemoveIP(ip, iface string) error {
-	if runtime.GOOS == "darwin" {
-		_, _, err := runCmd("ifconfig", iface, "-alias", ip)
-		return err
-	} else if runtime.GOOS == "linux" {
-		cidr := fmt.Sprintf("%s/32", ip)
-		_, _, err := runCmd("ip", "address", "del", cidr, "dev", iface)
-		return err
+func RemoveIP(addr, iface string) error {
+	var cmd []string
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = []string{"ifconfig", iface, "-alias", addr}
+	case "linux":
+		cmd = []string{"ip", "address", "del", addr, "dev", iface}
+	default:
+		return fmt.Errorf("Unsupported platform: %s", runtime.GOOS)
 	}
-	return fmt.Errorf("Unsupported platform: %s", runtime.GOOS)
+	_, _, err := runCmd(cmd...)
+	return err
+
 }

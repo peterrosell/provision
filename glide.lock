@@ -1,5 +1,5 @@
-hash: c9bad77a8122460cd375ae546049e993dd1034db312a4c9e618a854f59c7d279
-updated: 2019-04-05T17:03:25.81862204-05:00
+hash: 677df3aedbb912162bdfa796b0ee7f70569af583eb48dc3e427fb97664f747df
+updated: 2019-04-15T11:56:21.676390664-05:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -93,6 +93,8 @@ imports:
   version: 7fe0c75c13abdee74b09fcacef5ea1c6bba6a874
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
+- name: github.com/j-keck/arping
+  version: 2cf9dc699c5640a7e2c81403a44127bf28033600
 - name: github.com/jessevdk/go-flags
   version: 1c38ed7ad0cc3d9e66649ac398c30e45f395c4eb
 - name: github.com/json-iterator/go
