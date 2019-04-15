@@ -61,3 +61,4 @@ import:
 - package: github.com/gofunky/semver
 - package: github.com/rackn/netwrangler
   version: v0.5.1
+- package: github.com/j-keck/arping

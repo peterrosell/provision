@@ -215,23 +215,36 @@ func processArgs(localLogger *log.Logger, cOpts *ProgOpts) error {
 			return fmt.Errorf("Error creating required directory %s: %v", cOpts.SecretsRoot, err)
 		}
 	}
+
+	if (cOpts.SecretsType == "consul") != (cOpts.BackEndType == "consul") {
+		return fmt.Errorf("Error: Secrets and writable store must both run consul, not %s and %s",
+			cOpts.SecretsType, cOpts.BackEndType)
+	}
 	// Validate HA args - Assumes a local consul server running talking to the "cluster"
 	if cOpts.HaEnabled {
-		if cOpts.SecretsType != "consul" || cOpts.BackEndType != "consul" {
-			return fmt.Errorf("Error: HA must be run on consul backends: %s, %s", cOpts.SecretsType, cOpts.BackEndType)
+		if cOpts.HaAddress == "" {
+			return fmt.Errorf("Error: HA must specify a VIP in CIDR format that DRP will move around")
 		}
 
-		if cOpts.HaAddress == "" {
-			return fmt.Errorf("Error: HA must specify a VIP that DRP will move around")
+		ip, cidr, err := net.ParseCIDR(cOpts.HaAddress)
+		if err != nil {
+			return fmt.Errorf("Error: HA IP address %s not valid: %v", cOpts.HaAddress, err)
 		}
+		cidr.IP = ip
 
 		if cOpts.HaInterface == "" {
 			return fmt.Errorf("Error: HA must specify an interface for the VIP that DRP will move around")
-		}
-
-		ip := net.ParseIP(cOpts.HaAddress)
-		if ip == nil {
-			return fmt.Errorf("Error: HA must be an IP address: %s", cOpts.HaAddress)
+		} else if iface, err := net.InterfaceByName(cOpts.HaInterface); err != nil {
+			return fmt.Errorf("Error: HA interface %s not found: %v", cOpts.HaInterface, err)
+		} else if addrs, err := iface.Addrs(); err != nil {
+			return fmt.Errorf("Error: Unable to get address list from HA interface %s: %v", cOpts.HaInterface, err)
+		} else {
+			cmp := ip.String() + "/"
+			for _, addr := range addrs {
+				if strings.HasPrefix(addr.String(), cmp) {
+					return fmt.Errorf("Error: HA interface %s already has address %v", cOpts.HaInterface, addr.String())
+				}
+			}
 		}
 
 		if cOpts.OurAddress != "" {
@@ -354,12 +367,12 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	}
 	services := make([]midlayer.Service, 0, 0)
 
-	// HA waits here.
 	if cOpts.HaEnabled {
-		midlayer.RemoveIP(cOpts.HaAddress, cOpts.HaInterface)
-
-		leader := midlayer.BecomeLeader(localLogger)
-		services = append(services, leader)
+		// If we are using consul, wait here. Otherwise, plow on through.
+		if cOpts.SecretsType == "consul" {
+			leader := midlayer.BecomeLeader(localLogger)
+			services = append(services, leader)
+		}
 
 		if err := midlayer.AddIP(cOpts.HaAddress, cOpts.HaInterface); err != nil {
 			return fmt.Errorf("Unable to add address: %v", err)
