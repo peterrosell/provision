@@ -37,12 +37,14 @@ type renderer struct {
 	write      func(net.IP) (io.Reader, error)
 }
 
-func (r renderer) register(fs *FileSystem) {
-	fs.AddDynamicFile(r.path, r.write)
+func (r renderer) register(rt *RequestTracker) {
+	rt.Tracef("Registering dynamic file at %s", r.path)
+	rt.dt.FS.AddDynamicFile(r.path, r.write)
 }
 
-func (r renderer) deregister(fs *FileSystem) {
-	fs.DelDynamicFile(r.path)
+func (r renderer) deregister(rt *RequestTracker) {
+	rt.Tracef("Deregistering dynamic file at %s", r.path)
+	rt.dt.FS.DelDynamicFile(r.path)
 }
 
 type renderers []renderer
@@ -53,21 +55,21 @@ type renderable interface {
 	templates() *template.Template
 }
 
-func (r renderers) register(fs *FileSystem) {
+func (r renderers) register(rt *RequestTracker) {
 	if r == nil || len(r) == 0 {
 		return
 	}
-	for _, rt := range r {
-		rt.register(fs)
+	for _, rq := range r {
+		rq.register(rt)
 	}
 }
 
-func (r renderers) deregister(fs *FileSystem) {
+func (r renderers) deregister(rt *RequestTracker) {
 	if r == nil || len(r) == 0 {
 		return
 	}
-	for _, rt := range r {
-		rt.deregister(fs)
+	for _, rq := range r {
+		rq.deregister(rt)
 	}
 }
 

@@ -993,7 +993,7 @@ func NewDataTracker(backend *DataStack,
 				continue
 			}
 			err := &models.Error{}
-			AsBootEnv(bootEnv).render(rt, machine, err).register(res.FS)
+			AsBootEnv(bootEnv).render(rt, machine, err).register(rt)
 			if err.ContainsError() {
 				logger.Errorf("Error rendering machine %s at startup: %v", machine.UUID(), err)
 			}
@@ -1165,7 +1165,7 @@ func (p *DataTracker) RenderUnknown(rt *RequestTracker) error {
 		err.Errorf("BootEnv %s cannot be used for the unknownBootEnv", env.Name)
 		return err
 	}
-	env.render(rt, nil, err).register(p.FS)
+	env.render(rt, nil, err).register(rt)
 	return err.HasError()
 }
 

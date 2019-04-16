@@ -621,7 +621,7 @@ func (b *BootEnv) AfterDelete() {
 		if err.ContainsError() {
 			b.Errors = err.Messages
 		} else {
-			rts.deregister(b.rt.dt.FS)
+			rts.deregister(b.rt)
 		}
 		idx, idxerr := index.All(
 			index.Sort(b.Indexes()["OsName"]),
@@ -699,7 +699,7 @@ func (b *BootEnv) AfterSave() {
 		}
 	})
 	if b.Available && b.renderers != nil {
-		b.renderers.register(b.rt.dt.FS)
+		b.renderers.register(b.rt)
 	}
 	b.AddDynamicTree()
 	b.renderers = nil

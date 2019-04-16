@@ -323,7 +323,7 @@ func (s *Stage) render(rt *RequestTracker, m *Machine, e models.ErrorAdder) rend
 // AfterSave registers new renderers after successful save.
 func (s *Stage) AfterSave() {
 	if s.Available && s.renderers != nil {
-		s.renderers.register(s.rt.dt.FS)
+		s.renderers.register(s.rt)
 	}
 	s.renderers = nil
 }
