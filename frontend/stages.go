@@ -38,11 +38,87 @@ type StagePatchBodyParameter struct {
 }
 
 // StagePathParameter used to name a Stage in the path
-// swagger:parameters putStages getStage putStage patchStage deleteStage headStage
+// swagger:parameters putStages getStage putStage patchStage deleteStage headStage patchStageParams postStageParams getStagePubKey
 type StagePathParameter struct {
 	// in: path
 	// required: true
 	Name string `json:"name"`
+}
+
+// StageParamsResponse return on a successful GET of all Stage' Params
+// swagger:response
+type StageParamsResponse struct {
+	// in: body
+	Body map[string]interface{}
+}
+
+// StageParamResponse return on a successful GET of a single Stage param
+// swagger:response
+type StageParamResponse struct {
+	// in: body
+	Body interface{}
+}
+
+// StagePatchBodyParameter used to patch a Stage
+// swagger:parameters patchStageParams
+type StagePatchParamsParameter struct {
+	// in: body
+	// required: true
+	Body jsonpatch2.Patch
+}
+
+//StagePostParamParameter used to POST a Stage parameter
+//swagger:parameters postStageParam
+type StagePostParamParameter struct {
+	// in: body
+	// required: true
+	Body interface{}
+}
+
+//StagePostParamsParameter used to POST Stage parameters
+//swagger:parameters postStageParams
+type StagePostParamsParameter struct {
+	// in: body
+	// required: true
+	Body map[string]interface{}
+}
+
+// StagePostParamPathParemeter used to get a single Parameter for a single Stage
+// swagger:parameters postStageParam
+type StagePostParamPathParemeter struct {
+	// in: path
+	// required: true
+	Name string `json:"name"`
+	// in: path
+	//required: true
+	Key string `json:"key"`
+}
+
+// StageGetParamsPathParameter used to find a Stage in the path
+// swagger:parameters getStageParams
+type StageGetParamsPathParameter struct {
+	// in: query
+	Aggregate string `json:"aggregate"`
+	// in: query
+	Decode string `json:"decode"`
+	// in: path
+	// required: true
+	Name string `json:"name"`
+}
+
+//  StageGetParamPathParemeter used to get a single Parameter for a single Stage
+// swagger:parameters getStageParam
+type StageGetParamPathParemeter struct {
+	// in: query
+	Aggregate string `json:"aggregate"`
+	// in: query
+	Decode string `json:"decode"`
+	// in: path
+	// required: true
+	Name string `json:"name"`
+	// in: path
+	//required: true
+	Key string `json:"key"`
 }
 
 // StageListPathParameter used to limit lists of Stage by path options
@@ -345,4 +421,96 @@ func (f *Frontend) InitStageApi() {
 	//       404: ErrorResponse
 	//       409: ErrorResponse
 	f.ApiGroup.POST("/stages/:name/actions/:cmd", pRun)
+
+	pGetAll, pGetOne, pPatch, pSetThem, pSetOne, pDeleteOne, pGetPubKey := f.makeParamEndpoints(&backend.Stage{}, "name")
+
+	// swagger:route GET /stages/{name}/pubkey Stages getStagePubKey
+	//
+	// Get the public key for secure params on a stage
+	//
+	// Get the public key for a Stage specified by {name}
+	//
+	//     Responses:
+	//       200: PubKeyResponse
+	//       401: NoContentResponse
+	//       403: NoContentResponse
+	//       404: ErrorResponse
+	//       500: ErrorResponse
+	f.ApiGroup.GET("/stages/:name/pubkey", pGetPubKey)
+
+	// swagger:route GET /stages/{name}/params Stages getStageParams
+	//
+	// List stage params Stage
+	//
+	// List Stage parms for a Stage specified by {name}
+	//
+	//     Responses:
+	//       200: StageParamsResponse
+	//       401: NoContentResponse
+	//       403: NoContentResponse
+	//       404: ErrorResponse
+	f.ApiGroup.GET("/stages/:name/params", pGetAll)
+
+	// swagger:route GET /stages/{name}/params/{key} Stages getStageParam
+	//
+	// Get a single stage parameter
+	//
+	// Get a single parameter {key} for a Stage specified by {name}
+	//
+	//     Responses:
+	//       200: StageParamResponse
+	//       401: NoContentResponse
+	//       403: NoContentResponse
+	//       404: ErrorResponse
+	f.ApiGroup.GET("/stages/:name/params/*key", pGetOne)
+
+	// swagger:route DELETE /stages/{name}/params/{key} Stages getStageParam
+	//
+	// Delete a single stage parameter
+	//
+	// Delete a single parameter {key} for a Stage specified by {name}
+	//
+	//     Responses:
+	//       200: StageParamResponse
+	//       401: NoContentResponse
+	//       403: NoContentResponse
+	//       404: ErrorResponse
+	f.ApiGroup.DELETE("/stages/:name/params/*key", pDeleteOne)
+
+	// swagger:route PATCH /stages/{name}/params Stages patchStageParams
+	//
+	// Update params for Stage {name} with the passed-in patch
+	//
+	//     Responses:
+	//       200: StageParamsResponse
+	//       401: NoContentResponse
+	//       403: NoContentResponse
+	//       404: ErrorResponse
+	//       409: ErrorResponse
+	f.ApiGroup.PATCH("/stages/:name/params", pPatch)
+
+	// swagger:route POST /stages/{name}/params Stages postStageParams
+	//
+	// Sets parameters for a stage specified by {name}
+	//
+	//     Responses:
+	//       200: StageParamsResponse
+	//       401: NoContentResponse
+	//       403: NoContentResponse
+	//       404: ErrorResponse
+	//       409: ErrorResponse
+	f.ApiGroup.POST("/stages/:name/params", pSetThem)
+
+	// swagger:route POST /stages/{name}/params/{key} Stages postStageParam
+	//
+	// Set as single Parameter {key} for a stage specified by {name}
+	//
+	//     Responses:
+	//       200: StageParamResponse
+	//       401: NoContentResponse
+	//       403: NoContentResponse
+	//       404: ErrorResponse
+	//       409: ErrorResponse
+	f.ApiGroup.POST("/stages/:name/params/*key", pSetOne)
+
 }
