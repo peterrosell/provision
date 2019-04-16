@@ -15,7 +15,7 @@ import (
 var session *Client
 var tmpDir string
 
-func generateArgs(args []string) *server.ProgOpts {
+func generateArgs(args []string) (*server.ProgOpts, error) {
 	var c_opts server.ProgOpts
 
 	parser := flags.NewParser(&c_opts, flags.Default)
@@ -23,11 +23,11 @@ func generateArgs(args []string) *server.ProgOpts {
 		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		} else {
-			os.Exit(1)
+			return nil, err
 		}
 	}
 
-	return &c_opts
+	return &c_opts, nil
 }
 
 func fakeServer() error {
@@ -70,7 +70,10 @@ func fakeServer() error {
 		return err
 	}
 
-	c_opts := generateArgs(testArgs)
+	c_opts, err := generateArgs(testArgs)
+	if err != nil {
+		return err
+	}
 	go server.Server(c_opts)
 
 	count := 0
