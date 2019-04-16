@@ -121,14 +121,14 @@ func TestServer(t *testing.T) {
 	}
 
 	// test presences of all the above
-	if _, err := os.Stat(cOpts.TlsCertFile); os.IsNotExist(err) {
-		t.Errorf("Failed to create cert file: %s", cOpts.TlsCertFile)
+	if _, err := os.Stat(cOpts.TLSCertFile); os.IsNotExist(err) {
+		t.Errorf("Failed to create cert file: %s", cOpts.TLSCertFile)
 	} else {
 		t.Logf("Cert file correctly created")
 	}
 
-	if _, err := os.Stat(cOpts.TlsKeyFile); os.IsNotExist(err) {
-		t.Errorf("Failed to create cert file: %s", cOpts.TlsKeyFile)
+	if _, err := os.Stat(cOpts.TLSKeyFile); os.IsNotExist(err) {
+		t.Errorf("Failed to create cert file: %s", cOpts.TLSKeyFile)
 	} else {
 		t.Logf("Key file correctly created")
 	}

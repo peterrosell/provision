@@ -67,7 +67,7 @@ type ProgOpts struct {
 	MetricsPort         int    `long:"metrics-port" description:"Port the metrics HTTP server should listen on" default:"8080" env:"RS_METRICS_PORT"`
 	StaticPort          int    `long:"static-port" description:"Port the static HTTP file server should listen on" default:"8091" env:"RS_STATIC_PORT"`
 	TftpPort            int    `long:"tftp-port" description:"Port for the TFTP server to listen on" default:"69" env:"RS_TFTP_PORT"`
-	ApiPort             int    `long:"api-port" description:"Port for the API server to listen on" default:"8092" env:"RS_API_PORT"`
+	APIPort             int    `long:"api-port" description:"Port for the API server to listen on" default:"8092" env:"RS_API_PORT"`
 	DhcpPort            int    `long:"dhcp-port" description:"Port for the DHCP server to listen on" default:"67" env:"RS_DHCP_PORT"`
 	BinlPort            int    `long:"binl-port" description:"Port for the PXE/BINL server to listen on" default:"4011" env:"RS_BINL_PORT"`
 	UnknownTokenTimeout int    `long:"unknown-token-timeout" description:"The default timeout in seconds for the machine create authorization token" default:"600" env:"RS_UNKNOWN_TOKEN_TIMEOUT"`
@@ -102,11 +102,11 @@ type ProgOpts struct {
 	DebugRenderer string `long:"debug-renderer" description:"Debug level for the Template Renderer" default:"warn" env:"RS_DEBUG_RENDERER"`
 	DebugFrontend string `long:"debug-frontend" description:"Debug level for the Frontend" default:"warn" env:"RS_DEBUG_FRONTEND"`
 	DebugPlugins  string `long:"debug-plugins" description:"Debug level for the Plug-in layer" default:"warn" env:"RS_DEBUG_PLUGINS"`
-	TlsKeyFile    string `long:"tls-key" description:"The TLS Key File" default:"server.key" env:"RS_TLS_KEY_FILE"`
-	TlsCertFile   string `long:"tls-cert" description:"The TLS Cert File" default:"server.crt" env:"RS_TLS_CERT_FILE"`
+	TLSKeyFile    string `long:"tls-key" description:"The TLS Key File" default:"server.key" env:"RS_TLS_KEY_FILE"`
+	TLSCertFile   string `long:"tls-cert" description:"The TLS Cert File" default:"server.crt" env:"RS_TLS_CERT_FILE"`
 	UseOldCiphers bool   `long:"use-old-ciphers" description:"Use Original Less Secure Cipher List" env:"RS_USE_OLD_CIPHERS"`
-	DrpId         string `long:"drp-id" description:"The id of this Digital Rebar Provision instance" default:"" env:"RS_DRP_ID"`
-	HaId          string `long:"ha-id" description:"The id of this Digital Rebar Provision HA Cluster" default:"" env:"RS_HA_ID"`
+	DrpID         string `long:"drp-id" description:"The id of this Digital Rebar Provision instance" default:"" env:"RS_DRP_ID"`
+	HaID          string `long:"ha-id" description:"The id of this Digital Rebar Provision HA Cluster" default:"" env:"RS_HA_ID"`
 	CurveOrBits   string `long:"cert-type" description:"Type of cert to generate. values are: P224, P256, P384, P521, RSA, or <number of RSA bits>" default:"P384" env:"RS_CURVE_OR_BITS"`
 
 	BaseTokenSecret     string `long:"base-token-secret" description:"Auth Token secret to allow revocation of all tokens" default:"" env:"RS_BASE_TOKEN_SECRET"`
@@ -119,7 +119,7 @@ type ProgOpts struct {
 	HaInterface string `long:"ha-interface" description:"Interface to put the VIP on for HA" default:"" env:"RS_HA_INTERFACE"`
 	HaPassive   bool   `long:"ha-passive" description:"Wait for SIGUSR1 to switch to the active dr-provision" env:"RS_HA_PASSIVE"`
 
-	PromGwUrl      string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:"" env:"RS_PROM_GW_URL"`
+	PromGwURL      string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:"" env:"RS_PROM_GW_URL"`
 	PromInterval   int    `long:"prometheus-interval" description:"Duration in seconds to push metrics" default:"5" env:"RS_PROM_INTERVAL"`
 	CleanupCorrupt bool   `long:"cleanup" description:"Clean up corrupted writable data.  Only use when directed." env:"RS_CLEANUP_CORRUPT"`
 }
@@ -279,7 +279,7 @@ func makeLogBuffer(localLogger *log.Logger, cOpts *ProgOpts) (*logger.Buffer, er
 	return logger.New(localLogger).SetDefaultLevel(logLevel), nil
 }
 
-func waitOnApi(cOpts *ProgOpts) {
+func waitOnAPI(cOpts *ProgOpts) {
 	// Wait for Api to come up
 	for count := 1; count <= 7; count++ {
 		log.Printf("Waiting for API (%d) to come up...\n", count)
@@ -290,7 +290,7 @@ func waitOnApi(cOpts *ProgOpts) {
 			ExpectContinueTimeout: time.Duration(count) * time.Second,
 		}
 		client := &http.Client{Transport: tr, Timeout: timeout}
-		if _, err := client.Get(fmt.Sprintf("https://127.0.0.1:%d/api/v3", cOpts.ApiPort)); err == nil {
+		if _, err := client.Get(fmt.Sprintf("https://127.0.0.1:%d/api/v3", cOpts.APIPort)); err == nil {
 			return
 		}
 		time.Sleep(time.Second * time.Duration(count-1))
@@ -317,8 +317,8 @@ func bootstrapPlugins(
 		"127.0.0.1",
 		cOpts.ForceStatic,
 		cOpts.StaticPort,
-		cOpts.ApiPort,
-		cOpts.HaId,
+		cOpts.APIPort,
+		cOpts.HaID,
 		l,
 		map[string]string{
 			"debugBootEnv":        cOpts.DebugBootEnv,
@@ -342,19 +342,19 @@ func bootstrapPlugins(
 	}
 	fe := frontend.NewFrontend(dt, l,
 		"127.0.0.1",
-		cOpts.ApiPort, cOpts.StaticPort, cOpts.DhcpPort, cOpts.BinlPort,
+		cOpts.APIPort, cOpts.StaticPort, cOpts.DhcpPort, cOpts.BinlPort,
 		cOpts.FileRoot,
-		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, []string{cOpts.DrpId, cOpts.DrpId, cOpts.HaId}, pc,
+		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, []string{cOpts.DrpID, cOpts.DrpID, cOpts.HaID}, pc,
 		cOpts.DisableDHCP, cOpts.DisableTftpServer, cOpts.DisableProvisioner, cOpts.DisableBINL,
 		cOpts.SaasContentRoot)
 	srv := &http.Server{
 		TLSConfig: &tls.Config{},
-		Addr:      fmt.Sprintf("127.0.0.1:%d", cOpts.ApiPort),
+		Addr:      fmt.Sprintf("127.0.0.1:%d", cOpts.APIPort),
 		Handler:   fe.MgmtApi,
 	}
-	go srv.ListenAndServeTLS(cOpts.TlsCertFile, cOpts.TlsKeyFile)
+	go srv.ListenAndServeTLS(cOpts.TLSCertFile, cOpts.TLSKeyFile)
 	defer srv.Shutdown(context.Background())
-	waitOnApi(cOpts)
+	waitOnAPI(cOpts)
 	rt := dt.Request(l)
 	providers, err := pc.Define(rt, cOpts.FileRoot)
 	localLogger.Printf("Plugins bootstrapped")
@@ -413,19 +413,19 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		return fmt.Errorf("Unable to open secrets store: %v", err)
 	}
 
-	// No DrpId - get a mac address
+	// No DrpID - get a mac address
 	intfs, err := net.Interfaces()
 	if err != nil {
-		return fmt.Errorf("Error getting interfaces for DrpId: %v", err)
+		return fmt.Errorf("Error getting interfaces for DrpID: %v", err)
 	}
 
-	if _, err := os.Stat(cOpts.TlsCertFile); os.IsNotExist(err) {
-		if err = buildKeys(cOpts.CurveOrBits, cOpts.TlsCertFile, cOpts.TlsKeyFile); err != nil {
+	if _, err := os.Stat(cOpts.TLSCertFile); os.IsNotExist(err) {
+		if err = buildKeys(cOpts.CurveOrBits, cOpts.TLSCertFile, cOpts.TLSKeyFile); err != nil {
 			return fmt.Errorf("Error building certs: %v", err)
 		}
 	}
 
-	var localId string
+	var localID string
 	for _, intf := range intfs {
 		if (intf.Flags & net.FlagLoopback) == net.FlagLoopback {
 			continue
@@ -436,14 +436,14 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		if strings.HasPrefix(intf.Name, "veth") {
 			continue
 		}
-		localId = intf.HardwareAddr.String()
+		localID = intf.HardwareAddr.String()
 		break
 	}
-	if cOpts.DrpId == "" {
-		cOpts.DrpId = localId
+	if cOpts.DrpID == "" {
+		cOpts.DrpID = localID
 	}
-	if cOpts.HaId == "" {
-		cOpts.HaId = cOpts.DrpId
+	if cOpts.HaID == "" {
+		cOpts.HaID = cOpts.DrpID
 	}
 	pc, providers, err := bootstrapPlugins(localLogger, buf.Log("bootstrap"), cOpts, secretStore)
 	if err != nil {
@@ -451,11 +451,11 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	}
 	providerStores := map[string]store.Store{}
 	for k, v := range providers {
-		if ps, err := v.Store(); err != nil {
+		ps, err := v.Store()
+		if err != nil {
 			return fmt.Errorf("Error getting Store from plugin %s: %v", k, err)
-		} else {
-			providerStores[k] = ps
 		}
+		providerStores[k] = ps
 	}
 
 	localLogger.Printf("Starting metrics server")
@@ -465,8 +465,8 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	}
 	services = append(services, svc)
 
-	if cOpts.PromGwUrl != "" {
-		ppg := utils.NewPrometheusPushGateway(buf.Log("promgateway"), cOpts.PromGwUrl,
+	if cOpts.PromGwURL != "" {
+		ppg := utils.NewPrometheusPushGateway(buf.Log("promgateway"), cOpts.PromGwURL,
 			fmt.Sprintf("http://127.0.0.1:%d/metrics", cOpts.MetricsPort),
 			time.Duration(cOpts.PromInterval)*time.Second)
 		services = append(services, ppg)
@@ -489,8 +489,8 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		cOpts.OurAddress,
 		cOpts.ForceStatic,
 		cOpts.StaticPort,
-		cOpts.ApiPort,
-		cOpts.HaId,
+		cOpts.APIPort,
+		cOpts.HaID,
 		buf.Log("backend"),
 		map[string]string{
 			"debugBootEnv":        cOpts.DebugBootEnv,
@@ -516,9 +516,9 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 
 	fe := frontend.NewFrontend(dt, buf.Log("frontend"),
 		cOpts.OurAddress,
-		cOpts.ApiPort, cOpts.StaticPort, cOpts.DhcpPort, cOpts.BinlPort,
+		cOpts.APIPort, cOpts.StaticPort, cOpts.DhcpPort, cOpts.BinlPort,
 		cOpts.FileRoot,
-		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, []string{cOpts.DrpId, localId, cOpts.HaId}, pc,
+		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, []string{cOpts.DrpID, localID, cOpts.HaID}, pc,
 		cOpts.DisableDHCP, cOpts.DisableTftpServer, cOpts.DisableProvisioner, cOpts.DisableBINL,
 		cOpts.SaasContentRoot)
 	fe.TftpPort = cOpts.TftpPort
@@ -611,7 +611,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	}
 	srv := &http.Server{
 		TLSConfig: cfg,
-		Addr:      fmt.Sprintf(":%d", cOpts.ApiPort),
+		Addr:      fmt.Sprintf(":%d", cOpts.APIPort),
 		Handler:   fe.MgmtApi,
 		ConnState: func(n net.Conn, cs http.ConnState) {
 			if cs == http.StateActive {
@@ -637,7 +637,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	watchDone := make(chan struct{})
 
 	go func() {
-		waitOnApi(cOpts)
+		waitOnAPI(cOpts)
 		// Start the controller now that we have a frontend to front.
 		pc.Start(dt, providers, publishers)
 
@@ -734,7 +734,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	go func() {
 		localLogger.Printf("Starting API server")
 		fe.ApiGroup.Any("/plugin-apis/:plugin/*path", midlayer.ReverseProxy(pc))
-		if err = srv.ListenAndServeTLS(cOpts.TlsCertFile, cOpts.TlsKeyFile); err != http.ErrServerClosed {
+		if err = srv.ListenAndServeTLS(cOpts.TLSCertFile, cOpts.TLSKeyFile); err != http.ErrServerClosed {
 			// Stop the service gracefully.
 			for _, svc := range services {
 				localLogger.Println("Shutting down server...")
