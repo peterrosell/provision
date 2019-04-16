@@ -117,6 +117,7 @@ type ProgOpts struct {
 	HaEnabled   bool   `long:"ha-enabled" description:"Enable HA" env:"RS_HA_ENABLED"`
 	HaAddress   string `long:"ha-address" description:"IP address to advertise as our HA address" default:"" env:"RS_HA_ADDRESS"`
 	HaInterface string `long:"ha-interface" description:"Interface to put the VIP on for HA" default:"" env:"RS_HA_INTERFACE"`
+	HaPassive   bool   `long:"ha-passive" description:"Wait for SIGUSR1 to switch to the active dr-provision" env:"RS_HA_PASSIVE"`
 
 	PromGwUrl      string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:"" env:"RS_PROM_GW_URL"`
 	PromInterval   int    `long:"prometheus-interval" description:"Duration in seconds to push metrics" default:"5" env:"RS_PROM_INTERVAL"`
@@ -372,8 +373,28 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		if cOpts.SecretsType == "consul" {
 			leader := midlayer.BecomeLeader(localLogger)
 			services = append(services, leader)
+		} else if cOpts.HaPassive {
+			localLogger.Println("Waiting on SIGUSR1 to become active")
+			ch := make(chan os.Signal)
+			signal.Notify(ch, syscall.SIGUSR1)
+			<-ch
+			newArgs := make([]string, 0, len(os.Args))
+			for _, arg := range os.Args {
+				if strings.HasPrefix(arg, "--ha-passive") {
+					continue
+				}
+				newArgs = append(newArgs, arg)
+			}
+			newEnv := []string{}
+			for _, env := range os.Environ() {
+				if strings.HasPrefix(env, "RS_HA_PASSIVE") {
+					continue
+				}
+				newEnv = append(newEnv, env)
+			}
+			syscall.Exec(newArgs[0], newArgs, newEnv)
+			localLogger.Fatalln("Reexec failed")
 		}
-
 		if err := midlayer.AddIP(cOpts.HaAddress, cOpts.HaInterface); err != nil {
 			return fmt.Errorf("Unable to add address: %v", err)
 		}
@@ -607,7 +628,11 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 
 	// Handle SIGHUP, SIGINT and SIGTERM.
 	ch := make(chan os.Signal)
-	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT)
+	toWait := []os.Signal{syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT}
+	if cOpts.HaEnabled {
+		toWait = append(toWait, syscall.SIGUSR2)
+	}
+	signal.Notify(ch, toWait...)
 
 	watchDone := make(chan struct{})
 
@@ -666,7 +691,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 					})
 					localLogger.Println("Reload Complete")
 				}
-			case syscall.SIGTERM, syscall.SIGINT:
+			case syscall.SIGTERM, syscall.SIGINT, syscall.SIGUSR2:
 				if cOpts.HaEnabled {
 					localLogger.Printf("Removing VIP: %s:%s\n", cOpts.HaInterface, cOpts.HaAddress)
 					midlayer.RemoveIP(cOpts.HaAddress, cOpts.HaInterface)
@@ -677,6 +702,26 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 					if err := svc.Shutdown(context.Background()); err != nil {
 						localLogger.Printf("could not shutdown: %v", err)
 					}
+				}
+				if s == syscall.SIGUSR2 {
+					localLogger.Println("Switching to passive mode")
+					newArgs := make([]string, 0, len(os.Args))
+					for _, arg := range os.Args {
+						if strings.HasPrefix(arg, "--ha-passive") {
+							continue
+						}
+						newArgs = append(newArgs, arg)
+					}
+					newArgs = append(newArgs, "--ha-passive")
+					newEnv := []string{}
+					for _, env := range os.Environ() {
+						if strings.HasPrefix(env, "RS_HA_PASSIVE") {
+							continue
+						}
+						newEnv = append(newEnv, env)
+					}
+					syscall.Exec(newArgs[0], newArgs, newEnv)
+					localLogger.Fatalln("Reexec failed")
 				}
 				if watchDone != nil {
 					close(watchDone)
