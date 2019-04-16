@@ -2,6 +2,7 @@ package backend
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"text/template"
 
@@ -140,6 +141,46 @@ func (s *Stage) genRoot(commonRoot *template.Template, e models.ErrorAdder) *tem
 	return res
 }
 
+func (s *Stage) ParameterMaker(rt *RequestTracker, parameter string) (index.Maker, error) {
+	fix := AsStage
+	pobj := rt.find("params", parameter)
+	if pobj == nil {
+		return index.Maker{}, fmt.Errorf("Filter not found: %s", parameter)
+	}
+	param := AsParam(pobj)
+
+	return index.Make(
+		false,
+		"parameter",
+		func(i, j models.Model) bool {
+			ip, _ := rt.GetParam(fix(i), parameter, true, false)
+			jp, _ := rt.GetParam(fix(j), parameter, true, false)
+			return GeneralLessThan(ip, jp)
+		},
+		func(ref models.Model) (gte, gt index.Test) {
+			jp, _ := rt.GetParam(fix(ref), parameter, true, false)
+			return func(si models.Model) bool {
+					ip, _ := rt.GetParam(fix(si), parameter, true, false)
+					return GeneralGreaterThanEqual(ip, jp)
+				},
+				func(si models.Model) bool {
+					ip, _ := rt.GetParam(fix(si), parameter, true, false)
+					return GeneralGreaterThan(ip, jp)
+				}
+		},
+		func(str string) (models.Model, error) {
+			obj, err := GeneralValidateParam(param, str)
+			if err != nil {
+				return nil, err
+			}
+			res := fix(s.New())
+			res.Params = map[string]interface{}{}
+			res.Params[parameter] = obj
+			return res, nil
+		}), nil
+
+}
+
 // Validate ensures that the Stage is valid and available.
 // Setting those flags as appropriate.  Profiles, Tasks,
 // and BootEnv are validate for presence.  Renderers are
@@ -150,6 +191,11 @@ func (s *Stage) Validate() {
 		ti.SanityCheck(idx, s, false)
 	}
 	s.AddError(index.CheckUnique(s, s.rt.stores("stages").Items()))
+	if pk, err := s.rt.PrivateKeyFor(s); err == nil {
+		ValidateParams(s.rt, s, s.Params, pk)
+	} else {
+		s.Errorf("Unable to get key: %v", err)
+	}
 	if !s.SetValid() {
 		// If we have not been validated at this point, return.
 		return
@@ -329,11 +375,11 @@ func (s *Stage) AfterSave() {
 }
 
 var stageLockMap = map[string][]string{
-	"get":     {"stages"},
-	"create":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"update":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"patch":   {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"delete":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
+	"get":     {"stages", "params"},
+	"create":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows", "params"},
+	"update":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows", "params"},
+	"patch":   {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows", "params"},
+	"delete":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows", "params"},
 	"actions": {"stages", "profiles", "params"},
 }
 

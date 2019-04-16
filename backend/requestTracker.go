@@ -559,6 +559,7 @@ func (rt *RequestTracker) getAggParams(obj models.Paramer,
 	}
 	if stage != "" {
 		if sobj := rt.Find("stages", stage); sobj != nil {
+			subObjs = append(subObjs, sobj.(models.Paramer))
 			for _, pn := range AsStage(sobj).Profiles {
 				if pobj := rt.Find("profiles", pn); pobj != nil {
 					subObjs = append(subObjs, pobj.(models.Paramer))
