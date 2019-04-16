@@ -568,10 +568,10 @@ func (n *Machine) BeforeSave() error {
 func (n *Machine) AfterSave() {
 	if n.Available {
 		if n.toDeRegister != nil {
-			n.toDeRegister.deregister(n.rt.dt.FS)
+			n.toDeRegister.deregister(n.rt)
 		}
 		if n.toRegister != nil {
-			n.toRegister.register(n.rt.dt.FS)
+			n.toRegister.register(n.rt)
 		}
 	}
 	n.toDeRegister = nil
@@ -942,10 +942,10 @@ func (n *Machine) OnChange(oldThing store.KeySaver) error {
 func (n *Machine) AfterDelete() {
 	e := &models.Error{}
 	if b := n.rt.stores("bootenvs").Find(n.BootEnv); b != nil {
-		AsBootEnv(b).render(n.rt, n, e).deregister(n.rt.dt.FS)
+		AsBootEnv(b).render(n.rt, n, e).deregister(n.rt)
 	}
 	if s := n.rt.stores("stages").Find(n.Stage); s != nil {
-		AsStage(s).render(n.rt, n, e).deregister(n.rt.dt.FS)
+		AsStage(s).render(n.rt, n, e).deregister(n.rt)
 	}
 	if j := n.rt.stores("jobs").Find(n.CurrentJob.String()); j != nil {
 		job := AsJob(j)
