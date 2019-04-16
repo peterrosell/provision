@@ -11,10 +11,10 @@ import (
 	"github.com/jessevdk/go-flags"
 )
 
-var c_opts server.ProgOpts
+var cOpts server.ProgOpts
 
 func main() {
-	parser := flags.NewParser(&c_opts, flags.Default)
+	parser := flags.NewParser(&cOpts, flags.Default)
 	if _, err := parser.Parse(); err != nil {
 		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
@@ -22,5 +22,5 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	server.Server(&c_opts)
+	server.Server(&cOpts)
 }
