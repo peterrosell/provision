@@ -106,9 +106,11 @@ for build in ${builds}; do
     echo "Building binaries for ${arch}${ver_part} ${os} (staging to: '$BLD/$binpath')"
     mkdir -p "$binpath"
     go build -ldflags "$VERFLAGS" -o "$binpath/drpcli${ext}" cmds/drpcli/drpcli.go
-    go build -ldflags "$VERFLAGS" -o "$binpath/dr-provision${ext}" cmds/dr-provision/dr-provision.go
-    go generate cmds/incrementer/incrementer.go
-    go build -ldflags "$VERFLAGS" -o "$binpath/incrementer${ext}" cmds/incrementer/incrementer.go cmds/incrementer/content.go
+    if [[ $GOOS != windows ]]; then
+        go build -ldflags "$VERFLAGS" -o "$binpath/dr-provision${ext}" cmds/dr-provision/dr-provision.go
+        go generate cmds/incrementer/incrementer.go
+        go build -ldflags "$VERFLAGS" -o "$binpath/incrementer${ext}" cmds/incrementer/incrementer.go cmds/incrementer/content.go
+    fi
     go build -ldflags "$VERFLAGS" -o "$binpath/drbundler${ext}" cmds/drbundler/drbundler.go
 
     cp tools/drpjoin "$binpath/drpjoin"
