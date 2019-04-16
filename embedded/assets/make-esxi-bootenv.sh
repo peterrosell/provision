@@ -250,7 +250,7 @@ cat <<BOOT > $B_TMPL
 bootstate=0
 title=Loading ESXi installer for $TITLE
 timeout=2
-prefix=/
+prefix={{ template "esxi-get-http-mirror.tmpl" . }}
 kernel=$KERNEL
 kernelopt=ks={{.Machine.Url}}/compute.ks{{if .ParamExists "kernel-options"}} {{.Param "kernel-options"}}{{end}}{{if .ParamExists "esxi/serial-console"}} {{.Param "esxi/serial-console"}}{{end}}
 build=
