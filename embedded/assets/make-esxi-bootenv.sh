@@ -150,17 +150,20 @@ then
 fi
 
 # generic fixups
-[[ "$TITLE" =~ esxi-.* ]] || TITLE="esxi-$TITLE"
 TITLE=$(echo $TITLE | sed 's/^[-_~\.*\*]*\(.*\)[-_~\.*\*]/\1/')
+[[ "$TITLE" =~ ^esxi-.* ]] || TITLE="esxi-$TITLE"
 
 BUNDLE="$BLD/vmware-$TITLE.yaml"
 
+echo ""
 echo "Setting DRP Content build directory to:  $BLD"
 echo "FINAL DRP Content TITLE set to:  $TITLE"
+echo ""
 
 ###
 #  Build our content meta info files
 ###
+echo "Building meta data files for content bundle ... "
 printf "RackN, Inc." > ${BLD}/._Author.meta
 printf "https://github.com/rackn/provision-content" > ${BLD}/._CodeSource.meta
 printf "black" > ${BLD}/._Color.meta
@@ -227,12 +230,18 @@ Templates:
   - ID: esxi-pxelinux.tmpl
     Name: pxelinux-chain
     Path: '{{.Env.PathFor "tftp" ""}}/pxelinux.cfg/{{.Machine.HexAddress}}'
+  - ID: esxi-pxelinux.tmpl
+    Name: pxelinux-chain-mac
+    Path: '{{.Env.PathFor "tftp" ""}}/pxelinux.cfg/{{.Machine.MacAddr "pxelinux"}}'
   - ID: esxi-install-py3.ks.tmpl
     Name: compute.ks
     Path: '{{.Machine.Path}}/compute.ks'
   - ID: $TITLE.boot.cfg.tmpl
     Name: boot.cfg
     Path: '{{.Env.PathFor "tftp" ""}}/{{.Machine.Path}}/boot.cfg'
+  - ID: $TITLE.boot.cfg.tmpl
+    Name: boot-uefi.cfg
+    Path: '{{.Machine.Path}}/boot.cfg'
 BENV
 
 echo "Built DRP BootEnv template file '$T_YAML'"
