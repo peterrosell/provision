@@ -5,7 +5,7 @@ addons:
     packages:
     - bsdtar
 go:
-- "1.10"
+- "1.12"
 git:
   depth: 500
 install:
