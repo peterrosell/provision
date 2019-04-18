@@ -1,13 +1,13 @@
 DRP_VERSION?=stable
 DRP_COMMIT?=
 
-TARGET_MACHINE?=amd64
+TARGET_MACHINE?=$(shell uname -m)
 DRP_IP?=192.168.1.10
 RS_ENDPOINT?=https://$(STATIC_IP):8092
 
 
-ifeq ($(TARGET_MACHINE), amd64)
-	CPU_ARCH=amd64
+ifeq ($(TARGET_MACHINE), x86_64)
+	CPU_ARCH=x86_64
 	BASE_IMAGE=debian:stable-slim
 else
 	CPU_ARCH=armv7
