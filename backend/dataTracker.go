@@ -810,6 +810,7 @@ func (p *DataTracker) addStoreType(prefix string, schema interface{}, rt *Reques
 	}
 	// Record schema if specified for validation and indexes
 	rawModelSchemaMap[prefix] = schema
+	models.UpdateAllScopesWithRawModel(prefix)
 
 	bk := p.Backend.GetSub(prefix)
 	p.objs[prefix] = &Store{backingStore: bk}
