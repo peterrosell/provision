@@ -18,6 +18,11 @@ type Task struct {
 	tmplMux      sync.Mutex
 }
 
+// SetReadOnly interface function to set the ReadOnly flag.
+func (t *Task) SetReadOnly(b bool) {
+	t.ReadOnly = b
+}
+
 func (t *Task) sanityCheck(rt *RequestTracker, e models.ErrorAdder, seen map[string]int) (prereqs []string, sane bool) {
 	prereqs = []string{}
 	sane = true
