@@ -27,6 +27,10 @@ func (r *Role) SaveClean() store.KeySaver {
 	return ModelToBackend(&mod)
 }
 
+func (r *Role) ClearCachedClaims() {
+	r.cachedClaims = nil
+}
+
 // CompiledClaims compiles and caches the claims for
 // this role to accelerate lookups in the future.
 func (r *Role) CompiledClaims() models.Claims {

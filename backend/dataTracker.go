@@ -776,7 +776,7 @@ func (p *DataTracker) rebuildCache(loadRT *RequestTracker) (hard, soft *models.E
 		}
 	}
 	for pre, s := range rawModelSchemaMap {
-		if e := p.addStoreType(pre, s, loadRT, soft); e != nil {
+		if e := p.addStoreType(func(ref string) *Store { return p.objs[ref] }, pre, s, loadRT, soft); e != nil {
 			soft.Errorf("Failed to reload %s: %v", pre, e)
 		}
 	}
@@ -803,7 +803,7 @@ func (p *DataTracker) GetObjectTypes() []string {
 	return sobjs
 }
 
-func (p *DataTracker) addStoreType(prefix string, schema interface{}, rt *RequestTracker, soft *models.Error) error {
+func (p *DataTracker) addStoreType(d Stores, prefix string, schema interface{}, rt *RequestTracker, soft *models.Error) error {
 	_, berr := p.Backend.MakeSub(prefix)
 	if berr != nil {
 		return fmt.Errorf("dataTracker: Error creating substore %s: %v", prefix, berr)
@@ -811,6 +811,15 @@ func (p *DataTracker) addStoreType(prefix string, schema interface{}, rt *Reques
 	// Record schema if specified for validation and indexes
 	rawModelSchemaMap[prefix] = schema
 	models.UpdateAllScopesWithRawModel(prefix)
+
+	// Make sure that we rebuild the roles claims
+	roles := d("roles")
+	if roles != nil {
+		for _, i := range roles.Items() {
+			role := AsRole(i)
+			role.ClearCachedClaims()
+		}
+	}
 
 	bk := p.Backend.GetSub(prefix)
 	p.objs[prefix] = &Store{backingStore: bk}
@@ -839,7 +848,7 @@ func (p *DataTracker) AddStoreType(prefix string, schema interface{}) error {
 	rt := p.Request(p.Logger)
 	var err error
 	rt.AllLocked(func(d Stores) {
-		err = p.addStoreType(prefix, schema, rt, nil)
+		err = p.addStoreType(d, prefix, schema, rt, nil)
 	})
 	return err
 }
