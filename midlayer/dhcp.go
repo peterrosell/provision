@@ -890,7 +890,7 @@ func StartDhcpHandler(dhcpInfo *backend.DataTracker,
 			if fakePinger {
 				handler.pinger = pinger.Fake(true)
 			} else {
-				pinger, err := pinger.ICMP()
+				pinger, err := pinger.ICMPv4Only()
 				if err != nil {
 					return nil, err
 				}
