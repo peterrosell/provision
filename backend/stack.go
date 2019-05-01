@@ -63,6 +63,58 @@ chain {{.ProvisionerURL}}/${netX/mac}.ipxe && exit || goto chainip
 chain tftp://{{.ProvisionerAddress}}/${netX/ip}.ipxe || exit
 `,
 				},
+				{
+					Name: `grub`,
+					Path: `grub/grub.cfg`,
+					Contents: `set _kernel=linux
+set _module=initrd
+$_kernel
+if test $? != 18; then
+    set _kernel=linuxefi
+    set _module=initrdefi
+fi
+function kernel { $_kernel "$@"; }
+function module { $_module "$@"; }
+if test -s (tftp)/grub/${net_default_mac}.cfg; then
+    echo "Booting via MAC"
+    source (tftp)/grub/${net_default_mac}.cfg
+    boot
+elif test -s (tftp)/grub/${net_default_ip}.cfg; then
+    echo "Booting via IP"
+    source (tftp)/grub/${net_default_ip}.cfg
+    boot
+elif test $grub_platform == pc; then
+    chainloader (hd0)
+else
+    bpx=/efi/boot
+    root='' prefix=''
+    search --file --set=root $bpx/bootx64.efi || search --file --set=root $bpx/bootaa64.efi
+    if test x$root == x; then
+        echo "No EFI boot partiton found."
+        echo "Rebooting in 120 seconds"
+        sleep 120
+        reboot
+    fi
+    if test -f ($root)/efi/microsoft/boot/bootmgfw.efi; then
+        echo "Microsoft Windows found, chainloading into it"
+        chainloader ($root)/efi/microsoft/boot/bootmgfw.efi
+    fi
+    for f in ($root)/efi/*; do
+        if test -f $f/grub.cfg; then
+            prefix=$f
+            break
+        fi
+    done
+    if test x$prefix == x; then
+        echo "Unable to find grub.cfg"
+        echo "Rebooting in 120 seconds"
+        sleep 120
+        reboot
+    fi
+    configfile $prefix/grub.cfg
+fi
+`,
+				},
 			},
 			Meta: map[string]string{
 				"feature-flags": "change-stage-v2",
@@ -112,6 +164,76 @@ LABEL local
 					Path: "{{.Machine.MacAddr \"ipxe\"}}.ipxe",
 					Contents: `#!ipxe
 exit
+`,
+				},
+				{
+					Name: `grub`,
+					Path: `grub/{{.Machine.Address}}.cfg`,
+					Contents: `if test $grub_platform == pc; then
+    chainloader (hd0)
+else
+    bpx=/efi/boot
+    root='' prefix=''
+    search --file --set=root $bpx/bootx64.efi || search --file --set=root $bpx/bootaa64.efi
+    if test x$root == x; then
+        echo "No EFI boot partiton found."
+        echo "Rebooting in 120 seconds"
+        sleep 120
+        reboot
+    fi
+    if test -f ($root)/efi/microsoft/boot/bootmgfw.efi; then
+        echo "Microsoft Windows found, chainloading into it"
+        chainloader ($root)/efi/microsoft/boot/bootmgfw.efi
+    fi
+    for f in ($root)/efi/*; do
+        if test -f $f/grub.cfg; then
+            prefix=$f
+            break
+        fi
+    done
+    if test x$prefix == x; then
+        echo "Unable to find grub.cfg"
+        echo "Rebooting in 120 seconds"
+        sleep 120
+        reboot
+    fi
+    configfile $prefix/grub.cfg
+fi
+`,
+				},
+				{
+					Name: `grub-mac`,
+					Path: `grub/{{.Machine.MacAddr "grub"}}.cfg`,
+					Contents: `if test $grub_platform == pc; then
+    chainloader (hd0)
+else
+    bpx=/efi/boot
+    root='' prefix=''
+    search --file --set=root $bpx/bootx64.efi || search --file --set=root $bpx/bootaa64.efi
+    if test x$root == x; then
+        echo "No EFI boot partiton found."
+        echo "Rebooting in 120 seconds"
+        sleep 120
+        reboot
+    fi
+    if test -f ($root)/efi/microsoft/boot/bootmgfw.efi; then
+        echo "Microsoft Windows found, chainloading into it"
+        chainloader ($root)/efi/microsoft/boot/bootmgfw.efi
+    fi
+    for f in ($root)/efi/*; do
+        if test -f $f/grub.cfg; then
+            prefix=$f
+            break
+        fi
+    done
+    if test x$prefix == x; then
+        echo "Unable to find grub.cfg"
+        echo "Rebooting in 120 seconds"
+        sleep 120
+        reboot
+    fi
+    configfile $prefix/grub.cfg
+fi
 `,
 				},
 			},

@@ -94,6 +94,7 @@ func ExtractAssets(replaceRoot, fileRoot string) error {
 		"wimboot":        "",
 		"grubarm64.efi":  "",
 		"grubamd64.efi":  "",
+		"grub.pxe":       "",
 	}
 
 	for src, dest := range assets {
