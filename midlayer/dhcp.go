@@ -351,17 +351,26 @@ func (dhr *DhcpRequest) buildReply(
 	//
 	// THis also appears to be required to make UEFI boot mode work properly on
 	// the Dell T320.
+	saw82 := false
 	for _, opt := range dhr.outOpts.SelectOrderOrAll(order) {
 		if dhr.offerNetBoot {
 			dhr.Debugf("OfferBoot: opt %d: %v", opt.Code, opt.Value)
 		}
 		switch opt.Code {
+		case dhcp.OptionRelayAgentInformation:
+			saw82 = true
 		case dhcp.OptionBootFileName:
 			fileName = opt.Value
 		case dhcp.OptionTFTPServerName:
 			sName = opt.Value
 		default:
 			toAdd = append(toAdd, opt)
+		}
+	}
+	if !dhr.request.GIAddr().Equal(net.IPv4zero) && !saw82 {
+		// For option 82, if we see it, send it back.
+		if v, ok := dhr.pktOpts[dhcp.OptionRelayAgentInformation]; ok {
+			toAdd = append(toAdd, dhcp.Option{Code: dhcp.OptionRelayAgentInformation, Value: v})
 		}
 	}
 	// Add renew and rebind times based on the expire time.
