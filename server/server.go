@@ -90,7 +90,7 @@ type ProgOpts struct {
 	FileRoot        string `long:"file-root" description:"Root of filesystem we should manage" default:"tftpboot" env:"RS_FILE_ROOT"`
 	ReplaceRoot     string `long:"replace-root" description:"Root of filesystem we should use to replace embedded assets" default:"replace" env:"RS_REPLACE_ROOT"`
 
-	LocalUI        string `long:"local-ui" description:"Root of Local UI Pages" default:"ux/public" env:"RS_LOCAL_UI"`
+	LocalUI        string `long:"local-ui" description:"Root of Local UI Pages" default:"ux" env:"RS_LOCAL_UI"`
 	UIUrl          string `long:"ui-url" description:"URL to redirect to UI" default:"https://portal.rackn.io" env:"RS_UI_URL"`
 	DhcpInterfaces string `long:"dhcp-ifs" description:"Comma-separated list of interfaces to listen for DHCP packets" default:"" env:"RS_DHCP_INTERFACES"`
 	DefaultStage   string `long:"default-stage" description:"The default stage for the nodes" default:"none" env:"RS_DEFAULT_STAGE"`

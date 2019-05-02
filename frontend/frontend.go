@@ -645,6 +645,7 @@ func NewFrontend(
 	if len(localUI) != 0 {
 		lgr.Infof("Running Local UI from %s\n", localUI)
 		mgmtApi.Static("/local-ui", localUI)
+		mgmtApi.Static("/ux", localUI)
 	}
 
 	// UI points to the cloud
