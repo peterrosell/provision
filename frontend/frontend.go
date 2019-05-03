@@ -696,6 +696,8 @@ func (f *Frontend) assureAuth(c *gin.Context,
 	scope, action, specific string) bool {
 	auth := f.getAuth(c)
 	rt.Claims = auth.claimsList
+	rt.AuthUser = auth.currentUser
+	rt.AuthMachine = auth.currentMachine
 	if auth.matchClaim(wantsClaims) && auth.isLicensed(scope, action) {
 		f.Logger.Tracef("assureAuth: claims '%s:%s:%s' granted", scope, action, specific)
 		return true

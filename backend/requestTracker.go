@@ -38,6 +38,8 @@ type RequestTracker struct {
 	// The d Stores are assumed to be NOT locked and not Present.
 	toPublishAfter []func()
 	Claims         models.ClaimsList
+	AuthUser       *models.User
+	AuthMachine    *models.Machine
 }
 
 func (rt *RequestTracker) HasClaim(scope, action, specific string) bool {
@@ -339,6 +341,31 @@ func (rt *RequestTracker) Create(obj models.Model) (saved bool, err error) {
 	return saved, err
 }
 
+func (rt *RequestTracker) Locked(obj, original models.Model, method string) error {
+	type locked interface {
+		IsLocked() bool
+	}
+	new, ok := obj.(locked)
+	if !ok || rt.AuthUser == nil {
+		return nil
+	}
+	old, ok := original.(locked)
+	if ok && old.IsLocked() && !new.IsLocked() {
+		rt.Auditf("%s:%s unlocked by user %s", obj.Prefix(), obj.Key(), rt.AuthUser.Name)
+		return nil
+	}
+	if new.IsLocked() && (!ok || old.IsLocked()) {
+		return &models.Error{
+			Type:     method,
+			Code:     http.StatusForbidden,
+			Key:      obj.Key(),
+			Model:    obj.Prefix(),
+			Messages: []string{"Locked"},
+		}
+	}
+	return nil
+}
+
 // Remove takes a complete or partial object and removes
 // the object from the system.  removed is true if the object
 // is removed.  error indicates the error that caused the remove
@@ -355,6 +382,9 @@ func (rt *RequestTracker) Remove(obj models.Model) (removed bool, err error) {
 			Model:    prefix,
 			Messages: []string{"Not Found"},
 		}
+	}
+	if err = rt.Locked(item, nil, "DELETE"); err != nil {
+		return
 	}
 	item.(validator).setRT(rt)
 	removed, err = store.Remove(backend, item.(store.KeySaver))
@@ -415,6 +445,9 @@ func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.P
 		retErr.AddError(err)
 		return nil, retErr
 	}
+	if err := rt.Locked(toSave, ref, "PATCH"); err != nil {
+		return nil, err
+	}
 	if ms, ok := toSave.(models.Filler); ok {
 		ms.Fill()
 	}
@@ -459,6 +492,9 @@ func (rt *RequestTracker) Update(obj models.Model) (saved bool, err error) {
 			Model:    prefix,
 			Messages: []string{"Not Found"},
 		}
+	}
+	if err = rt.Locked(ref, target, "PUT"); err != nil {
+		return
 	}
 	if ms, ok := ref.(models.Filler); ok {
 		ms.Fill()
