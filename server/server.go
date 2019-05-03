@@ -35,6 +35,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"os/user"
 	"path"
 	"path/filepath"
 	"runtime/pprof"
@@ -748,7 +749,15 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		}
 	}()
 
-	err = watchSelf(localLogger, watchDone, services)
+	setcap := false
+	if u, uerr := user.Current(); uerr == nil {
+		localLogger.Printf("UserId: %s\n", u.Uid)
+		if u.Uid != "0" {
+			setcap = true
+		}
+	}
+
+	err = watchSelf(localLogger, setcap, watchDone, services)
 	if err != nil {
 		err = fmt.Errorf("Error starting watcher service: %v", err)
 	}

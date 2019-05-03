@@ -229,7 +229,7 @@ func (f *Frontend) InitSystemApi() {
 			}
 			tgt.Close()
 
-			cmd := exec.Command("unzip", fileTmpName)
+			cmd := exec.Command("bsdtar", "-zxvf", fileTmpName)
 			cmd.Dir = dir
 			if _, zerr := cmd.CombinedOutput(); zerr != nil {
 				err.Code = http.StatusBadRequest
@@ -267,7 +267,19 @@ func (f *Frontend) InitSystemApi() {
 						c.JSON(err.Code, err)
 						return
 					}
-					if terr := os.Rename(newfname, oldFname); terr != nil {
+					if terr := CopyFile(newfname, oldFname+".new"); terr != nil {
+						err.Code = http.StatusBadRequest
+						err.AddError(terr)
+						c.JSON(err.Code, err)
+						return
+					}
+					if terr := os.Chmod(oldFname+".new", 0755); terr != nil {
+						err.Code = http.StatusBadRequest
+						err.AddError(terr)
+						c.JSON(err.Code, err)
+						return
+					}
+					if terr := os.Rename(oldFname+".new", oldFname); terr != nil {
 						err.Code = http.StatusBadRequest
 						err.AddError(terr)
 						c.JSON(err.Code, err)
@@ -276,14 +288,26 @@ func (f *Frontend) InitSystemApi() {
 				}
 			}
 
+			newfname := path.Join(dir, "bin", osLocal, arch, "dr-provision")
 			if terr := CopyFile(currentDrp, currentDrp+".bak"); terr != nil {
 				err.Code = http.StatusBadRequest
 				err.AddError(terr)
 				c.JSON(err.Code, err)
 				return
 			}
-			newfname := path.Join(dir, "bin", osLocal, arch, "dr-provision")
-			if terr := os.Rename(newfname, tmpcurrentDrp); terr != nil {
+			if terr := CopyFile(newfname, currentDrp+".new"); terr != nil {
+				err.Code = http.StatusBadRequest
+				err.AddError(terr)
+				c.JSON(err.Code, err)
+				return
+			}
+			if terr := os.Chmod(currentDrp+".new", 0755); terr != nil {
+				err.Code = http.StatusBadRequest
+				err.AddError(terr)
+				c.JSON(err.Code, err)
+				return
+			}
+			if terr := os.Rename(currentDrp+".new", tmpcurrentDrp); terr != nil {
 				err.Code = http.StatusBadRequest
 				err.AddError(terr)
 				c.JSON(err.Code, err)
