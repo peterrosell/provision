@@ -41,11 +41,11 @@ func (dhr *DhcpRequest) marshalText(p dhcp.Packet) ([]byte, error) {
 	if fname := string(p.File()); len(fname) != 0 {
 		fmt.Fprintf(buf, "file:%q\n", fname)
 	}
-	opts := models.DHCPOptionsInOrder(p)
+	opts, err := models.DHCPOptionsInOrder(p)
 	for _, opt := range opts {
 		fmt.Fprintf(buf, "option:%s\n", opt)
 	}
-	return buf.Bytes(), nil
+	return buf.Bytes(), err
 }
 
 func (dhr *DhcpRequest) MarshalText() ([]byte, error) {
@@ -53,7 +53,11 @@ func (dhr *DhcpRequest) MarshalText() ([]byte, error) {
 }
 
 func (dhr *DhcpRequest) PrintIncoming() string {
-	buf, _ := dhr.MarshalText()
+	buf, err := dhr.MarshalText()
+	if err != nil {
+		dhr.Errorf("Error processing options: %v", err)
+		return string(buf) + "\n" + err.Error()
+	}
 	return string(buf)
 }
 
@@ -61,7 +65,11 @@ func (dhr *DhcpRequest) PrintOutgoing(p dhcp.Packet) string {
 	if p == nil || len(p) == 0 {
 		return ""
 	}
-	buf, _ := dhr.marshalText(p)
+	buf, err := dhr.marshalText(p)
+	if err != nil {
+		dhr.Errorf("Error processing options: %v", err)
+		return string(buf) + "\n" + err.Error()
+	}
 	return string(buf)
 }
 
