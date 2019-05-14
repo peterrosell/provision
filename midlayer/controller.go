@@ -83,7 +83,7 @@ func ReverseProxy(pc *PluginController) gin.HandlerFunc {
 	}
 }
 
-func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, provider, contentDir string) *models.PluginProvider {
+func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, provider, contentDir string) (*models.PluginProvider, error) {
 	pc.Infof("Importing plugin provider: %s\n", provider)
 	cmd := exec.Command(provider, "define")
 
@@ -104,19 +104,19 @@ func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, pro
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		pc.Errorf("Skipping %s because %s: %s\n", provider, err, string(out))
-		return nil
+		return nil, fmt.Errorf("Skipping %s because %s: %s\n", provider, err, string(out))
 	}
 	pp := &models.PluginProvider{}
 	err = json.Unmarshal(out, pp)
 	if err != nil {
 		pc.Errorf("Skipping %s because of bad json: %s\n%s\n", provider, err, out)
-		return nil
+		return nil, fmt.Errorf("Skipping %s because of bad json: %s\n%s\n", provider, err, out)
 	}
 	pp.Fill()
 
 	if pp.PluginVersion != 2 {
 		pc.Errorf("Skipping %s because of bad version: %d\n", provider, pp.PluginVersion)
-		return nil
+		return nil, fmt.Errorf("Skipping %s because of bad version: %d\n", provider, pp.PluginVersion)
 	}
 	for _, aa := range pp.AvailableActions {
 		aa.Provider = pp.Name
@@ -128,9 +128,9 @@ func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, pro
 	if err != nil {
 		pc.Errorf("Unpack for %s failed: %v", pp.Name, err)
 		pc.Errorf("%s", out)
-		return nil
+		return nil, fmt.Errorf("Unpack for %s failed: %v %s", pp.Name, err, string(out))
 	}
-	return pp
+	return pp, nil
 }
 
 func (pc *PluginController) define(rt *backend.RequestTracker, contentDir string) (map[string]*models.PluginProvider, error) {
@@ -142,10 +142,11 @@ func (pc *PluginController) define(rt *backend.RequestTracker, contentDir string
 	}
 	for _, f := range files {
 		pc.Debugf("PluginController Define: getting definition for %s\n", f.Name())
-		pp := pc.definePluginProvider(rt, path.Join(pc.pluginDir, f.Name()), contentDir)
-		if pp != nil {
+		pp, perr := pc.definePluginProvider(rt, path.Join(pc.pluginDir, f.Name()), contentDir)
+		if perr == nil {
 			providers[pp.Name] = pp
 		}
+		// Skip erroring plugins for now
 	}
 	return providers, nil
 }
@@ -386,10 +387,10 @@ func (pc *PluginController) UploadPluginProvider(c *gin.Context, fileRoot, name 
 	defer pc.lock.Unlock()
 	// If it is here, remove it.
 	rt := pc.Request()
-	pp := pc.definePluginProvider(rt, ppTmpName, pc.dt.FileRoot)
-	if pp == nil {
+	pp, perr := pc.definePluginProvider(rt, ppTmpName, pc.dt.FileRoot)
+	if perr != nil {
 		return nil, models.NewError("API ERROR", http.StatusBadRequest,
-			fmt.Sprintf("Import plugin failed %s: define failed", name))
+			fmt.Sprintf("Import plugin failed %s: define failed: %v", name, perr))
 	}
 	ns, err := pp.Store()
 	if err != nil {
