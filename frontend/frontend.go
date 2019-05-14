@@ -288,6 +288,10 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 					}
 				})
 			}
+		} else {
+			if !strings.Contains(runErr.Error(), "Action no longer available") {
+				f.Logger.Errorf("Failed to authenticate %s: %v", username, runErr)
+			}
 		}
 	}
 	return res

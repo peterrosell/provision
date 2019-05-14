@@ -113,6 +113,7 @@ type ProgOpts struct {
 	BaseTokenSecret     string `long:"base-token-secret" description:"Auth Token secret to allow revocation of all tokens" default:"" env:"RS_BASE_TOKEN_SECRET"`
 	SystemGrantorSecret string `long:"system-grantor-secret" description:"Auth Token secret to allow revocation of all Machine tokens" default:"" env:"RS_SYSTEM_GRANTOR_SECRET"`
 	FakePinger          bool   `hidden:"true" long:"fake-pinger" env:"RS_FAKE_PINGER"`
+	NoWatcher           bool   `hidden:"true" long:"no-watcher" env:"RS_NO_WATCHER"`
 	DefaultLogLevel     string `long:"log-level" description:"Level to log messages at" default:"warn" env:"RS_DEFAULT_LOG_LEVEL"`
 
 	HaEnabled   bool   `long:"ha-enabled" description:"Enable HA" env:"RS_HA_ENABLED"`
@@ -757,7 +758,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		}
 	}
 
-	err = watchSelf(localLogger, setcap, watchDone, services)
+	err = watchSelf(localLogger, setcap, watchDone, services, cOpts.NoWatcher)
 	if err != nil {
 		err = fmt.Errorf("Error starting watcher service: %v", err)
 	}
