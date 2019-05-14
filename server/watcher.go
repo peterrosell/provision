@@ -15,7 +15,7 @@ import (
 
 // watchSelf watches for changes in the main binary and hot-swaps itself for the newly
 // built binary file
-func watchSelf(localLogger *log.Logger, setcap bool, done chan struct{}, svcs []midlayer.Service) error {
+func watchSelf(localLogger *log.Logger, setcap bool, done chan struct{}, svcs []midlayer.Service, noWatcher bool) error {
 
 	// Retrieve file info for the currently running program
 	file, err := osext.Executable()
@@ -40,7 +40,10 @@ func watchSelf(localLogger *log.Logger, setcap bool, done chan struct{}, svcs []
 		select {
 		case e := <-w.Events:
 			// Events mean changes
-			fmt.Printf("watcher received: %+v", e)
+			if noWatcher {
+				continue
+			}
+			fmt.Printf("watcher received: %+v\n", e)
 
 			if setcap {
 				if out, zerr := exec.Command("sudo", "setcap", "cap_net_raw,cap_net_bind_service=+ep", file).CombinedOutput(); zerr != nil {

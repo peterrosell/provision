@@ -347,8 +347,8 @@ func (pc *PluginController) startPlugin(mp models.Model) {
 			plugin.Name,
 			plugin.Provider,
 			pc.Logger.Fork().SetService(plugin.Name).SetPrincipal(plugin.Provider),
-			rt.ApiURL(net.ParseIP("0.0.0.0")),
-			rt.FileURL(net.ParseIP("0.0.0.0")),
+			rt.ApiURL(net.ParseIP("127.0.0.1")),
+			rt.FileURL(net.ParseIP("127.0.0.1")),
 			token,
 			ppath)
 
