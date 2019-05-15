@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,14 +51,21 @@ func (rt *RequestTracker) HasClaim(scope, action, specific string) bool {
 }
 
 func (rt *RequestTracker) unlocker(u func()) {
-	for _, f := range rt.toRunAfter {
-		f()
+	if len(rt.toRunAfter) > 0 {
+		rt.Tracef("rt: running after hooks")
+		for _, f := range rt.toRunAfter {
+			f()
+		}
 	}
 	rt.Lock()
 	u()
+	rt.Tracef("rt: locks released")
 	rt.d = nil
-	for _, f := range rt.toPublishAfter {
-		f()
+	if len(rt.toPublishAfter) > 0 {
+		rt.Tracef("rt: publishing deferred events")
+		for _, f := range rt.toPublishAfter {
+			f()
+		}
 	}
 	rt.toPublishAfter = []func(){}
 	rt.toRunAfter = []func(){}
@@ -229,7 +237,12 @@ func (rt *RequestTracker) Do(thunk func(Stores)) {
 		rt.Unlock()
 		rt.Panicf("Recursive lock of request tracker!")
 	}
+	if rt.IsTrace() {
+		_, f, l, _ := runtime.Caller(1)
+		rt.Tracef("rt: %s:%s starting txn with locks %v", f, l, rt.locks)
+	}
 	d, unlocker := rt.dt.lockEnts(rt.locks...)
+	rt.Tracef("rt: locks acquired")
 	rt.d = d
 	rt.Unlock()
 	defer rt.unlocker(unlocker)
@@ -242,6 +255,7 @@ func (rt *RequestTracker) Do(thunk func(Stores)) {
 // It is assumed that is as lamdba function.
 func (rt *RequestTracker) AllLocked(thunk func(Stores)) {
 	rt.Lock()
+	rt.Tracef("starting txn with all locks")
 	d, unlocker := rt.dt.lockAll()
 	rt.d = d
 	rt.Unlock()
@@ -303,6 +317,8 @@ func (rt *RequestTracker) spkibrt(obj models.Model) (
 //
 // Assumes locks are held if appropriate.
 func (rt *RequestTracker) Create(obj models.Model) (saved bool, err error) {
+	rt.Tracef("rt: create %s:%s started", obj.Prefix(), obj.Key())
+	defer rt.Tracef("rt: create %s:%s finished", obj.Prefix(), obj.Key())
 	if ms, ok := obj.(models.Filler); ok {
 		ms.Fill()
 	}
@@ -373,6 +389,8 @@ func (rt *RequestTracker) Locked(obj, original models.Model, method string) erro
 //
 // Assumes locks are held if appropriate.
 func (rt *RequestTracker) Remove(obj models.Model) (removed bool, err error) {
+	rt.Tracef("rt: remove %s:%s started", obj.Prefix(), obj.Key())
+	defer rt.Tracef("rt: remove %s:%s finished", obj.Prefix(), obj.Key())
 	_, prefix, key, idx, backend, _, item := rt.spkibrt(obj)
 	if item == nil {
 		return false, &models.Error{
@@ -392,6 +410,7 @@ func (rt *RequestTracker) Remove(obj models.Model) (removed bool, err error) {
 		idx.Remove(item)
 		rt.Publish(prefix, "delete", key, item)
 	}
+
 	return removed, err
 }
 
@@ -403,6 +422,8 @@ func (rt *RequestTracker) Remove(obj models.Model) (removed bool, err error) {
 // Assumes locks are held as appropriate.
 func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.Patch) (models.Model, error) {
 	_, prefix, _, idx, backend, _, _ := rt.spkibrt(obj)
+	rt.Tracef("rt: patch %s:%s started", obj.Prefix(), key)
+	defer rt.Tracef("rt: patch %s:%s finished", obj.Prefix(), key)
 	ref := idx.Find(key)
 	if ref == nil {
 		return nil, &models.Error{
@@ -419,8 +440,6 @@ func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.P
 		rt.Fatalf("Non-JSON encodable %v:%v stored in cache: %v", obj.Prefix(), key, fatalErr)
 	}
 	resBuf, patchErr, loc := patch.Apply(buf)
-	rt.Tracef("Patching %s", string(buf))
-	rt.Tracef("Patched to: %s", string(resBuf))
 	if patchErr != nil {
 		err := &models.Error{
 			Code:  http.StatusConflict,
@@ -428,12 +447,12 @@ func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.P
 			Model: prefix,
 			Type:  "PATCH",
 		}
-		rt.Tracef("Patched to: %s", string(resBuf))
 		err.Errorf("Patch error at line %d: %v", loc, patchErr)
 		buf, _ := json.Marshal(patch[loc])
 		err.Errorf("Patch line: %v", string(buf))
 		return nil, err
 	}
+	rt.Tracef("rt: patched %s:%s", obj.Prefix(), key)
 	toSave := target.New()
 	if err := json.Unmarshal(resBuf, &toSave); err != nil {
 		retErr := &models.Error{
@@ -484,6 +503,8 @@ func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.P
 // Assumes locks are held as appropriate.
 func (rt *RequestTracker) Update(obj models.Model) (saved bool, err error) {
 	_, prefix, key, idx, backend, ref, target := rt.spkibrt(obj)
+	rt.Tracef("rt: update %s:%s started", obj.Prefix(), key)
+	defer rt.Tracef("rt: update %s:%s finished", obj.Prefix(), key)
 	if target == nil {
 		return false, &models.Error{
 			Type:     "PUT",
@@ -522,6 +543,8 @@ func (rt *RequestTracker) Update(obj models.Model) (saved bool, err error) {
 // Assumes that locks are held as appropriate.
 func (rt *RequestTracker) Save(obj models.Model) (saved bool, err error) {
 	_, prefix, key, idx, backend, ref, target := rt.spkibrt(obj)
+	rt.Tracef("rt: save %s:%s started", obj.Prefix(), key)
+	defer rt.Tracef("rt: save %s:%s finished", obj.Prefix(), key)
 	if ms, ok := ref.(models.Filler); ok {
 		ms.Fill()
 	}
