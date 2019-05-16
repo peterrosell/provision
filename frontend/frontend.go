@@ -361,7 +361,7 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
-			token = user.GenClaim(string(userpass[0]), 30)
+			token = user.GenClaim(string(userpass[0]), time.Minute*2)
 			l.Auditf("Authenticated user %s from %s", userpass[0], c.ClientIP())
 		} else if hdrParts[0] == "Bearer" {
 			t, err := fe.dt.GetToken(string(hdrParts[1]))

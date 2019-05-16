@@ -239,7 +239,7 @@ func (rt *RequestTracker) Do(thunk func(Stores)) {
 	}
 	if rt.IsTrace() {
 		_, f, l, _ := runtime.Caller(1)
-		rt.Tracef("rt: %s:%s starting txn with locks %v", f, l, rt.locks)
+		rt.Tracef("rt: %s:%d starting txn with locks %v", f, l, rt.locks)
 	}
 	d, unlocker := rt.dt.lockEnts(rt.locks...)
 	rt.Tracef("rt: locks acquired")
