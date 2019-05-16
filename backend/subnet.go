@@ -669,10 +669,10 @@ func (s *Subnet) next(used map[string]models.Model, token string, hint, via net.
 
 var subnetLockMap = map[string][]string{
 	"get":     {"subnets"},
-	"create":  {"subnets"},
-	"update":  {"subnets"},
-	"patch":   {"subnets"},
-	"delete":  {"subnets", "reservations"},
+	"create":  {"subnets:rw"},
+	"update":  {"subnets:rw"},
+	"patch":   {"subnets:rw"},
+	"delete":  {"subnets:rw", "reservations"},
 	"actions": {"subnets", "profiles", "params"},
 }
 

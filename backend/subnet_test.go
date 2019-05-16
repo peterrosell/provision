@@ -9,7 +9,7 @@ import (
 
 func TestSubnetCrud(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "subnets", "leases", "reservations")
+	rt := dt.Request(dt.Logger, "subnets:rw", "leases", "reservations")
 	createTests := []crudTest{
 		{"Create empty Subnet", rt.Create, &models.Subnet{}, false},
 		{"Create with bad name /", rt.Create, &models.Subnet{Name: "greg/24"}, false},

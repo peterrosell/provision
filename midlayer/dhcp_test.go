@@ -39,7 +39,7 @@ func diff(expect, actual string) (string, error) {
 }
 
 func clearLeases() {
-	rt := dataTracker.Request(dataTracker.Logger, "leases")
+	rt := dataTracker.Request(dataTracker.Logger, "leases:rw")
 	rt.Do(func(d backend.Stores) {
 		for _, item := range rt.Index("leases").Items() {
 			rt.Remove(item)

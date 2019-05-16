@@ -256,7 +256,7 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 			u := &models.User{}
 			if jerr := models.Remarshal(obj, u); jerr == nil {
 				// Upgrade RT to a user create level
-				rt = f.rt(c, "users", "roles", "tenants")
+				rt = f.rt(c, "users:rw", "roles", "tenants:rw")
 				rt.Do(func(d backend.Stores) {
 					// Make sure someone didn't create it on me
 					if u2 := rt.Find("users", username); u2 != nil {
@@ -1138,7 +1138,7 @@ func (f *Frontend) create(c *gin.Context, val store.KeySaver) {
 	tenant := f.getAuth(c).currentTenant
 	locks := val.(Lockable).Locks("create")
 	if tenant != "" {
-		locks = append(locks, "tenants")
+		locks = append(locks, "tenants:rw")
 	}
 	rt := f.rt(c, locks...)
 	if !f.assureSimpleAuth(c, rt, val.Prefix(), "create", "") {
@@ -1276,7 +1276,7 @@ func (f *Frontend) Remove(c *gin.Context, ref store.KeySaver, key string) {
 	var err error
 	var res models.Model
 	locks := ref.(Lockable).Locks("delete")
-	locks = append(locks, "tenants")
+	locks = append(locks, "tenants:rw")
 	rt := f.rt(c, locks...)
 	res = f.Find(c, rt, ref.Prefix(), key)
 	if res == nil {

@@ -595,10 +595,10 @@ func (j *Job) Log(rt *RequestTracker, src io.Reader) error {
 
 var jobLockMap = map[string][]string{
 	"get":     {"jobs"},
-	"create":  {"stages", "bootenvs", "jobs", "machines", "tasks", "profiles", "workflows", "params"},
-	"update":  {"stages", "bootenvs", "jobs", "machines", "tasks", "profiles", "workflows", "params"},
-	"patch":   {"stages", "bootenvs", "jobs", "machines", "tasks", "profiles", "workflows", "params"},
-	"delete":  {"machines", "jobs"},
+	"create":  {"stages", "bootenvs", "jobs:rw", "machines:rw", "tasks", "profiles", "workflows", "params"},
+	"update":  {"stages", "bootenvs", "jobs:rw", "machines", "tasks", "profiles", "workflows", "params"},
+	"patch":   {"stages", "bootenvs", "jobs:rw", "machines", "tasks", "profiles", "workflows", "params"},
+	"delete":  {"machines", "jobs:rw"},
 	"actions": {"stages", "jobs", "machines", "tasks", "profiles", "bootenvs", "params", "workflows"},
 }
 

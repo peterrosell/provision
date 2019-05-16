@@ -171,10 +171,10 @@ func AsPlugins(o []models.Model) []*Plugin {
 
 var pluginLockMap = map[string][]string{
 	"get":     {"plugins", "params", "profiles"},
-	"create":  {"plugins", "params"},
-	"update":  {"plugins", "params"},
-	"patch":   {"plugins", "params"},
-	"delete":  {"plugins", "params"},
+	"create":  {"plugins:rw", "params"},
+	"update":  {"plugins:rw", "params"},
+	"patch":   {"plugins:rw", "params"},
+	"delete":  {"plugins:rw", "params"},
 	"actions": {"plugins", "profiles", "params"},
 }
 

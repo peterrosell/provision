@@ -8,7 +8,7 @@ import (
 
 func TestTemplateCrud(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "stages", "templates", "bootenvs", "tasks", "machines")
+	rt := dt.Request(dt.Logger, "stages", "templates:rw", "bootenvs:rw", "tasks", "machines")
 	crudTest{"Create Template with No ID", rt.Create, &models.Template{}, false}.Test(t, rt)
 	crudTest{"Create Template with Bad / ID", rt.Create, &models.Template{ID: "test/greg"}, false}.Test(t, rt)
 	crudTest{"Create Template with Bad \\ ID", rt.Create, &models.Template{ID: "test\\greg"}, false}.Test(t, rt)

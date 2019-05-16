@@ -124,10 +124,10 @@ func (w *Workflow) OnLoad() error {
 
 var workflowLockMap = map[string][]string{
 	"get":     {"workflows"},
-	"create":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"update":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"patch":   {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"delete":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
+	"create":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw"},
+	"update":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw"},
+	"patch":   {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw"},
+	"delete":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw"},
 	"actions": {"workflows", "stages", "profiles", "params"},
 }
 

@@ -463,7 +463,7 @@ func (dhr *DhcpRequest) reqAddr(msgType dhcp.MessageType) (addr net.IP, state in
 // requests, as we don't actually want to allocate an IP address or
 // anything crazy like that.
 func (dhr *DhcpRequest) FakeLease(req net.IP) *backend.Lease {
-	rt := dhr.Request("leases", "reservations", "subnets")
+	rt := dhr.Request("leases:rw", "reservations", "subnets")
 	for _, s := range dhr.handler.strats {
 		strategy := s.Name
 		token := s.GenToken(dhr.request, dhr.pktOpts)
@@ -499,7 +499,7 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 			dhr.Warnf("WARNING: %s: Competing DHCP server on network: %s", dhr.xid(), dhr.cm.Src)
 		}
 	case dhcp.Decline:
-		rt := dhr.Request("leases")
+		rt := dhr.Request("leases:rw")
 		rt.Do(func(d backend.Stores) {
 			leaseThing := rt.Find("leases", models.Hexaddr(req))
 			if leaseThing == nil {
@@ -517,7 +517,7 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 			}
 		})
 	case dhcp.Release:
-		rt := dhr.Request("leases")
+		rt := dhr.Request("leases:rw")
 		rt.Do(func(d backend.Stores) {
 			leaseThing := rt.Find("leases", models.Hexaddr(req))
 			if leaseThing == nil {
@@ -553,7 +553,7 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 		var lease *backend.Lease
 		var reservation *backend.Reservation
 		var subnet *backend.Subnet
-		rt := dhr.Request("leases", "reservations", "subnets")
+		rt := dhr.Request("leases:rw", "reservations", "subnets")
 		for _, s := range dhr.handler.strats {
 			lease, subnet, reservation, err = backend.FindLease(rt, s.Name, s.GenToken(dhr.request, dhr.pktOpts), req, via)
 			if lease == nil &&
@@ -623,7 +623,7 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 			var (
 				lease *backend.Lease
 			)
-			rt := dhr.Request("leases", "reservations", "subnets")
+			rt := dhr.Request("leases:rw", "reservations", "subnets:rw")
 			for {
 				var fresh bool
 				lease, fresh = backend.FindOrCreateLease(rt, strategy, token, req, via)
@@ -906,7 +906,7 @@ func StartDhcpHandler(dhcpInfo *backend.DataTracker,
 				handler.pinger = pinger
 			}
 		}
-		rt := handler.bk.Request(log, "leases")
+		rt := handler.bk.Request(log, "leases:rw")
 		rt.Do(func(d backend.Stores) {
 			for _, leaseThing := range d("leases").Items() {
 				lease := backend.AsLease(leaseThing)

@@ -201,10 +201,10 @@ func ValidateParams(rt *RequestTracker, e models.ErrorAdder, params map[string]i
 
 var paramLockMap = map[string][]string{
 	"get":     {"params"},
-	"create":  {"params", "profiles"},
-	"update":  {"params", "profiles"},
-	"patch":   {"params", "profiles"},
-	"delete":  {"params", "profiles"},
+	"create":  {"params:rw", "profiles"},
+	"update":  {"params:rw", "profiles"},
+	"patch":   {"params:rw", "profiles"},
+	"delete":  {"params:rw", "profiles"},
 	"actions": {"params", "profiles"},
 }
 

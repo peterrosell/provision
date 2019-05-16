@@ -8,7 +8,7 @@ import (
 
 func TestTaskCrud(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "stages", "templates", "tasks", "bootenvs")
+	rt := dt.Request(dt.Logger, "stages", "templates:rw", "tasks:rw", "bootenvs")
 	tmpl := &models.Template{ID: "ok", Contents: "{{ .Env.Name }}"}
 	var ok bool
 	var err error

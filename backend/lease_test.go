@@ -10,7 +10,7 @@ import (
 
 func TestLeaseCrud(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "leases", "reservations", "subnets")
+	rt := dt.Request(dt.Logger, "leases:rw", "reservations", "subnets:rw")
 	tests := []crudTest{
 		{"Test Invalid Lease Create", rt.Create, &models.Lease{}, false},
 		{"Test Incorrect IP Address Create", rt.Create, &models.Lease{Addr: net.ParseIP("127.0.0.1"), Token: "token", ExpireTime: time.Now(), Strategy: "token"}, false},
