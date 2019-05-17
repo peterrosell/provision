@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -252,7 +251,7 @@ func (rt *RequestTracker) lockEnts(ents ...string) (stores Stores, unlocker func
 	for i := range s {
 		parts := strings.SplitN(s[i], ":", 2)
 		if _, ok := rt.dt.objs[parts[0]]; !ok {
-			log.Panicf("Tried to reference nonexistent object type '%s'", parts[0])
+			rt.Panicf("Tried to reference nonexistent object type '%s'", parts[0])
 		}
 		if len(parts) == 2 && parts[1] == "rw" {
 			rt.canWrite[parts[0]] = struct{}{}
@@ -275,7 +274,7 @@ func (rt *RequestTracker) lockEnts(ents ...string) (stores Stores, unlocker func
 			idx, ok := sortedRes[ref]
 			srMux.Unlock()
 			if !ok {
-				log.Panicf("Tried to access unlocked resource %s", ref)
+				rt.Panicf("Tried to access unlocked resource %s", ref)
 			}
 			return idx
 		},
