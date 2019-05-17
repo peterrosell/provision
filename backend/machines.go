@@ -567,12 +567,7 @@ func (n *Machine) BeforeSave() error {
 }
 func (n *Machine) AfterSave() {
 	if n.Available {
-		if n.toDeRegister != nil {
-			n.toDeRegister.deregister(n.rt)
-		}
-		if n.toRegister != nil {
-			n.toRegister.register(n.rt)
-		}
+		replaceDynamicFSRenderers(n.rt, n.toDeRegister, n.toRegister)
 	}
 	n.toDeRegister = nil
 	n.toRegister = nil
@@ -977,10 +972,10 @@ func AsMachines(o []models.Model) []*Machine {
 
 var machineLockMap = map[string][]string{
 	"get":     {"stages", "bootenvs", "machines", "profiles", "params", "workflows"},
-	"create":  {"stages", "bootenvs", "machines", "tasks", "profiles", "templates", "params", "workflows"},
-	"update":  {"stages", "bootenvs", "machines", "tasks", "profiles", "templates", "params", "workflows"},
-	"patch":   {"stages", "bootenvs", "machines", "tasks", "profiles", "templates", "params", "workflows"},
-	"delete":  {"stages", "bootenvs", "machines", "jobs", "tasks", "profiles", "params"},
+	"create":  {"stages", "bootenvs", "machines:rw", "tasks", "profiles", "templates", "params", "workflows"},
+	"update":  {"stages", "bootenvs", "machines:rw", "tasks", "profiles", "templates", "params", "workflows"},
+	"patch":   {"stages", "bootenvs", "machines:rw", "tasks", "profiles", "templates", "params", "workflows"},
+	"delete":  {"stages", "bootenvs", "machines:rw", "jobs:rw", "tasks", "profiles", "params"},
 	"actions": {"stages", "bootenvs", "machines", "profiles", "params"},
 }
 

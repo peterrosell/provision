@@ -93,9 +93,9 @@ func (t *Tenant) Indexes() map[string]index.Maker {
 
 var tenantLockMap = map[string][]string{
 	"get":     {"tenants"},
-	"create":  {"tenants", "users"},
-	"update":  {"tenants", "users"},
-	"delete":  {"users", "tenants"},
+	"create":  {"tenants:rw", "users:rw"},
+	"update":  {"tenants:rw", "users:rw"},
+	"delete":  {"users:rw", "tenants:rw"},
 	"actions": {"tenants"},
 }
 

@@ -39,7 +39,7 @@ type AuthSaver interface {
 // Until that point is reached, sorting and searching slices is
 // fantastically efficient.
 type Store struct {
-	sync.Mutex
+	sync.RWMutex
 	index.Index
 	backingStore store.Store
 }
@@ -494,60 +494,6 @@ func allKeySavers() []models.Model {
 	}
 }
 
-// LockEnts grabs the requested Store locks a consistent order.
-// It returns a function to get an Index that was requested, and
-// a function that unlocks the taken locks in the right order.
-func (p *DataTracker) lockEnts(ents ...string) (stores Stores, unlocker func()) {
-	p.allMux.RLock()
-	sortedEnts := make([]string, len(ents))
-	copy(sortedEnts, ents)
-	s := sort.StringSlice(sortedEnts)
-	sort.Sort(sort.Reverse(s))
-	sortedRes := map[string]*Store{}
-	for _, ent := range s {
-		if _, ok := p.objs[ent]; !ok {
-			log.Panicf("Tried to reference nonexistent object type '%s'", ent)
-		}
-	}
-	for _, ent := range s {
-		if _, ok := sortedRes[ent]; !ok {
-			sortedRes[ent] = p.objs[ent]
-			sortedRes[ent].Lock()
-		}
-	}
-	srMux := &sync.Mutex{}
-	return func(ref string) *Store {
-			srMux.Lock()
-			idx, ok := sortedRes[ref]
-			srMux.Unlock()
-			if !ok {
-				log.Panicf("Tried to access unlocked resource %s", ref)
-			}
-			return idx
-		},
-		func() {
-			srMux.Lock()
-			for i := len(s) - 1; i >= 0; i-- {
-				if _, ok := sortedRes[s[i]]; ok {
-					sortedRes[s[i]].Unlock()
-					delete(sortedRes, s[i])
-				}
-			}
-			srMux.Unlock()
-			p.allMux.RUnlock()
-		}
-}
-
-func (p *DataTracker) lockAll() (stores Stores, unlocker func()) {
-	p.allMux.Lock()
-	return func(ref string) *Store {
-			return p.objs[ref]
-		},
-		func() {
-			p.allMux.Unlock()
-		}
-}
-
 func (p *DataTracker) LocalIP(remote net.IP) string {
 	// If we are behind a NAT, always use Our Address
 	if p.ForceOurAddress && p.OurAddress != "" {
@@ -907,16 +853,16 @@ func NewDataTracker(backend *DataStack,
 	})
 	// Create minimal content.
 	rt := res.Request(res.Logger,
-		"stages",
-		"bootenvs",
-		"preferences",
-		"users",
-		"tenants",
-		"machines",
-		"profiles",
-		"params",
-		"workflows",
-		"roles")
+		"stages:rw",
+		"bootenvs:rw",
+		"preferences:rw",
+		"users:rw",
+		"tenants:rw",
+		"machines:rw",
+		"profiles:rw",
+		"params:rw",
+		"workflows:rw",
+		"roles:rw")
 	rt.Do(func(d Stores) {
 		// Load the prefs - overriding defaults.
 		savePrefs := false
@@ -1198,14 +1144,15 @@ func (p *DataTracker) SealClaims(claims *DrpCustomClaims) (string, error) {
 func (p *DataTracker) Backup() ([]byte, error) {
 	keys := make([]string, len(p.objs))
 	for k := range p.objs {
-		keys = append(keys, k)
+		keys = append(keys, k+":ro")
 	}
-	_, unlocker := p.lockEnts(keys...)
-	defer unlocker()
+	rt := p.Request(p.Logger, keys...)
 	res := map[string][]models.Model{}
-	for _, k := range keys {
-		res[k] = p.objs[k].Items()
-	}
+	rt.Do(func(_ Stores) {
+		for k := range p.objs {
+			res[k] = p.objs[k].Items()
+		}
+	})
 	return json.Marshal(res)
 }
 

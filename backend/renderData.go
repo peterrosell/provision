@@ -59,18 +59,46 @@ func (r renderers) register(rt *RequestTracker) {
 	if r == nil || len(r) == 0 {
 		return
 	}
+	start := time.Now()
+	rt.dt.FS.Lock()
+	defer rt.dt.FS.Unlock()
 	for _, rq := range r {
-		rq.register(rt)
+		rt.dt.FS.addDynamicFile(rq.path, rq.write)
 	}
+	rt.Tracef("rt: render register took %s", time.Since(start))
 }
 
 func (r renderers) deregister(rt *RequestTracker) {
 	if r == nil || len(r) == 0 {
 		return
 	}
+	start := time.Now()
+	rt.dt.FS.Lock()
+	defer rt.dt.FS.Unlock()
 	for _, rq := range r {
-		rq.deregister(rt)
+		rt.dt.FS.delDynamicFile(rq.path)
 	}
+	rt.Tracef("rt: render deregister took %s", time.Since(start))
+}
+
+func replaceDynamicFSRenderers(rt *RequestTracker, rm, add renderers) {
+	if len(add) == 0 && len(rm) == 0 {
+		return
+	}
+	start := time.Now()
+	rt.dt.FS.Lock()
+	defer rt.dt.FS.Unlock()
+	if len(rm) > 0 {
+		for _, rq := range rm {
+			rt.dt.FS.delDynamicFile(rq.path)
+		}
+	}
+	if len(add) > 0 {
+		for _, rq := range add {
+			rt.dt.FS.addDynamicFile(rq.path, rq.write)
+		}
+	}
+	rt.Tracef("rt: dynamic fs update took %s", time.Since(start))
 }
 
 func newRenderedTemplate(r *RenderData,
@@ -80,22 +108,22 @@ func newRenderedTemplate(r *RenderData,
 	if r.Task != nil {
 		prefixes = append(prefixes, "tasks")
 		keys = append(keys, r.Task.Key())
-		r.rt.Debugf("Making renderer for %s:%s template %s at path %s", r.Task.Prefix(), r.Task.Key(), tmplKey, path)
+		r.rt.Tracef("Making renderer for %s:%s template %s at path %s", r.Task.Prefix(), r.Task.Key(), tmplKey, path)
 	}
 	if r.Stage != nil {
 		prefixes = append(prefixes, "stages")
 		keys = append(keys, r.Stage.Key())
-		r.rt.Debugf("Making renderer for %s:%s template %s at path %s", r.Stage.Prefix(), r.Stage.Key(), tmplKey, path)
+		r.rt.Tracef("Making renderer for %s:%s template %s at path %s", r.Stage.Prefix(), r.Stage.Key(), tmplKey, path)
 	}
 	if r.Env != nil {
 		prefixes = append(prefixes, "bootenvs")
 		keys = append(keys, r.Env.Key())
-		r.rt.Debugf("Making renderer for %s:%s template %s at path %s", r.Env.Prefix(), r.Env.Key(), tmplKey, path)
+		r.rt.Tracef("Making renderer for %s:%s template %s at path %s", r.Env.Prefix(), r.Env.Key(), tmplKey, path)
 	}
 	if r.Machine != nil {
 		prefixes = append(prefixes, "machines")
 		keys = append(keys, r.Machine.Key())
-		r.rt.Debugf("Making renderer for %s:%s template %s at path %s", r.Machine.Prefix(), r.Machine.Key(), tmplKey, path)
+		r.rt.Tracef("Making renderer for %s:%s template %s at path %s", r.Machine.Prefix(), r.Machine.Key(), tmplKey, path)
 	}
 	targetPrefix := r.target.Prefix()
 	dt := r.rt.dt

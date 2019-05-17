@@ -169,10 +169,10 @@ func (p *Profile) AfterDelete() {
 
 var profileLockMap = map[string][]string{
 	"get":     {"profiles", "params"},
-	"create":  {"profiles", "tasks", "params"},
-	"update":  {"profiles", "tasks", "params"},
-	"patch":   {"profiles", "tasks", "params"},
-	"delete":  {"stages", "profiles", "machines"},
+	"create":  {"profiles:rw", "tasks", "params"},
+	"update":  {"profiles:rw", "tasks", "params"},
+	"patch":   {"profiles:rw", "tasks", "params"},
+	"delete":  {"stages", "profiles:rw", "machines"},
 	"actions": {"profiles", "params"},
 }
 

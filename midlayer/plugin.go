@@ -120,7 +120,7 @@ func (pc *PluginController) StartPlugins(dt *backend.DataTracker, providers map[
 
 	// Get all the plugins that have this as provider
 	ref := &backend.Plugin{}
-	rt := pc.Request(ref.Locks("get")...)
+	rt := pc.Request(ref.Locks("create")...)
 	rt.Do(func(d backend.Stores) {
 		for k, v := range providers {
 			rt.Publish("plugin_providers", "create", k, v)
@@ -134,7 +134,7 @@ func (pc *PluginController) RestartPlugins() {
 
 	// Get all the plugins that have this as provider
 	ref := &backend.Plugin{}
-	rt := pc.Request(ref.Locks("get")...)
+	rt := pc.Request(ref.Locks("create")...)
 	rt.Do(func(d backend.Stores) {
 		var idx *index.Index
 		idx, err := index.All([]index.Filter{index.Native()}...)(&d(ref.Prefix()).Index)
@@ -249,7 +249,7 @@ func (pc *PluginController) createPlugin(mp models.Model) {
 	plugin := mp.(*models.Plugin)
 
 	ref := &backend.Plugin{}
-	rt := pc.Request(ref.Locks("get")...)
+	rt := pc.Request(ref.Locks("create")...)
 
 	if r, ok := pc.runningPlugins[plugin.Name]; ok && r.state == PLUGIN_CREATED {
 		pc.Infof("Already created plugin %s. Updating model", plugin.Name)
@@ -286,7 +286,7 @@ func (pc *PluginController) startPlugin(mp models.Model) {
 	plugin := mp.(*models.Plugin)
 
 	ref := &backend.Plugin{}
-	rt := pc.Request(ref.Locks("get")...)
+	rt := pc.Request(ref.Locks("create")...)
 	rt.Do(func(d backend.Stores) {
 		ref2 := rt.Find("plugins", plugin.Name)
 
@@ -390,7 +390,7 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 	defer pc.lock.Unlock()
 
 	ref := &backend.Plugin{}
-	rt := pc.Request(ref.Locks("get")...)
+	rt := pc.Request(ref.Locks("create")...)
 
 	plugin := mp.(*models.Plugin)
 
@@ -540,7 +540,7 @@ func (pc *PluginController) stopPlugin(mp models.Model) {
 	defer pc.lock.Unlock()
 
 	ref := &backend.Plugin{}
-	rt := pc.Request(ref.Locks("get")...)
+	rt := pc.Request(ref.Locks("create")...)
 
 	rp, ok := pc.runningPlugins[plugin.Name]
 	if !ok || rp.state == PLUGIN_REMOVED || rp.state == PLUGIN_STOPPED {
@@ -612,7 +612,7 @@ func (pc *PluginController) restartPlugin(mp models.Model) {
 	plugin := mp.(*models.Plugin)
 
 	ref := &backend.Plugin{}
-	rt := pc.Request(ref.Locks("get")...)
+	rt := pc.Request(ref.Locks("create")...)
 	rt.Do(func(d backend.Stores) {
 		ref2 := rt.Find(ref.Prefix(), plugin.Name)
 		// May be deleted before we get here. An event will be around to remove it
@@ -651,7 +651,7 @@ func (pc *PluginController) deletePlugin(mp models.Model) {
 	plugin := mp.(*models.Plugin)
 
 	ref := &backend.Plugin{}
-	rt := pc.Request(ref.Locks("get")...)
+	rt := pc.Request(ref.Locks("create")...)
 	rt.Do(func(d backend.Stores) {
 		rt.PublishEvent(models.EventFor(plugin, "stop"))
 		rt.PublishEvent(models.EventFor(plugin, "remove"))

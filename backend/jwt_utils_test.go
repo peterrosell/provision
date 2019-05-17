@@ -37,7 +37,7 @@ func TestJWTUtils(t *testing.T) {
 	}
 
 	jwtManager = NewJwtManager([]byte(models.RandString(32)))
-	s, e := NewClaim("fred", "fred", 30).AddRawClaim("*", "get", "m").Seal(jwtManager)
+	s, e := NewClaim("fred", "fred", time.Second*30).AddRawClaim("*", "get", "m").Seal(jwtManager)
 	if e != nil {
 		t.Errorf("Failed to sign token: %v\n", e)
 	}
@@ -53,11 +53,11 @@ func TestJWTUtils(t *testing.T) {
 		}
 	}
 
-	s, e = NewClaim("fred", "fred", 1).AddRawClaim("*", "get", "a").Seal(jwtManager)
+	s, e = NewClaim("fred", "fred", time.Second).AddRawClaim("*", "get", "a").Seal(jwtManager)
 	if e != nil {
 		t.Errorf("Failed to sign token: %v\n", e)
 	}
-	time.Sleep(1000 * 1000 * 1000 * 3)
+	time.Sleep(3 * time.Second)
 	drpClaim, e = jwtManager.get(s)
 	if e == nil {
 		t.Errorf("Failed because we got a token: %v\n", drpClaim)

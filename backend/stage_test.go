@@ -9,7 +9,7 @@ import (
 
 func TestStageCrud(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "stages", "bootenvs", "templates", "tasks", "machines", "profiles", "workflows")
+	rt := dt.Request(dt.Logger, "stages:rw", "bootenvs", "templates:rw", "tasks", "machines:rw", "profiles", "workflows")
 	tmpl := &models.Template{ID: "ok", Contents: "{{ .Env.Name }}"}
 	var ok bool
 	var err error

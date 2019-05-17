@@ -56,7 +56,7 @@ func fakeServer() error {
 		backend.NewPublishers(baseLog))
 	dhcpHandler = makeHandler(dataTracker, false)
 	binlHandler = makeHandler(dataTracker, true)
-	rt := dataTracker.Request(l, "subnets")
+	rt := dataTracker.Request(l, "subnets:rw")
 	var gerr error
 	rt.Do(func(d backend.Stores) {
 		subs := []*models.Subnet{

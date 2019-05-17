@@ -84,15 +84,15 @@ ApiURL = https://127.0.0.1:8092`
 func TestRenderData(t *testing.T) {
 	dt := mkDT()
 	rt := dt.Request(dt.Logger,
-		"stages",
-		"bootenvs",
-		"templates",
-		"machines",
-		"profiles",
-		"params",
-		"tasks",
-		"preferences",
-		"workflows")
+		"stages:rw",
+		"bootenvs:rw",
+		"templates:rw",
+		"machines:rw",
+		"profiles:rw",
+		"params:rw",
+		"tasks:rw",
+		"preferences:rw",
+		"workflows:rw")
 	claimrt := dt.Request(dt.Logger, "roles")
 	var machine *Machine
 	var paramWithDefault *Param

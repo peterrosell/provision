@@ -219,10 +219,10 @@ func AsTemplates(o []models.Model) []*Template {
 
 var templateLockMap = map[string][]string{
 	"get":     {"templates"},
-	"create":  {"stages", "templates", "bootenvs", "machines", "tasks"},
-	"update":  {"stages", "templates", "bootenvs", "machines", "tasks"},
-	"patch":   {"stages", "templates", "bootenvs", "machines", "tasks"},
-	"delete":  {"stages", "templates", "bootenvs", "machines", "tasks"},
+	"create":  {"stages:rw", "templates:rw", "bootenvs:rw", "machines:rw", "tasks:rw"},
+	"update":  {"stages:rw", "templates:rw", "bootenvs:rw", "machines:rw", "tasks:rw"},
+	"patch":   {"stages:rw", "templates:rw", "bootenvs:rw", "machines:rw", "tasks:rw"},
+	"delete":  {"stages:rw", "templates:rw", "bootenvs:rw", "machines:rw", "tasks:rw"},
 	"actions": {"templates", "profiles", "params"},
 }
 

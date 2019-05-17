@@ -7,9 +7,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/VictorLowther/jsonpatch2"
 	"github.com/digitalrebar/logger"
@@ -26,9 +29,11 @@ import (
 type RequestTracker struct {
 	*sync.Mutex
 	logger.Logger
-	dt    *DataTracker
-	locks []string
-	d     Stores
+	dt        *DataTracker
+	locks     []string
+	canWrite  map[string]struct{}
+	allLocked bool
+	d         Stores
 	// toRunAfter is to run at the end, but before the locks are dropped.
 	// This is used validation.
 	// The d Stores are assumed to be locked.
@@ -49,19 +54,31 @@ func (rt *RequestTracker) HasClaim(scope, action, specific string) bool {
 	return rt.Claims.Match(models.MakeRole("", scope, action, specific).Compile())
 }
 
-func (rt *RequestTracker) unlocker(u func()) {
-	for _, f := range rt.toRunAfter {
-		f()
+func (rt *RequestTracker) unlocker(startTime time.Time, u func()) {
+	if len(rt.toRunAfter) > 0 {
+		rt.Tracef("rt: running after hooks")
+		for _, f := range rt.toRunAfter {
+			f()
+		}
 	}
 	rt.Lock()
 	u()
+	rt.Tracef("rt: locks released")
 	rt.d = nil
-	for _, f := range rt.toPublishAfter {
-		f()
+	rt.allLocked = false
+	rt.canWrite = nil
+	if len(rt.toPublishAfter) > 0 {
+		rt.Tracef("rt: publishing deferred events")
+		for _, f := range rt.toPublishAfter {
+			f()
+		}
 	}
 	rt.toPublishAfter = []func(){}
 	rt.toRunAfter = []func(){}
 	rt.Unlock()
+	if rt.IsTrace() {
+		rt.Tracef("rt: total time: %s", time.Since(startTime))
+	}
 }
 
 func (rt *RequestTracker) runAfter(thunk func()) {
@@ -205,6 +222,7 @@ func (rt *RequestTracker) Find(prefix, key string) models.Model {
 // FindByIndex uses the provided index and key (for that index) to return
 // the object.  The object returned is a clone.
 func (rt *RequestTracker) FindByIndex(prefix string, idx index.Maker, key string) models.Model {
+
 	items, err := index.Sort(idx)(rt.Index(prefix))
 	if err != nil {
 		rt.Errorf("Error sorting %s: %v", prefix, err)
@@ -219,20 +237,96 @@ func (rt *RequestTracker) Index(name string) *index.Index {
 	return &rt.d(name).Index
 }
 
+// LockEnts grabs the requested Store locks a consistent order.
+// It returns a function to get an Index that was requested, and
+// a function that unlocks the taken locks in the right order.
+func (rt *RequestTracker) lockEnts(ents ...string) (stores Stores, unlocker func()) {
+	rt.dt.allMux.RLock()
+	sortedEnts := make([]string, len(ents))
+	copy(sortedEnts, ents)
+	s := sort.StringSlice(sortedEnts)
+	sort.Sort(sort.Reverse(s))
+	sortedRes := map[string]*Store{}
+	rt.canWrite = map[string]struct{}{}
+	for i := range s {
+		parts := strings.SplitN(s[i], ":", 2)
+		if _, ok := rt.dt.objs[parts[0]]; !ok {
+			rt.Panicf("Tried to reference nonexistent object type '%s'", parts[0])
+		}
+		if len(parts) == 2 && parts[1] == "rw" {
+			rt.canWrite[parts[0]] = struct{}{}
+		}
+		s[i] = parts[0]
+	}
+	for _, ent := range s {
+		if _, ok := sortedRes[ent]; !ok {
+			sortedRes[ent] = rt.dt.objs[ent]
+			if _, ok := rt.canWrite[ent]; ok {
+				sortedRes[ent].Lock()
+			} else {
+				sortedRes[ent].RLock()
+			}
+		}
+	}
+	srMux := &sync.Mutex{}
+	return func(ref string) *Store {
+			srMux.Lock()
+			idx, ok := sortedRes[ref]
+			srMux.Unlock()
+			if !ok {
+				rt.Panicf("Tried to access unlocked resource %s", ref)
+			}
+			return idx
+		},
+		func() {
+			srMux.Lock()
+			for i := len(s) - 1; i >= 0; i-- {
+				if _, ok := sortedRes[s[i]]; ok {
+					if _, ok := rt.canWrite[s[i]]; ok {
+						sortedRes[s[i]].Unlock()
+					} else {
+						sortedRes[s[i]].RUnlock()
+					}
+					delete(sortedRes, s[i])
+				}
+			}
+			srMux.Unlock()
+			rt.dt.allMux.RUnlock()
+		}
+}
+
+func (rt *RequestTracker) writable(prefix string) {
+	if rt.allLocked {
+		return
+	}
+	if rt.canWrite != nil {
+		if _, ok := rt.canWrite[prefix]; ok {
+			return
+		}
+	}
+	rt.Panicf("rt: %s: Locked readonly, not allowed to write!", prefix)
+}
+
 // Do takes a function that takes the lock stores specified
 // when the RequestTracker was created and executes it
 // with the locks taken and then unlocks the locks when complete.
 // It is assumed that is as lamdba function.
 func (rt *RequestTracker) Do(thunk func(Stores)) {
+	startTime := time.Now()
 	rt.Lock()
 	if rt.d != nil {
 		rt.Unlock()
 		rt.Panicf("Recursive lock of request tracker!")
 	}
-	d, unlocker := rt.dt.lockEnts(rt.locks...)
+	if rt.IsTrace() {
+		_, f, l, _ := runtime.Caller(1)
+		rt.Tracef("rt: %s:%d starting txn with locks %v", f, l, rt.locks)
+	}
+	d, unlocker := rt.lockEnts(rt.locks...)
+	rt.Tracef("rt: locks acquired")
 	rt.d = d
 	rt.Unlock()
-	defer rt.unlocker(unlocker)
+	defer rt.unlocker(startTime, unlocker)
 	thunk(d)
 }
 
@@ -241,12 +335,17 @@ func (rt *RequestTracker) Do(thunk func(Stores)) {
 // Upon completion, the locks are released.
 // It is assumed that is as lamdba function.
 func (rt *RequestTracker) AllLocked(thunk func(Stores)) {
+	startTime := time.Now()
 	rt.Lock()
-	d, unlocker := rt.dt.lockAll()
-	rt.d = d
+	rt.allLocked = true
+	rt.Tracef("starting txn with all locks")
+	rt.dt.allMux.Lock()
+	rt.d = func(ref string) *Store {
+		return rt.dt.objs[ref]
+	}
 	rt.Unlock()
-	defer rt.unlocker(unlocker)
-	thunk(d)
+	defer rt.unlocker(startTime, func() { rt.dt.allMux.Unlock() })
+	thunk(rt.d)
 }
 
 func (rt *RequestTracker) backend(m models.Model) store.Store {
@@ -303,6 +402,9 @@ func (rt *RequestTracker) spkibrt(obj models.Model) (
 //
 // Assumes locks are held if appropriate.
 func (rt *RequestTracker) Create(obj models.Model) (saved bool, err error) {
+	rt.writable(obj.Prefix())
+	rt.Tracef("rt: create %s:%s started", obj.Prefix(), obj.Key())
+	defer rt.Tracef("rt: create %s:%s finished", obj.Prefix(), obj.Key())
 	if ms, ok := obj.(models.Filler); ok {
 		ms.Fill()
 	}
@@ -329,9 +431,12 @@ func (rt *RequestTracker) Create(obj models.Model) (saved bool, err error) {
 	if checkOK {
 		checker.ClearValidation()
 	}
-
+	startTime := time.Now()
 	saved, err = store.Create(backend, ref)
 	if saved {
+		if rt.IsTrace() {
+			rt.Tracef("rt: disk write time: %s", time.Since(startTime))
+		}
 		ref.(validator).clearRT()
 		idx.Add(ref)
 
@@ -373,6 +478,9 @@ func (rt *RequestTracker) Locked(obj, original models.Model, method string) erro
 //
 // Assumes locks are held if appropriate.
 func (rt *RequestTracker) Remove(obj models.Model) (removed bool, err error) {
+	rt.writable(obj.Prefix())
+	rt.Tracef("rt: remove %s:%s started", obj.Prefix(), obj.Key())
+	defer rt.Tracef("rt: remove %s:%s finished", obj.Prefix(), obj.Key())
 	_, prefix, key, idx, backend, _, item := rt.spkibrt(obj)
 	if item == nil {
 		return false, &models.Error{
@@ -387,11 +495,16 @@ func (rt *RequestTracker) Remove(obj models.Model) (removed bool, err error) {
 		return
 	}
 	item.(validator).setRT(rt)
+	startTime := time.Now()
 	removed, err = store.Remove(backend, item.(store.KeySaver))
 	if removed {
+		if rt.IsTrace() {
+			rt.Tracef("rt: disk write time: %s", time.Since(startTime))
+		}
 		idx.Remove(item)
 		rt.Publish(prefix, "delete", key, item)
 	}
+
 	return removed, err
 }
 
@@ -402,7 +515,10 @@ func (rt *RequestTracker) Remove(obj models.Model) (removed bool, err error) {
 //
 // Assumes locks are held as appropriate.
 func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.Patch) (models.Model, error) {
+	rt.writable(obj.Prefix())
 	_, prefix, _, idx, backend, _, _ := rt.spkibrt(obj)
+	rt.Tracef("rt: patch %s:%s started", obj.Prefix(), key)
+	defer rt.Tracef("rt: patch %s:%s finished", obj.Prefix(), key)
 	ref := idx.Find(key)
 	if ref == nil {
 		return nil, &models.Error{
@@ -419,8 +535,6 @@ func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.P
 		rt.Fatalf("Non-JSON encodable %v:%v stored in cache: %v", obj.Prefix(), key, fatalErr)
 	}
 	resBuf, patchErr, loc := patch.Apply(buf)
-	rt.Tracef("Patching %s", string(buf))
-	rt.Tracef("Patched to: %s", string(resBuf))
 	if patchErr != nil {
 		err := &models.Error{
 			Code:  http.StatusConflict,
@@ -428,12 +542,12 @@ func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.P
 			Model: prefix,
 			Type:  "PATCH",
 		}
-		rt.Tracef("Patched to: %s", string(resBuf))
 		err.Errorf("Patch error at line %d: %v", loc, patchErr)
 		buf, _ := json.Marshal(patch[loc])
 		err.Errorf("Patch line: %v", string(buf))
 		return nil, err
 	}
+	rt.Tracef("rt: patched %s:%s", obj.Prefix(), key)
 	toSave := target.New()
 	if err := json.Unmarshal(resBuf, &toSave); err != nil {
 		retErr := &models.Error{
@@ -459,17 +573,19 @@ func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.P
 	if obj != nil {
 		a, aok := obj.(models.ChangeForcer)
 		if aok {
-			rt.Tracef("obj: %#v", obj)
-			rt.Tracef("a: %#v", a)
 			if a != nil && a.ChangeForced() {
 				rt.Tracef("Forcing change for %s:%s", prefix, key)
 				toSave.(models.ChangeForcer).ForceChange()
 			}
 		}
 	}
+	startTime := time.Now()
 	saved, err := store.Update(backend, toSave)
 	toSave.(validator).clearRT()
 	if saved {
+		if rt.IsTrace() {
+			rt.Tracef("rt: disk write time: %s", time.Since(startTime))
+		}
 		idx.Add(toSave)
 		rt.PublishExt(prefix, "update", key, toSave, ref)
 	}
@@ -483,7 +599,10 @@ func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.P
 //
 // Assumes locks are held as appropriate.
 func (rt *RequestTracker) Update(obj models.Model) (saved bool, err error) {
+	rt.writable(obj.Prefix())
 	_, prefix, key, idx, backend, ref, target := rt.spkibrt(obj)
+	rt.Tracef("rt: update %s:%s started", obj.Prefix(), key)
+	defer rt.Tracef("rt: update %s:%s finished", obj.Prefix(), key)
 	if target == nil {
 		return false, &models.Error{
 			Type:     "PUT",
@@ -504,9 +623,13 @@ func (rt *RequestTracker) Update(obj models.Model) (saved bool, err error) {
 	if checkOK {
 		checker.ClearValidation()
 	}
+	startTime := time.Now()
 	saved, err = store.Update(backend, ref)
 	ref.(validator).clearRT()
 	if saved {
+		if rt.IsTrace() {
+			rt.Tracef("rt: disk write time: %s", time.Since(startTime))
+		}
 		idx.Add(ref)
 		rt.PublishExt(prefix, "update", key, ref, target)
 	}
@@ -521,7 +644,10 @@ func (rt *RequestTracker) Update(obj models.Model) (saved bool, err error) {
 //
 // Assumes that locks are held as appropriate.
 func (rt *RequestTracker) Save(obj models.Model) (saved bool, err error) {
+	rt.writable(obj.Prefix())
 	_, prefix, key, idx, backend, ref, target := rt.spkibrt(obj)
+	rt.Tracef("rt: save %s:%s started", obj.Prefix(), key)
+	defer rt.Tracef("rt: save %s:%s finished", obj.Prefix(), key)
 	if ms, ok := ref.(models.Filler); ok {
 		ms.Fill()
 	}
@@ -530,10 +656,13 @@ func (rt *RequestTracker) Save(obj models.Model) (saved bool, err error) {
 	if checkOK {
 		checker.ClearValidation()
 	}
-
+	startTime := time.Now()
 	saved, err = store.Save(backend, ref)
 	ref.(validator).clearRT()
 	if saved {
+		if rt.IsTrace() {
+			rt.Tracef("rt: disk write time: %s", time.Since(startTime))
+		}
 		idx.Add(ref)
 		rt.PublishExt(prefix, "save", key, ref, target)
 	}

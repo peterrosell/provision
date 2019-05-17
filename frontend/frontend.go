@@ -48,6 +48,7 @@ type Lockable interface {
 }
 
 type authBlob struct {
+	logger.Logger
 	f                           *Frontend
 	claim                       *backend.DrpCustomClaims
 	claimsList                  models.ClaimsList
@@ -62,13 +63,13 @@ func (a *authBlob) tenantOK(prefix, key string) bool {
 	if a.tenantMembers != nil && a.tenantMembers[prefix] != nil {
 		_, res = a.tenantMembers[prefix][key]
 	}
-	a.f.Logger.Tracef("tenantOK: %s:%s: %v", prefix, key, res)
+	a.Tracef("tenantOK: %s:%s: %v", prefix, key, res)
 	return res
 }
 
 func (a *authBlob) tenantSelect(scope string) index.Filter {
 	if a.tenantMembers == nil {
-		a.f.Logger.Tracef("tenantSelect: %s: not scoped, allowed", scope)
+		a.Tracef("tenantSelect: %s: not scoped, allowed", scope)
 		return nil
 	}
 	test := func(m models.Model) bool {
@@ -90,7 +91,7 @@ func (a *authBlob) tenantSelect(scope string) index.Filter {
 		case *backend.Reservation:
 			return a.tenantOK("machines", a.f.dt.MacToMachineUUID(o.Token))
 		}
-		a.f.Logger.Tracef("tenantSelect: %s:%s: default denied", prefix, key)
+		a.Tracef("tenantSelect: %s:%s: default denied", prefix, key)
 		return false
 	}
 	return index.Select(test)
@@ -255,7 +256,7 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 			u := &models.User{}
 			if jerr := models.Remarshal(obj, u); jerr == nil {
 				// Upgrade RT to a user create level
-				rt = f.rt(c, "users", "roles", "tenants")
+				rt = f.rt(c, "users:rw", "roles", "tenants:rw")
 				rt.Do(func(d backend.Stores) {
 					// Make sure someone didn't create it on me
 					if u2 := rt.Find("users", username); u2 != nil {
@@ -304,11 +305,19 @@ func NewDefaultAuthSource(dt *backend.DataTracker) (das AuthSource) {
 
 func (fe *Frontend) userAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var l logger.Logger
+		if ll, ok := c.Get("logger"); ok {
+			l = ll.(logger.Logger)
+		} else {
+			fe.Logger.Panicf("No logger on context")
+		}
+		startTime := time.Now()
+		l.Tracef("Auth validation started")
 		authHeader := c.Request.Header.Get("Authorization")
 		if len(authHeader) == 0 {
 			authHeader = c.Query("token")
 			if len(authHeader) == 0 {
-				fe.l(c).Warnf("No authentication header or token")
+				l.Warnf("No authentication header or token")
 				c.Header("WWW-Authenticate", "dr-provision")
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
@@ -322,7 +331,7 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 		}
 		hdrParts := strings.SplitN(authHeader, " ", 2)
 		if len(hdrParts) != 2 || (hdrParts[0] != "Basic" && hdrParts[0] != "Bearer") {
-			fe.l(c).Warnf("Bad auth header: %s", authHeader)
+			l.Warnf("Bad auth header: %s", authHeader)
 			c.Header("WWW-Authenticate", "dr-provision")
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
@@ -331,35 +340,35 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 		if hdrParts[0] == "Basic" {
 			hdr, err := base64.StdEncoding.DecodeString(hdrParts[1])
 			if err != nil {
-				fe.l(c).Warnf("Malformed basic auth string: %s", hdrParts[1])
+				l.Warnf("Malformed basic auth string: %s", hdrParts[1])
 				c.Header("WWW-Authenticate", "dr-provision")
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
 			userpass := bytes.SplitN(hdr, []byte(`:`), 2)
 			if len(userpass) != 2 {
-				fe.l(c).Warnf("Malformed basic auth string: %s", hdrParts[1])
+				l.Warnf("Malformed basic auth string: %s", hdrParts[1])
 				c.Header("WWW-Authenticate", "dr-provision")
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
 			user := fe.authSource.GetUser(fe, c, string(userpass[0]), string(userpass[1]))
 			if user == nil {
-				fe.rt(c).Auditf("Failed Authenticated (no user) user %s from %s", userpass[0], c.ClientIP())
+				l.Auditf("Failed Authenticated (no user) user %s from %s", userpass[0], c.ClientIP())
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
 			if !user.CheckPassword(string(userpass[1])) {
-				fe.rt(c).Auditf("Failed Authenticated (bad password) user %s from %s", userpass[0], c.ClientIP())
+				l.Auditf("Failed Authenticated (bad password) user %s from %s", userpass[0], c.ClientIP())
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
-			token = user.GenClaim(string(userpass[0]), 30)
-			fe.rt(c).Auditf("Authenticated user %s from %s", userpass[0], c.ClientIP())
+			token = user.GenClaim(string(userpass[0]), time.Minute*2)
+			l.Auditf("Authenticated user %s from %s", userpass[0], c.ClientIP())
 		} else if hdrParts[0] == "Bearer" {
 			t, err := fe.dt.GetToken(string(hdrParts[1]))
 			if err != nil {
-				fe.l(c).Auditf("No DRP authentication token from %s", c.ClientIP())
+				l.Auditf("No DRP authentication token from %s", c.ClientIP())
 				c.Header("WWW-Authenticate", "dr-provision")
 				c.AbortWithStatus(http.StatusForbidden)
 				return
@@ -396,12 +405,11 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 			}
 		})
 		if valid {
-			if k, ok := c.Get("logger"); ok {
-				logger := k.(logger.Logger)
-				logger.SetPrincipal(auth.Principal())
-				c.Set("logger", logger)
-			}
+			l = l.SetPrincipal(auth.Principal())
+			auth.Logger = l
+			c.Set("logger", l)
 			c.Set("DRP-AUTH", auth)
+			l.Tracef("Auth success in %s", time.Since(startTime))
 			c.Next()
 			return
 		}
@@ -412,7 +420,7 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 		if userString == "" {
 			userString = "Unknown User"
 		}
-		fe.rt(c).Auditf("Failed Authenticated user %s from %s", userString, c.ClientIP())
+		l.Auditf("Failed Authenticated user %s from %s", userString, c.ClientIP())
 		err := &models.Error{
 			Type: "AUTH",
 			Code: http.StatusForbidden,
@@ -504,6 +512,14 @@ func NewFrontend(
 
 	mgmtApi.Use(func(c *gin.Context) {
 		l := me.Logger.Fork()
+		clientIP := c.ClientIP()
+		path := c.Request.URL.Path
+		raw := c.Request.URL.RawQuery
+		method := c.Request.Method
+		if raw != "" {
+			path = path + "?" + raw
+		}
+		start := time.Now()
 		if logLevel := c.GetHeader("X-Log-Request"); logLevel != "" {
 			lvl, err := logger.ParseLevel(logLevel)
 			if err != nil {
@@ -515,18 +531,11 @@ func NewFrontend(
 		if logToken := c.GetHeader("X-Log-Token"); logToken != "" {
 			l.Errorf("Log token: %s", logToken)
 		}
+		l.Tracef("API: starting %s %s", c.Request.Method, path)
 		c.Set("logger", l)
-		start := time.Now()
-		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
 		c.Next()
-		latency := time.Now().Sub(start)
-		clientIP := c.ClientIP()
-		method := c.Request.Method
+		latency := time.Since(start)
 		statusCode := c.Writer.Status()
-		if raw != "" {
-			path = path + "?" + raw
-		}
 		l.Debugf("API: st: %d lt: %13v ip: %15s m: %s %s",
 			statusCode,
 			latency,
@@ -1133,7 +1142,7 @@ func (f *Frontend) create(c *gin.Context, val store.KeySaver) {
 	tenant := f.getAuth(c).currentTenant
 	locks := val.(Lockable).Locks("create")
 	if tenant != "" {
-		locks = append(locks, "tenants")
+		locks = append(locks, "tenants:rw")
 	}
 	rt := f.rt(c, locks...)
 	if !f.assureSimpleAuth(c, rt, val.Prefix(), "create", "") {
@@ -1271,7 +1280,7 @@ func (f *Frontend) Remove(c *gin.Context, ref store.KeySaver, key string) {
 	var err error
 	var res models.Model
 	locks := ref.(Lockable).Locks("delete")
-	locks = append(locks, "tenants")
+	locks = append(locks, "tenants:rw")
 	rt := f.rt(c, locks...)
 	res = f.Find(c, rt, ref.Prefix(), key)
 	if res == nil {
