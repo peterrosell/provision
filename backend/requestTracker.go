@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/VictorLowther/jsonpatch2"
 	"github.com/digitalrebar/logger"
@@ -54,7 +55,7 @@ func (rt *RequestTracker) HasClaim(scope, action, specific string) bool {
 	return rt.Claims.Match(models.MakeRole("", scope, action, specific).Compile())
 }
 
-func (rt *RequestTracker) unlocker(u func()) {
+func (rt *RequestTracker) unlocker(startTime time.Time, u func()) {
 	if len(rt.toRunAfter) > 0 {
 		rt.Tracef("rt: running after hooks")
 		for _, f := range rt.toRunAfter {
@@ -76,6 +77,9 @@ func (rt *RequestTracker) unlocker(u func()) {
 	rt.toPublishAfter = []func(){}
 	rt.toRunAfter = []func(){}
 	rt.Unlock()
+	if rt.IsTrace() {
+		rt.Tracef("rt: total time: %s", time.Since(startTime))
+	}
 }
 
 func (rt *RequestTracker) runAfter(thunk func()) {
@@ -219,6 +223,7 @@ func (rt *RequestTracker) Find(prefix, key string) models.Model {
 // FindByIndex uses the provided index and key (for that index) to return
 // the object.  The object returned is a clone.
 func (rt *RequestTracker) FindByIndex(prefix string, idx index.Maker, key string) models.Model {
+
 	items, err := index.Sort(idx)(rt.Index(prefix))
 	if err != nil {
 		rt.Errorf("Error sorting %s: %v", prefix, err)
@@ -308,6 +313,7 @@ func (rt *RequestTracker) writable(prefix string) {
 // with the locks taken and then unlocks the locks when complete.
 // It is assumed that is as lamdba function.
 func (rt *RequestTracker) Do(thunk func(Stores)) {
+	startTime := time.Now()
 	rt.Lock()
 	if rt.d != nil {
 		rt.Unlock()
@@ -321,7 +327,7 @@ func (rt *RequestTracker) Do(thunk func(Stores)) {
 	rt.Tracef("rt: locks acquired")
 	rt.d = d
 	rt.Unlock()
-	defer rt.unlocker(unlocker)
+	defer rt.unlocker(startTime, unlocker)
 	thunk(d)
 }
 
@@ -330,6 +336,7 @@ func (rt *RequestTracker) Do(thunk func(Stores)) {
 // Upon completion, the locks are released.
 // It is assumed that is as lamdba function.
 func (rt *RequestTracker) AllLocked(thunk func(Stores)) {
+	startTime := time.Now()
 	rt.Lock()
 	rt.allLocked = true
 	rt.Tracef("starting txn with all locks")
@@ -338,7 +345,7 @@ func (rt *RequestTracker) AllLocked(thunk func(Stores)) {
 		return rt.dt.objs[ref]
 	}
 	rt.Unlock()
-	defer rt.unlocker(func() { rt.dt.allMux.Unlock() })
+	defer rt.unlocker(startTime, func() { rt.dt.allMux.Unlock() })
 	thunk(rt.d)
 }
 
@@ -425,9 +432,12 @@ func (rt *RequestTracker) Create(obj models.Model) (saved bool, err error) {
 	if checkOK {
 		checker.ClearValidation()
 	}
-
+	startTime := time.Now()
 	saved, err = store.Create(backend, ref)
 	if saved {
+		if rt.IsTrace() {
+			rt.Tracef("rt: disk write time: %s", time.Since(startTime))
+		}
 		ref.(validator).clearRT()
 		idx.Add(ref)
 
@@ -486,8 +496,12 @@ func (rt *RequestTracker) Remove(obj models.Model) (removed bool, err error) {
 		return
 	}
 	item.(validator).setRT(rt)
+	startTime := time.Now()
 	removed, err = store.Remove(backend, item.(store.KeySaver))
 	if removed {
+		if rt.IsTrace() {
+			rt.Tracef("rt: disk write time: %s", time.Since(startTime))
+		}
 		idx.Remove(item)
 		rt.Publish(prefix, "delete", key, item)
 	}
@@ -560,17 +574,19 @@ func (rt *RequestTracker) Patch(obj models.Model, key string, patch jsonpatch2.P
 	if obj != nil {
 		a, aok := obj.(models.ChangeForcer)
 		if aok {
-			rt.Tracef("obj: %#v", obj)
-			rt.Tracef("a: %#v", a)
 			if a != nil && a.ChangeForced() {
 				rt.Tracef("Forcing change for %s:%s", prefix, key)
 				toSave.(models.ChangeForcer).ForceChange()
 			}
 		}
 	}
+	startTime := time.Now()
 	saved, err := store.Update(backend, toSave)
 	toSave.(validator).clearRT()
 	if saved {
+		if rt.IsTrace() {
+			rt.Tracef("rt: disk write time: %s", time.Since(startTime))
+		}
 		idx.Add(toSave)
 		rt.PublishExt(prefix, "update", key, toSave, ref)
 	}
@@ -608,9 +624,13 @@ func (rt *RequestTracker) Update(obj models.Model) (saved bool, err error) {
 	if checkOK {
 		checker.ClearValidation()
 	}
+	startTime := time.Now()
 	saved, err = store.Update(backend, ref)
 	ref.(validator).clearRT()
 	if saved {
+		if rt.IsTrace() {
+			rt.Tracef("rt: disk write time: %s", time.Since(startTime))
+		}
 		idx.Add(ref)
 		rt.PublishExt(prefix, "update", key, ref, target)
 	}
@@ -637,10 +657,13 @@ func (rt *RequestTracker) Save(obj models.Model) (saved bool, err error) {
 	if checkOK {
 		checker.ClearValidation()
 	}
-
+	startTime := time.Now()
 	saved, err = store.Save(backend, ref)
 	ref.(validator).clearRT()
 	if saved {
+		if rt.IsTrace() {
+			rt.Tracef("rt: disk write time: %s", time.Since(startTime))
+		}
 		idx.Add(ref)
 		rt.PublishExt(prefix, "save", key, ref, target)
 	}

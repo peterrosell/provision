@@ -311,6 +311,8 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 		} else {
 			fe.Logger.Panicf("No logger on context")
 		}
+		startTime := time.Now()
+		l.Tracef("Auth validation started")
 		authHeader := c.Request.Header.Get("Authorization")
 		if len(authHeader) == 0 {
 			authHeader = c.Query("token")
@@ -407,6 +409,7 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 			auth.Logger = l
 			c.Set("logger", l)
 			c.Set("DRP-AUTH", auth)
+			l.Tracef("Auth success in %s", time.Since(startTime))
 			c.Next()
 			return
 		}
@@ -509,6 +512,14 @@ func NewFrontend(
 
 	mgmtApi.Use(func(c *gin.Context) {
 		l := me.Logger.Fork()
+		clientIP := c.ClientIP()
+		path := c.Request.URL.Path
+		raw := c.Request.URL.RawQuery
+		method := c.Request.Method
+		if raw != "" {
+			path = path + "?" + raw
+		}
+		start := time.Now()
 		if logLevel := c.GetHeader("X-Log-Request"); logLevel != "" {
 			lvl, err := logger.ParseLevel(logLevel)
 			if err != nil {
@@ -520,18 +531,11 @@ func NewFrontend(
 		if logToken := c.GetHeader("X-Log-Token"); logToken != "" {
 			l.Errorf("Log token: %s", logToken)
 		}
+		l.Tracef("API: starting %s %s", c.Request.Method, path)
 		c.Set("logger", l)
-		start := time.Now()
-		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
 		c.Next()
-		latency := time.Now().Sub(start)
-		clientIP := c.ClientIP()
-		method := c.Request.Method
+		latency := time.Since(start)
 		statusCode := c.Writer.Status()
-		if raw != "" {
-			path = path + "?" + raw
-		}
 		l.Debugf("API: st: %d lt: %13v ip: %15s m: %s %s",
 			statusCode,
 			latency,

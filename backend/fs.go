@@ -119,6 +119,14 @@ func (fs *FileSystem) TftpResponder() func(string, net.IP) (io.Reader, error) {
 	}
 }
 
+func (fs *FileSystem) addDynamicFile(fsPath string, t func(net.IP) (io.Reader, error)) {
+	fs.dynamicFiles[fsPath] = t
+}
+
+func (fs *FileSystem) delDynamicFile(fsPath string) {
+	delete(fs.dynamicFiles, fsPath)
+}
+
 // AddDynamicFile adds a lookaside that handles rendering a file that should be generated on
 // the fly.  fsPath is the path where the dynamic lookaside lives, and the passed-in function
 // will be called with the IP address of the system making the request.

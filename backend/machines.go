@@ -567,12 +567,7 @@ func (n *Machine) BeforeSave() error {
 }
 func (n *Machine) AfterSave() {
 	if n.Available {
-		if n.toDeRegister != nil {
-			n.toDeRegister.deregister(n.rt)
-		}
-		if n.toRegister != nil {
-			n.toRegister.register(n.rt)
-		}
+		replaceDynamicFSRenderers(n.rt, n.toDeRegister, n.toRegister)
 	}
 	n.toDeRegister = nil
 	n.toRegister = nil
