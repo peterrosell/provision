@@ -46,6 +46,12 @@ func (pc *PluginController) Request(locks ...string) *backend.RequestTracker {
 	return res
 }
 
+func (pc *PluginController) SetLevel(lvl logger.Level) {
+	pc.lock.Lock()
+	defer pc.lock.Unlock()
+	pc.Logger = pc.Logger.SetLevel(lvl)
+}
+
 /*
  * Create controller and start an event listener.
  */

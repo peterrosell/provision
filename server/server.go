@@ -514,6 +514,8 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	if cOpts.CleanupCorrupt {
 		dt.Cleanup = true
 	}
+	pcLogLvl, _ := logger.ParseLevel(dt.Prefs()["debugPlugins"])
+	pc.SetLevel(pcLogLvl)
 	services = append(services, pc)
 
 	fe := frontend.NewFrontend(dt, buf.Log("frontend"),
