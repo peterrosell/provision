@@ -177,18 +177,28 @@ func validateActionParameters(f *Frontend,
 
 	name := ma.Command
 	val := ma.Params
-
+	var key []byte
 	m, _ := ma.Model.(models.Paramer)
 	for k, v := range val {
+		key = nil
 		pobj := rt.Find("params", k)
 		if pobj == nil {
 			continue
 		}
 		param := backend.AsParam(pobj)
 		if param.Secure {
-			err.Errorf("Action %s cannot be passed secure parameter %s via the API", name, k)
+			sv := &models.SecureData{}
+			pk, pke := rt.PublicKeyFor(m)
+			if pke != nil {
+				err.AddError(pke)
+			} else if mErr := sv.Marshal(pk, v); mErr != nil {
+				err.AddError(mErr)
+			} else {
+				key, _ = rt.PrivateKeyFor(m)
+				v = sv
+			}
 		}
-		if verr := param.ValidateValue(v, nil); verr != nil {
+		if verr := param.ValidateValue(v, key); verr != nil {
 			err.Errorf("Action %s: Invalid Parameter: %s: %s", name, k, verr.Error())
 		}
 	}
