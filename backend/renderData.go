@@ -724,7 +724,7 @@ func (r *RenderData) GenerateToken() string {
 			AddRawClaim("tasks", "get", "*").
 			AddRawClaim("info", "get", "*").
 			AddRawClaim("events", "post", "*").
-			AddRawClaim("reservations", "create", "*").
+			AddRawClaim("reservations", "get,create", "*").
 			AddRawClaim("reservations", "*", models.Hexaddr(r.Machine.Address)).
 			AddMachine(r.Machine.Key()).
 			AddSecrets("", grantorSecret, r.Machine.Secret).
@@ -761,7 +761,7 @@ func (r *RenderData) GenerateInfiniteToken() string {
 		AddRawClaim("tasks", "get", "*").
 		AddRawClaim("info", "get", "*").
 		AddRawClaim("events", "post", "*").
-		AddRawClaim("reservations", "create", "*").
+		AddRawClaim("reservations", "get,create", "*").
 		AddRawClaim("reservations", "*", models.Hexaddr(r.Machine.Address)).
 		AddMachine(r.Machine.Key()).
 		AddSecrets("", grantorSecret, r.Machine.Secret).
