@@ -43,10 +43,12 @@ func (pc *PluginClient) readLog(name string, com io.ReadCloser) {
 	// read command's com line by line - for logging
 	in := bufio.NewScanner(com)
 	for in.Scan() {
+		txt := in.Text()
+		fmt.Fprintln(os.Stderr, txt)
 		// XXX: NoPublish these until we get json logging setup.
 		// The problem is that publish calls generate logging that generate Publish calls
 		// This loops (but doesn't hang).  So, don't event these, but log them.
-		pc.NoPublish().Infof("Plugin %s(%s): %s", pc.plugin, name, in.Text())
+		pc.NoPublish().Infof("Plugin %s(%s): %s", pc.plugin, name, txt)
 	}
 	if err := in.Err(); err != nil {
 		pc.Errorf("Plugin %s(%s): error: %s", pc.plugin, name, err)
