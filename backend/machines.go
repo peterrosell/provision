@@ -345,6 +345,10 @@ func (n *Machine) OnCreate() error {
 	}
 	n.Runnable = true
 	n.Validate()
+	// If create is forced, let it happen
+	if n.ChangeForced() && n.Useable() {
+		return nil
+	}
 	return n.MakeError(422, ValidationError, n)
 }
 

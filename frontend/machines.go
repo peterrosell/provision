@@ -322,6 +322,9 @@ func (f *Frontend) InitMachineApi() {
 			if b.Uuid == nil || len(b.Uuid) == 0 {
 				b.Uuid = uuid.NewRandom()
 			}
+			if c.Query("force") == "true" {
+				b.ForceChange()
+			}
 			f.create(c, b)
 		})
 
