@@ -105,7 +105,7 @@ func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, pro
 	env = append(env, fmt.Sprintf("RS_ENDPOINT=%s", apiURL))
 	env = append(env, fmt.Sprintf("RS_FILESERVER=%s", staticURL))
 	env = append(env, fmt.Sprintf("RS_TOKEN=%s", token))
-	env = append(env, fmt.Sprintf("RS_WEBROOT=%s", pc.dt.FileRoot))
+	env = append(env, fmt.Sprintf("RS_WEBROOT=%s", rt.FileRoot()))
 	cmd.Env = env
 
 	out, err := cmd.CombinedOutput()
