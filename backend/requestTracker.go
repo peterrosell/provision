@@ -788,6 +788,12 @@ func (rt *RequestTracker) FileURL(remoteIP net.IP) string {
 	return rt.urlFor("http", remoteIP, rt.dt.StaticPort)
 }
 
+// FileRoot is a helper function to return the full path
+// to the file root.
+func (rt *RequestTracker) FileRoot() string {
+	return rt.dt.FileRoot
+}
+
 // SealClaims takes a set of auth claims and signs them to
 // make an Token for authentication purposes.
 func (rt *RequestTracker) SealClaims(claims *DrpCustomClaims) (string, error) {
