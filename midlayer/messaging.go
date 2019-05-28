@@ -119,6 +119,7 @@ func NewPluginClient(pc *PluginController, pluginCommDir, plugin, provider strin
 	env = append(env, fmt.Sprintf("RS_ENDPOINT=%s", apiURL))
 	env = append(env, fmt.Sprintf("RS_FILESERVER=%s", staticURL))
 	env = append(env, fmt.Sprintf("RS_TOKEN=%s", token))
+	env = append(env, fmt.Sprintf("RS_WEBROOT=%s", pc.dt.FileRoot))
 	answer.cmd.Env = env
 
 	plugintmppath := fmt.Sprintf("%s/plugin-tmp", filepath.Dir(pc.pluginDir))
