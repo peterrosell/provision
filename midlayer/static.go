@@ -8,6 +8,7 @@ import (
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/utils"
+	"github.com/rs/cors"
 )
 
 type fileData struct {
@@ -44,6 +45,9 @@ func ServeStatic(listenAt string, responder http.Handler, logger logger.Logger, 
 		}
 	})
 	r = pub.Handler(r)
+
+	// Enable CORS
+	r = cors.Default().Handler(r)
 
 	svr := &http.Server{
 		Addr:    listenAt,
