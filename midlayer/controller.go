@@ -37,7 +37,7 @@ type PluginController struct {
 	finished           chan bool
 	events             chan *models.Event
 	publishers         *backend.Publishers
-	Actions            *Actions
+	Actions            *actions
 	AddStorageType     func(string)
 }
 
@@ -168,7 +168,7 @@ func (pc *PluginController) Start(
 	dt *backend.DataTracker,
 	providers map[string]*models.PluginProvider,
 	pubs *backend.Publishers) {
-	pc.Actions = NewActions()
+	pc.Actions = newActions()
 	pc.publishers = pubs
 	pubs.Add(pc)
 

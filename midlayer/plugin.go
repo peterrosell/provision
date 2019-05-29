@@ -514,7 +514,7 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 	for i := range r.Provider.AvailableActions {
 		r.Provider.AvailableActions[i].Fill()
 		r.Provider.AvailableActions[i].Provider = r.Provider.Name
-		pc.Actions.Add(r.Provider.AvailableActions[i], r)
+		pc.Actions.add(r.Provider.AvailableActions[i], r)
 	}
 	rt.Publish("plugins", "configed", plugin.Name, plugin)
 }
@@ -567,7 +567,7 @@ func (pc *PluginController) stopPlugin(mp models.Model) {
 		}
 		for _, aa := range rp.Provider.AvailableActions {
 			rt.Debugf("Remove actions: %s(%s,%s)\n", plugin.Name, plugin.Provider, aa.Command)
-			pc.Actions.Remove(aa, rp)
+			pc.Actions.remove(aa, rp)
 		}
 		rp.state = PLUGIN_STOPPED
 

@@ -14,7 +14,7 @@ type AvailableAction struct {
 	models.AvailableAction
 
 	Plugin *RunningPlugin
-	ma     *Actions
+	ma     *actions
 
 	lock      sync.Mutex
 	inflight  int
@@ -33,19 +33,19 @@ type AvailableAction struct {
  */
 
 type AvailableActions []*AvailableAction
-type ObjectCommands map[string]AvailableActions
-type ObjectsCommands map[string]ObjectCommands
+type objectCommands map[string]AvailableActions
+type objectsCommands map[string]objectCommands
 
-type Actions struct {
-	actions ObjectsCommands
+type actions struct {
+	actions objectsCommands
 	lock    sync.Mutex
 }
 
-func NewActions() *Actions {
-	return &Actions{actions: make(ObjectsCommands, 0)}
+func newActions() *actions {
+	return &actions{actions: make(objectsCommands, 0)}
 }
 
-func (ma *Actions) Add(model_aa models.AvailableAction, plugin *RunningPlugin) error {
+func (ma *actions) add(model_aa models.AvailableAction, plugin *RunningPlugin) error {
 	aa := &AvailableAction{}
 	aa.AvailableAction = model_aa
 	aa.Plugin = plugin
@@ -61,9 +61,9 @@ func (ma *Actions) Add(model_aa models.AvailableAction, plugin *RunningPlugin) e
 	cmd := aa.Command
 	pn := aa.Plugin.Plugin.Name
 
-	var oc ObjectCommands
+	var oc objectCommands
 	if toc, ok := ma.actions[ob]; !ok {
-		oc = make(ObjectCommands, 0)
+		oc = make(objectCommands, 0)
 		ma.actions[ob] = oc
 	} else {
 		oc = toc
@@ -87,7 +87,7 @@ func (ma *Actions) Add(model_aa models.AvailableAction, plugin *RunningPlugin) e
 	return nil
 }
 
-func (ma *Actions) Remove(aa models.AvailableAction, plugin *RunningPlugin) error {
+func (ma *actions) remove(aa models.AvailableAction, plugin *RunningPlugin) error {
 	var err error
 	var the_aa *AvailableAction
 	ma.lock.Lock()
@@ -127,13 +127,13 @@ func (ma *Actions) Remove(aa models.AvailableAction, plugin *RunningPlugin) erro
 	ma.lock.Unlock()
 
 	if the_aa != nil {
-		the_aa.Unload()
+		the_aa.unload()
 	}
 
 	return err
 }
 
-func (ma *Actions) List(ob string) []AvailableActions {
+func (ma *actions) List(ob string) []AvailableActions {
 	ma.lock.Lock()
 	defer ma.lock.Unlock()
 
@@ -154,7 +154,7 @@ func (ma *Actions) List(ob string) []AvailableActions {
 
 }
 
-func (ma *Actions) Get(ob, name string) (AvailableActions, bool) {
+func (ma *actions) Get(ob, name string) (AvailableActions, bool) {
 	ma.lock.Lock()
 	defer ma.lock.Unlock()
 
@@ -166,7 +166,7 @@ func (ma *Actions) Get(ob, name string) (AvailableActions, bool) {
 	return nil, false
 }
 
-func (ma *Actions) GetSpecific(ob, name, plugin string) (*AvailableAction, bool) {
+func (ma *actions) GetSpecific(ob, name, plugin string) (*AvailableAction, bool) {
 	ma.lock.Lock()
 	defer ma.lock.Unlock()
 
@@ -182,7 +182,7 @@ func (ma *Actions) GetSpecific(ob, name, plugin string) (*AvailableAction, bool)
 	return nil, false
 }
 
-func (ma *Actions) Run(rt *backend.RequestTracker, ob string, maa *models.Action) (interface{}, error) {
+func (ma *actions) Run(rt *backend.RequestTracker, ob string, maa *models.Action) (interface{}, error) {
 	var aa *AvailableAction
 	var ok bool
 	if maa.Plugin == "" {
@@ -198,10 +198,10 @@ func (ma *Actions) Run(rt *backend.RequestTracker, ob string, maa *models.Action
 		return nil, fmt.Errorf("Action no longer available: %s", maa.Command)
 	}
 
-	if err := aa.Reserve(); err != nil {
+	if err := aa.reserve(); err != nil {
 		return nil, err
 	}
-	defer aa.Release()
+	defer aa.release()
 
 	rt.Debugf("Starting action: %s on %v\n", maa.Command, maa.Model)
 	v, e := aa.Plugin.Client.Action(rt, maa)
@@ -209,7 +209,7 @@ func (ma *Actions) Run(rt *backend.RequestTracker, ob string, maa *models.Action
 	return v, e
 }
 
-func (aa *AvailableAction) Reserve() error {
+func (aa *AvailableAction) reserve() error {
 	aa.lock.Lock()
 	defer aa.lock.Unlock()
 
@@ -220,14 +220,14 @@ func (aa *AvailableAction) Reserve() error {
 	return nil
 }
 
-func (aa *AvailableAction) Release() {
+func (aa *AvailableAction) release() {
 	aa.lock.Lock()
 	defer aa.lock.Unlock()
 
 	aa.inflight -= 1
 }
 
-func (aa *AvailableAction) Unload() {
+func (aa *AvailableAction) unload() {
 	aa.lock.Lock()
 	aa.unloading = true
 	for aa.inflight != 0 {
