@@ -852,3 +852,202 @@ func (rt *RequestTracker) PublicKeyFor(m models.Model) ([]byte, error) {
 	curve25519.ScalarBaseMult(&res, &pk)
 	return res[:], nil
 }
+
+// Actions methods.  Used to list and invoke actions for a given object
+
+func (rt *RequestTracker) validateActionParameters(
+	ma *models.Action,
+	aa *availableAction,
+	err *models.Error) map[string]interface{} {
+
+	name := ma.Command
+	var key []byte
+	m, mok := ma.Model.(models.Paramer)
+	res := map[string]interface{}{}
+	for k, v := range ma.Params {
+		res[k] = v
+		key = nil
+		pobj := rt.Find("params", k)
+		if pobj == nil {
+			continue
+		}
+		param := AsParam(pobj)
+		if param.Secure && mok {
+			sv := &models.SecureData{}
+			pk, pke := rt.PublicKeyFor(m)
+			if pke != nil {
+				err.AddError(pke)
+			} else if mErr := sv.Marshal(pk, v); mErr != nil {
+				err.AddError(mErr)
+			} else {
+				key, _ = rt.PrivateKeyFor(m)
+				v = sv
+			}
+		}
+		if verr := param.ValidateValue(v, key); verr != nil {
+			err.Errorf("Action %s: Invalid Parameter: %s: %s", name, k, verr.Error())
+		}
+	}
+	if mok {
+		missingOK := false
+		params := rt.GetParams(m, true, true)
+		for _, pList := range [][]string{aa.RequiredParams, aa.OptionalParams} {
+			for _, param := range pList {
+				if _, ok := ma.Params[param]; ok {
+					continue
+				}
+				if obj, ok := params[param]; ok {
+					res[param] = obj
+					continue
+				}
+				if po := rt.Find("params", param); po != nil {
+					if vv, ok := AsParam(po).DefaultValue(); ok {
+						res[param] = vv
+						continue
+					}
+				}
+				if !missingOK {
+					err.Errorf("Action %s Missing Parameter %s", name, param)
+				}
+			}
+			missingOK = true
+		}
+	}
+	return res
+}
+
+func (rt *RequestTracker) validateAction(ma *models.Action, params map[string]interface{}) (map[string]interface{}, *models.Error) {
+
+	err := &models.Error{
+		Code:  http.StatusBadRequest,
+		Type:  "GET",
+		Model: ma.CommandSet,
+		Key:   ma.Command,
+	}
+
+	lraa := AvailableActions{}
+	var ok bool
+	if ma.Plugin != "" {
+		if aa, ok := rt.dt.pc.actions.getSpecific(ma.CommandSet, ma.Command, ma.Plugin); !ok {
+			err.Errorf("Action %s on %s for plugin %s not found", ma.Command, ma.CommandSet, ma.Plugin)
+			return nil, err
+		} else {
+			lraa = append(lraa, aa)
+		}
+	} else {
+		if lraa, ok = rt.dt.pc.actions.get(ma.CommandSet, ma.Command); !ok {
+			err.Errorf("Action %s on %s: Not Found", ma.Command, ma.CommandSet)
+			return nil, err
+		}
+	}
+	if len(params) > 0 {
+		ma.Params = params
+	} else {
+		ma.Params = map[string]interface{}{}
+	}
+	for _, aa := range lraa {
+		err = &models.Error{
+			Code:  http.StatusBadRequest,
+			Type:  "INVOKE",
+			Model: ma.CommandSet,
+			Key:   ma.Command,
+		}
+		fullParams := rt.validateActionParameters(ma, aa, err)
+
+		if !err.ContainsError() {
+			ma.Plugin = aa.plugin.Plugin.Name
+			return fullParams, nil
+		}
+	}
+	return nil, err
+}
+
+func (rt *RequestTracker) AllActions(ref models.Model,
+	cmdSet, plugin string,
+	params map[string]interface{}) []models.AvailableAction {
+	res := []models.AvailableAction{}
+	for _, laa := range rt.dt.pc.actions.list(cmdSet) {
+		for _, aa := range laa {
+			if plugin != "" && aa.plugin.Plugin.Name != plugin {
+				continue
+			}
+			ma := &models.Action{
+				Model:      ref,
+				Command:    aa.Command,
+				CommandSet: cmdSet,
+				Plugin:     aa.plugin.Plugin.Name,
+			}
+			if _, err := rt.validateAction(ma, params); err == nil || !err.ContainsError() {
+				res = append(res, aa.AvailableAction)
+			}
+		}
+	}
+	return res
+}
+
+func (rt *RequestTracker) Actions(m models.Model,
+	cmdSet, action, plugin string,
+	params map[string]interface{}) ([]models.AvailableAction, *models.Error) {
+	res := []models.AvailableAction{}
+	laa := []*availableAction{}
+	err := &models.Error{
+		Code:  http.StatusNotFound,
+		Model: m.Prefix(),
+		Key:   m.Key(),
+		Type:  "GET",
+	}
+	found := false
+	if plugin != "" {
+		var aa *availableAction
+		aa, found = rt.dt.pc.actions.getSpecific(cmdSet, action, plugin)
+		if found {
+			laa = append(laa, aa)
+		}
+	} else {
+		laa, found = rt.dt.pc.actions.get(cmdSet, action)
+	}
+	if !found {
+		err.Errorf("%s: Not Found", action)
+		return res, err
+	}
+	for _, aa := range laa {
+		ma := &models.Action{
+			Model:      m,
+			CommandSet: cmdSet,
+			Command:    aa.Command,
+			Plugin:     aa.plugin.Plugin.Name,
+		}
+		err = nil
+		if _, err = rt.validateAction(ma, params); err == nil || !err.ContainsError() {
+			res = append(res, aa.AvailableAction)
+		}
+	}
+	if err != nil {
+		err.Type = "GET"
+		err.Model = m.Prefix()
+		err.Key = m.Key()
+	}
+	return res, err
+}
+
+func (rt *RequestTracker) BuildAction(m models.Model,
+	cmdSet, action, plugin string,
+	params map[string]interface{}) (*models.Action, *models.Error) {
+	ma := &models.Action{
+		Model:      models.Clone(m),
+		CommandSet: cmdSet,
+		Command:    action,
+		Plugin:     plugin,
+	}
+	fullParams, err := rt.validateAction(ma, params)
+	if err != nil && err.ContainsError() {
+		err.Key = m.Key()
+		return nil, err
+	}
+	ma.Params = fullParams
+	return ma, nil
+}
+
+func (rt *RequestTracker) RunAction(ma *models.Action) (interface{}, error) {
+	return rt.dt.pc.actions.run(rt, ma)
+}

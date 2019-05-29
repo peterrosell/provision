@@ -1,4 +1,4 @@
-package midlayer
+package backend
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/digitalrebar/logger"
-	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
 	"github.com/gin-gonic/gin"
@@ -30,18 +29,18 @@ type PluginController struct {
 	lock               *sync.Mutex
 	AvailableProviders map[string]*models.PluginProvider
 	runningPlugins     map[string]*RunningPlugin
-	dt                 *backend.DataTracker
+	dt                 *DataTracker
 	pluginDir          string
 	pluginCommDir      string
 	done               chan bool
 	finished           chan bool
 	events             chan *models.Event
-	publishers         *backend.Publishers
-	Actions            *actions
+	publishers         *Publishers
+	actions            *actions
 	AddStorageType     func(string)
 }
 
-func (pc *PluginController) Request(locks ...string) *backend.RequestTracker {
+func (pc *PluginController) Request(locks ...string) *RequestTracker {
 	res := pc.dt.Request(pc.Logger, locks...)
 	return res
 }
@@ -89,12 +88,12 @@ func ReverseProxy(pc *PluginController) gin.HandlerFunc {
 	}
 }
 
-func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, provider, contentDir string) (*models.PluginProvider, error) {
+func (pc *PluginController) definePluginProvider(rt *RequestTracker, provider, contentDir string) (*models.PluginProvider, error) {
 	pc.Infof("Importing plugin provider: %s\n", provider)
 	cmd := exec.Command(provider, "define")
 
 	// Setup env vars to run plugin - auth should be parameters.
-	claims := backend.NewClaim(provider, "system", time.Hour*1).
+	claims := NewClaim(provider, "system", time.Hour*1).
 		AddRawClaim("*", "get", "*").
 		AddSecrets("", "", "")
 	token, _ := rt.SealClaims(claims)
@@ -140,7 +139,7 @@ func (pc *PluginController) definePluginProvider(rt *backend.RequestTracker, pro
 	return pp, nil
 }
 
-func (pc *PluginController) define(rt *backend.RequestTracker, contentDir string) (map[string]*models.PluginProvider, error) {
+func (pc *PluginController) define(rt *RequestTracker, contentDir string) (map[string]*models.PluginProvider, error) {
 	providers := map[string]*models.PluginProvider{}
 	files, err := ioutil.ReadDir(pc.pluginDir)
 	if err != nil {
@@ -158,17 +157,17 @@ func (pc *PluginController) define(rt *backend.RequestTracker, contentDir string
 	return providers, nil
 }
 
-func (pc *PluginController) Define(rt *backend.RequestTracker, contentDir string) (map[string]*models.PluginProvider, error) {
+func (pc *PluginController) Define(rt *RequestTracker, contentDir string) (map[string]*models.PluginProvider, error) {
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
 	return pc.define(rt, contentDir)
 }
 
 func (pc *PluginController) Start(
-	dt *backend.DataTracker,
+	dt *DataTracker,
 	providers map[string]*models.PluginProvider,
-	pubs *backend.Publishers) {
-	pc.Actions = newActions()
+	pubs *Publishers) {
+	pc.actions = newActions()
 	pc.publishers = pubs
 	pubs.Add(pc)
 
@@ -265,7 +264,7 @@ func (pc *PluginController) GetPluginProviders() []*models.PluginProvider {
 	return answer
 }
 
-func forceParamRemoval(d *backend.DataStack, l store.Store, logger logger.Logger) error {
+func forceParamRemoval(d *DataStack, l store.Store, logger logger.Logger) error {
 	toRemove := [][]string{}
 	layer0 := d.Layers()[0]
 	lSubs := l.Subs()
@@ -296,7 +295,7 @@ func forceParamRemoval(d *backend.DataStack, l store.Store, logger logger.Logger
 }
 
 // Try to stop using plugins and remove available - Must lock controller lock before calling
-func (pc *PluginController) removePluginProvider(rt *backend.RequestTracker, provider string) error {
+func (pc *PluginController) removePluginProvider(rt *RequestTracker, provider string) error {
 	pc.Tracef("removePluginProvider Started: %s\n", provider)
 	var name string
 	for _, pp := range pc.AvailableProviders {
@@ -310,7 +309,7 @@ func (pc *PluginController) removePluginProvider(rt *backend.RequestTracker, pro
 		rt.Publish("plugin_providers", "delete", name, pc.AvailableProviders[name])
 
 		// Remove the plugin content
-		rt.AllLocked(func(d backend.Stores) {
+		rt.AllLocked(func(d Stores) {
 			ds := pc.dt.Backend
 			nbs, hard, _ := ds.RemovePluginLayer(name, pc.dt.Logger, pc.dt.Secrets)
 			if hard != nil {
@@ -404,7 +403,7 @@ func (pc *PluginController) UploadPluginProvider(c *gin.Context, fileRoot, name 
 		return nil, models.NewError("API ERROR", http.StatusBadRequest,
 			fmt.Sprintf("Import plugin failed %s: bad store: %v", name, err))
 	}
-	rt.AllLocked(func(d backend.Stores) {
+	rt.AllLocked(func(d Stores) {
 		ds := pc.dt.Backend
 		nbs, hard, _ := ds.AddReplacePluginLayer(name, ns, pc.dt.Secrets, pc.dt.Logger, forceParamRemoval)
 		if hard != nil {

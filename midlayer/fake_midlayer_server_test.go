@@ -53,7 +53,8 @@ func fakeServer() error {
 		"fred",
 		l,
 		map[string]string{"systemGrantorSecret": "itisfred", "defaultStage": "none", "defaultBootEnv": "local", "unknownBootEnv": "ignore"},
-		backend.NewPublishers(baseLog))
+		backend.NewPublishers(baseLog),
+		nil)
 	dhcpHandler = makeHandler(dataTracker, false)
 	binlHandler = makeHandler(dataTracker, true)
 	rt := dataTracker.Request(l, "subnets:rw")

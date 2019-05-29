@@ -304,7 +304,7 @@ func bootstrapPlugins(
 	localLogger *log.Logger,
 	l logger.Logger,
 	cOpts *ProgOpts,
-	secretStore store.Store) (*midlayer.PluginController, map[string]*models.PluginProvider, error) {
+	secretStore store.Store) (*backend.PluginController, map[string]*models.PluginProvider, error) {
 	localLogger.Printf("Bootstrapping plugins")
 	scratchStore, err := backend.InitDataStack(cOpts.SaasContentRoot, cOpts.FileRoot, l)
 	if err != nil {
@@ -337,8 +337,9 @@ func bootstrapPlugins(
 			"baseTokenSecret":     cOpts.BaseTokenSecret,
 			"systemGrantorSecret": cOpts.SystemGrantorSecret,
 		},
-		publishers)
-	pc, err := midlayer.InitPluginController(cOpts.PluginRoot, cOpts.PluginCommRoot, l)
+		publishers,
+		nil)
+	pc, err := backend.InitPluginController(cOpts.PluginRoot, cOpts.PluginCommRoot, l)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -509,7 +510,8 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 			"baseTokenSecret":     cOpts.BaseTokenSecret,
 			"systemGrantorSecret": cOpts.SystemGrantorSecret,
 		},
-		publishers)
+		publishers,
+		pc)
 
 	if cOpts.CleanupCorrupt {
 		dt.Cleanup = true
@@ -737,7 +739,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 
 	go func() {
 		localLogger.Printf("Starting API server")
-		fe.ApiGroup.Any("/plugin-apis/:plugin/*path", midlayer.ReverseProxy(pc))
+		fe.ApiGroup.Any("/plugin-apis/:plugin/*path", backend.ReverseProxy(pc))
 		if err = srv.ListenAndServeTLS(cOpts.TLSCertFile, cOpts.TLSKeyFile); err != http.ErrServerClosed {
 			// Stop the service gracefully.
 			for _, svc := range services {

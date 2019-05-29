@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/digitalrebar/provision/backend"
-	"github.com/digitalrebar/provision/midlayer"
 	"github.com/digitalrebar/provision/models"
 	"github.com/gin-gonic/gin"
 )
@@ -63,27 +62,7 @@ func (f *Frontend) makeActionEndpoints(cmdSet string, obj models.Model, idKey st
 			if fok, mok := f.processRequestWithForwarding(c, ref, nil); fok || mok {
 				return
 			}
-			p := plugin(c)
-			for _, laa := range f.pc.Actions.List(cmdSet) {
-				for _, aa := range laa {
-					if p != "" && p != aa.Plugin.Plugin.Name {
-						continue
-					}
-					ma := &models.Action{
-						Model:   ref,
-						Command: aa.Command,
-						Plugin:  aa.Plugin.Plugin.Name,
-						Params:  map[string]interface{}{},
-					}
-					var err *models.Error
-					rt.Do(func(_ backend.Stores) { _, err = validateAction(f, rt, cmdSet, id, ma) })
-					if err.ContainsError() {
-						continue
-					}
-					actions = append(actions, aa.AvailableAction)
-					break
-				}
-			}
+			rt.Do(func(_ backend.Stores) { actions = rt.AllActions(ref, cmdSet, plugin(c), nil) })
 			c.JSON(http.StatusOK, actions)
 		},
 		/* oneAction */ func(c *gin.Context) {
@@ -98,32 +77,14 @@ func (f *Frontend) makeActionEndpoints(cmdSet string, obj models.Model, idKey st
 			if fok, mok := f.processRequestWithForwarding(c, ref, nil); fok || mok {
 				return
 			}
-			err := &models.Error{
-				Code:  http.StatusNotFound,
-				Model: obj.Prefix(),
-				Key:   id,
-				Type:  c.Request.Method,
+			var err *models.Error
+			var aa []models.AvailableAction
+			rt.Do(func(_ backend.Stores) { aa, err = rt.Actions(ref, cmdSet, cmd, plugin(c), nil) })
+			if len(aa) == 0 {
+				c.AbortWithStatusJSON(err.Code, err)
+			} else {
+				c.JSON(http.StatusOK, aa[0])
 			}
-			err.Errorf("%s: Not Found", cmd)
-			p := plugin(c)
-			laa, _ := f.pc.Actions.Get(cmdSet, cmd)
-			for _, aa := range laa {
-				if p != "" && p != aa.Plugin.Plugin.Name {
-					continue
-				}
-				ma := &models.Action{
-					Model:   ref,
-					Command: aa.Command,
-					Plugin:  aa.Plugin.Plugin.Name,
-					Params:  map[string]interface{}{},
-				}
-				rt.Do(func(_ backend.Stores) { _, err = validateAction(f, rt, cmdSet, id, ma) })
-				if !err.ContainsError() {
-					c.JSON(http.StatusOK, aa.AvailableAction)
-					return
-				}
-			}
-			c.AbortWithStatusJSON(err.Code, err)
 		},
 		/* runAction */ func(c *gin.Context) {
 			var val map[string]interface{}
@@ -141,127 +102,22 @@ func (f *Frontend) makeActionEndpoints(cmdSet string, obj models.Model, idKey st
 			if fok, mok := f.processRequestWithForwarding(c, ref, val); fok || mok {
 				return
 			}
-			res := &models.Action{
-				Model:   ref,
-				Plugin:  plugin(c),
-				Command: cmd,
-				Params:  val}
+			var out interface{}
+			var err error
 			var ma *models.Action
-			var err *models.Error
-			rt.Do(func(_ backend.Stores) { ma, err = validateAction(f, rt, cmdSet, id, res) })
-			if err.ContainsError() {
-				err.Type = "INVOKE"
-				c.JSON(err.Code, err)
-				return
+			rt.Do(func(_ backend.Stores) { ma, err = rt.BuildAction(ref, cmdSet, cmd, plugin(c), val) })
+			if err.(*models.Error) == nil {
+				rt.Publish(ma.CommandSet, ma.Command, id, ma)
+				out, err = rt.RunAction(ma)
 			}
-			rt.Publish(cmdSet, cmd, id, ma)
-			retval, runErr := f.pc.Actions.Run(rt, cmdSet, ma)
-			if runErr != nil {
-				be, ok := runErr.(*models.Error)
-				if !ok {
-					c.JSON(409, runErr)
-				} else {
-					c.JSON(be.Code, be)
-				}
+			be, ok := err.(*models.Error)
+			if !ok && err != nil {
+				c.JSON(409, err)
+			} else if ok && be != nil {
+				be.Type = "INVOKE"
+				c.JSON(be.Code, be)
 			} else {
-				c.JSON(http.StatusOK, retval)
+				c.JSON(http.StatusOK, out)
 			}
 		}
-}
-
-func validateActionParameters(f *Frontend,
-	rt *backend.RequestTracker,
-	ma *models.Action,
-	aa *midlayer.AvailableAction,
-	err *models.Error) {
-
-	name := ma.Command
-	val := ma.Params
-	var key []byte
-	m, _ := ma.Model.(models.Paramer)
-	for k, v := range val {
-		key = nil
-		pobj := rt.Find("params", k)
-		if pobj == nil {
-			continue
-		}
-		param := backend.AsParam(pobj)
-		if param.Secure {
-			sv := &models.SecureData{}
-			pk, pke := rt.PublicKeyFor(m)
-			if pke != nil {
-				err.AddError(pke)
-			} else if mErr := sv.Marshal(pk, v); mErr != nil {
-				err.AddError(mErr)
-			} else {
-				key, _ = rt.PrivateKeyFor(m)
-				v = sv
-			}
-		}
-		if verr := param.ValidateValue(v, key); verr != nil {
-			err.Errorf("Action %s: Invalid Parameter: %s: %s", name, k, verr.Error())
-		}
-	}
-
-	missingOK := false
-	for _, pList := range [][]string{aa.RequiredParams, aa.OptionalParams} {
-		for _, param := range pList {
-			if _, ok := val[param]; ok {
-				continue
-			}
-			if obj, ok := rt.GetParam(m, param, true, len(ma.Params) != 0); ok {
-				val[param] = obj
-			} else if !missingOK {
-				err.Errorf("Action %s Missing Parameter %s", name, param)
-			}
-		}
-		missingOK = true
-	}
-}
-
-func validateAction(f *Frontend,
-	rt *backend.RequestTracker,
-	ob string,
-	id string,
-	ma *models.Action) (*models.Action, *models.Error) {
-
-	cmd := ma.Command
-	err := &models.Error{
-		Code:  http.StatusBadRequest,
-		Type:  "GET",
-		Model: ob,
-		Key:   id,
-	}
-
-	lraa := midlayer.AvailableActions{}
-	var ok bool
-	if ma.Plugin != "" {
-		if aa, ok := f.pc.Actions.GetSpecific(ob, cmd, ma.Plugin); !ok {
-			err.Errorf("Action %s on %s for plugin %s not found", cmd, ob, ma.Plugin)
-			return nil, err
-		} else {
-			lraa = append(lraa, aa)
-		}
-	} else {
-		if lraa, ok = f.pc.Actions.Get(ob, cmd); !ok {
-			err.Errorf("Action %s on %s: Not Found", cmd, ob)
-			return nil, err
-		}
-	}
-
-	for _, aa := range lraa {
-		err = &models.Error{
-			Code:  http.StatusBadRequest,
-			Type:  "GET",
-			Model: ob,
-			Key:   id,
-		}
-		validateActionParameters(f, rt, ma, aa, err)
-
-		if !err.ContainsError() {
-			ma.Plugin = aa.Plugin.Plugin.Name
-			return ma, nil
-		}
-	}
-	return nil, err
 }

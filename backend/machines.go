@@ -573,6 +573,36 @@ func (n *Machine) AfterSave() {
 	if n.Available {
 		replaceDynamicFSRenderers(n.rt, n.toDeRegister, n.toRegister)
 	}
+	if n.oldBootEnv != n.BootEnv {
+		oe := n.rt.find("bootenvs", n.oldBootEnv)
+		ne := n.rt.find("bootenvs", n.BootEnv)
+		if oe == nil || oe.(*BootEnv).NetBoot() != ne.(*BootEnv).NetBoot() {
+			params := n.rt.GetParams(n, true, true)
+			if enabled, ok := params[`ipmi/enabled`]; ok && enabled.(bool) {
+				if autoPower, ok := params[`ipmi/auto-boot-target`]; ok && autoPower.(bool) {
+					nextAction := "forcebootdisk"
+					if ne.(*BootEnv).NetBoot() {
+						nextAction = "forcebootpxe"
+					}
+					action, err := n.rt.BuildAction(n.Machine, `machines`, nextAction, ``, nil)
+					if err != nil {
+						n.rt.Errorf("Cannot set %s on %s:%s: %v", nextAction, n.Prefix(), n.Key(), err)
+					} else {
+						n.rt.Infof("Machine %s changed from '%s' to '%s', will %s", n.Key(), n.oldBootEnv, n.BootEnv, nextAction)
+						n.rt.Publish(action.CommandSet, action.Command, n.Key(), action)
+						rt := n.rt
+						key := n.Key()
+						n.rt.PublishAfter(func() {
+							_, err := rt.RunAction(action)
+							if err != nil {
+								rt.Errorf("Action %s invoke on %s:%s failed: %v", action.Command, action.CommandSet, key, err)
+							}
+						})
+					}
+				}
+			}
+		}
+	}
 	n.toDeRegister = nil
 	n.toRegister = nil
 	n.oldStage = n.Stage

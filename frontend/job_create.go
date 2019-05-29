@@ -13,14 +13,15 @@ import (
 	"github.com/pborman/uuid"
 )
 
-func makeDeferredAction(f *Frontend,
-	rt *backend.RequestTracker,
+func makeDeferredAction(rt *backend.RequestTracker,
 	action *models.Action,
 	prefix, key, jobKey string) func(*models.Error) *backend.Job {
 	return func(ret *models.Error) *backend.Job {
 		buf := &bytes.Buffer{}
 		ret.Code = http.StatusAccepted
-		res, err := f.pc.Actions.Run(rt, prefix, action)
+		var job *backend.Job
+		rt.Publish(action.CommandSet, action.Command, key, action)
+		res, err := rt.RunAction(action)
 		if res != nil {
 			fmt.Fprintf(buf, "Results from plugin invoke:\n")
 			enc := json.NewEncoder(buf)
@@ -28,14 +29,11 @@ func makeDeferredAction(f *Frontend,
 			enc.Encode(res)
 			fmt.Fprintf(buf, "\nEnd of results\n")
 		}
-		if err == nil {
-			rt.Publish(prefix, action.Command, key, action)
-		} else {
+		if err != nil {
 			fmt.Fprintf(buf, "Action invoke %s failed\n%v", action.Command, err)
 			ret.Errorf("Action invoke %s failed", action.Command)
 			ret.AddError(err)
 		}
-		var job *backend.Job
 		rt.Do(func(_ backend.Stores) {
 			var machine *backend.Machine
 			if obj := rt.Find("machines", key); obj != nil {
@@ -76,7 +74,7 @@ func makeDeferredAction(f *Frontend,
 	}
 }
 
-func handleAction(f *Frontend,
+func handleAction(
 	rt *backend.RequestTracker,
 	m *backend.Machine,
 	pa string,
@@ -127,8 +125,8 @@ func handleAction(f *Frontend,
 		rt.Remove(nb)
 		return nil
 	}
-	validAction, err := validateAction(f, rt, m.Prefix(), m.Key(), action)
-	if err.ContainsError() {
+	action, err := rt.BuildAction(m, m.Prefix(), action.Command, action.Plugin, nil)
+	if err != nil {
 		ret.AddError(err)
 		nb.State = "failed"
 		buf := &bytes.Buffer{}
@@ -140,7 +138,7 @@ func handleAction(f *Frontend,
 		return nil
 	}
 
-	return makeDeferredAction(f, rt, validAction, m.Prefix(), m.Key(), nb.Key())
+	return makeDeferredAction(rt, action, m.Prefix(), m.Key(), nb.Key())
 }
 
 func saveMachineAndNoJob(rt *backend.RequestTracker, m *backend.Machine, ret *models.Error) {
@@ -300,7 +298,7 @@ func realCreateJob(f *Frontend,
 			logMsg = fmt.Sprintf("Machine %s changing from bootenv %s to %s", b.Machine.String(), m.BootEnv, st[1])
 			m.BootEnv = st[1]
 		case "action":
-			return nil, handleAction(f, rt, m, st[1], taskToRun, err)
+			return nil, handleAction(rt, m, st[1], taskToRun, err)
 		}
 		// We actually need to generate a stage/bootenv change. Create a fake job to track
 		// the event.
