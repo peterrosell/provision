@@ -15,7 +15,6 @@ import (
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/backend/index"
-	"github.com/digitalrebar/provision/midlayer"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/provision/utils"
 	"github.com/digitalrebar/store"
@@ -160,7 +159,7 @@ type Frontend struct {
 	MgmtApi    *gin.Engine
 	ApiGroup   *gin.RouterGroup
 	dt         *backend.DataTracker
-	pc         *midlayer.PluginController
+	pc         *backend.PluginController
 	authSource AuthSource
 	pubs       *backend.Publishers
 	melody     *melody.Melody
@@ -243,16 +242,24 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 	if checkAuth {
 		// Assume that it is not a good user or good password
 		res = nil
-		ma := &models.Action{
-			Model:   nil,
-			Plugin:  "",
-			Command: "authenticate",
-			Params: map[string]interface{}{
-				"auth/username": username,
-				"auth/password": password,
-			},
+		var obj interface{}
+		var buildErr *models.Error
+		var runErr error
+		var action *models.Action
+		rt.Do(func(_ backend.Stores) {
+			action, buildErr = rt.BuildAction(nil,
+				"system", "authenticate", "",
+				map[string]interface{}{
+					"auth/username": username,
+					"auth/password": password,
+				},
+			)
+		})
+		if buildErr == nil {
+			rt.Publish(action.CommandSet, action.Command, "global", action)
+			obj, runErr = rt.RunAction(action)
 		}
-		if obj, runErr := f.pc.Actions.Run(rt, "system", ma); runErr == nil {
+		if runErr == nil {
 			u := &models.User{}
 			if jerr := models.Remarshal(obj, u); jerr == nil {
 				// Upgrade RT to a user create level
@@ -476,7 +483,7 @@ func NewFrontend(
 	authSource AuthSource,
 	pubs *backend.Publishers,
 	drpids []string,
-	pc *midlayer.PluginController,
+	pc *backend.PluginController,
 	noDhcp, noTftp, noProv, noBinl bool,
 	saasDir string) (me *Frontend) {
 	me = &Frontend{

@@ -1,4 +1,4 @@
-package midlayer
+package backend
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 )
@@ -111,7 +110,7 @@ func (pc *PluginController) handleEvent(event *models.Event) {
 	}
 }
 
-func (pc *PluginController) StartPlugins(dt *backend.DataTracker, providers map[string]*models.PluginProvider) {
+func (pc *PluginController) StartPlugins(dt *DataTracker, providers map[string]*models.PluginProvider) {
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
 	pc.dt = dt
@@ -119,9 +118,9 @@ func (pc *PluginController) StartPlugins(dt *backend.DataTracker, providers map[
 	pc.AvailableProviders = providers
 
 	// Get all the plugins that have this as provider
-	ref := &backend.Plugin{}
+	ref := &Plugin{}
 	rt := pc.Request(ref.Locks("create")...)
-	rt.Do(func(d backend.Stores) {
+	rt.Do(func(d Stores) {
 		for k, v := range providers {
 			rt.Publish("plugin_providers", "create", k, v)
 		}
@@ -133,9 +132,9 @@ func (pc *PluginController) RestartPlugins() {
 	defer pc.lock.Unlock()
 
 	// Get all the plugins that have this as provider
-	ref := &backend.Plugin{}
+	ref := &Plugin{}
 	rt := pc.Request(ref.Locks("create")...)
-	rt.Do(func(d backend.Stores) {
+	rt.Do(func(d Stores) {
 		var idx *index.Index
 		idx, err := index.All([]index.Filter{index.Native()}...)(&d(ref.Prefix()).Index)
 		if err != nil {
@@ -143,7 +142,7 @@ func (pc *PluginController) RestartPlugins() {
 		}
 		arr := idx.Items()
 		for _, res := range arr {
-			plugin := res.(*backend.Plugin)
+			plugin := res.(*Plugin)
 			// If we don't know about this plugin yet, create it on the running list
 			if _, ok := pc.runningPlugins[plugin.Name]; !ok {
 				rt.PublishEvent(models.EventFor(plugin, "create"))
@@ -158,9 +157,9 @@ func (pc *PluginController) RestartPlugins() {
 
 func (pc *PluginController) allPlugins(provider, action string) (err error) {
 	// Get all the plugins that have this as provider
-	ref := &backend.Plugin{}
+	ref := &Plugin{}
 	rt := pc.Request(ref.Locks("get")...)
-	rt.Do(func(d backend.Stores) {
+	rt.Do(func(d Stores) {
 		var idx *index.Index
 		idx, err = index.All([]index.Filter{index.Native()}...)(&d(ref.Prefix()).Index)
 		if err != nil {
@@ -168,7 +167,7 @@ func (pc *PluginController) allPlugins(provider, action string) (err error) {
 		}
 		arr := idx.Items()
 		for _, res := range arr {
-			plugin := res.(*backend.Plugin)
+			plugin := res.(*Plugin)
 			if plugin.Provider == provider {
 				switch action {
 				case "start":
@@ -188,7 +187,7 @@ func (pc *PluginController) allPlugins(provider, action string) (err error) {
 }
 
 // Must be called under rt.Do()
-func validateParameters(rt *backend.RequestTracker, pp *models.PluginProvider, plugin *models.Plugin) []string {
+func validateParameters(rt *RequestTracker, pp *models.PluginProvider, plugin *models.Plugin) []string {
 	errors := []string{}
 	for _, parmName := range pp.RequiredParams {
 		obj, ok := plugin.Params[parmName]
@@ -197,7 +196,7 @@ func validateParameters(rt *backend.RequestTracker, pp *models.PluginProvider, p
 		} else {
 			pobj := rt.Find("params", parmName)
 			if pobj != nil {
-				rp := pobj.(*backend.Param)
+				rp := pobj.(*Param)
 				if pk, pkerr := rt.PrivateKeyFor(plugin); pkerr == nil {
 					if ev := rp.ValidateValue(obj, pk); ev != nil {
 						errors = append(errors, ev.Error())
@@ -213,7 +212,7 @@ func validateParameters(rt *backend.RequestTracker, pp *models.PluginProvider, p
 		if ok {
 			pobj := rt.Find("params", parmName)
 			if pobj != nil {
-				rp := pobj.(*backend.Param)
+				rp := pobj.(*Param)
 				if pk, pkerr := rt.PrivateKeyFor(plugin); pkerr == nil {
 					if ev := rp.ValidateValue(obj, pk); ev != nil {
 						errors = append(errors, ev.Error())
@@ -248,7 +247,7 @@ func (pc *PluginController) createPlugin(mp models.Model) {
 
 	plugin := mp.(*models.Plugin)
 
-	ref := &backend.Plugin{}
+	ref := &Plugin{}
 	rt := pc.Request(ref.Locks("create")...)
 
 	if r, ok := pc.runningPlugins[plugin.Name]; ok && r.state == PLUGIN_CREATED {
@@ -285,9 +284,9 @@ func (pc *PluginController) startPlugin(mp models.Model) {
 
 	plugin := mp.(*models.Plugin)
 
-	ref := &backend.Plugin{}
+	ref := &Plugin{}
 	rt := pc.Request(ref.Locks("create")...)
-	rt.Do(func(d backend.Stores) {
+	rt.Do(func(d Stores) {
 		ref2 := rt.Find("plugins", plugin.Name)
 
 		r, ok := pc.runningPlugins[plugin.Name]
@@ -336,7 +335,7 @@ func (pc *PluginController) startPlugin(mp models.Model) {
 			return
 		}
 
-		claims := backend.NewClaim(plugin.Name, "system", time.Hour*1000000).
+		claims := NewClaim(plugin.Name, "system", time.Hour*1000000).
 			AddRawClaim("*", "*", "*").
 			AddSecrets("", "", "")
 		token, _ := rt.SealClaims(claims)
@@ -389,7 +388,7 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
 
-	ref := &backend.Plugin{}
+	ref := &Plugin{}
 	rt := pc.Request(ref.Locks("create")...)
 
 	plugin := mp.(*models.Plugin)
@@ -457,7 +456,7 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 	for k, v := range plugin.Params {
 		params[k] = v
 	}
-	rt.Do(func(d backend.Stores) {
+	rt.Do(func(d Stores) {
 		for _, name := range r.Provider.RequiredParams {
 			if _, ok := params[name]; ok {
 				continue
@@ -487,7 +486,7 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 		r.Client.Stop()
 		r.Client = nil
 		r.state = PLUGIN_STOPPED
-		rt.Do(func(d backend.Stores) {
+		rt.Do(func(d Stores) {
 			ref2 := rt.Find("plugins", plugin.Name)
 			if ref2 == nil {
 				return
@@ -514,7 +513,7 @@ func (pc *PluginController) configPlugin(mp models.Model) {
 	for i := range r.Provider.AvailableActions {
 		r.Provider.AvailableActions[i].Fill()
 		r.Provider.AvailableActions[i].Provider = r.Provider.Name
-		pc.Actions.Add(r.Provider.AvailableActions[i], r)
+		pc.actions.add(r.Provider.AvailableActions[i], r)
 	}
 	rt.Publish("plugins", "configed", plugin.Name, plugin)
 }
@@ -539,7 +538,7 @@ func (pc *PluginController) stopPlugin(mp models.Model) {
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
 
-	ref := &backend.Plugin{}
+	ref := &Plugin{}
 	rt := pc.Request(ref.Locks("create")...)
 
 	rp, ok := pc.runningPlugins[plugin.Name]
@@ -567,7 +566,7 @@ func (pc *PluginController) stopPlugin(mp models.Model) {
 		}
 		for _, aa := range rp.Provider.AvailableActions {
 			rt.Debugf("Remove actions: %s(%s,%s)\n", plugin.Name, plugin.Provider, aa.Command)
-			pc.Actions.Remove(aa, rp)
+			pc.actions.remove(aa, rp)
 		}
 		rp.state = PLUGIN_STOPPED
 
@@ -611,13 +610,13 @@ func (pc *PluginController) restartPlugin(mp models.Model) {
 
 	plugin := mp.(*models.Plugin)
 
-	ref := &backend.Plugin{}
+	ref := &Plugin{}
 	rt := pc.Request(ref.Locks("create")...)
-	rt.Do(func(d backend.Stores) {
+	rt.Do(func(d Stores) {
 		ref2 := rt.Find(ref.Prefix(), plugin.Name)
 		// May be deleted before we get here. An event will be around to remove it
 		if ref2 != nil {
-			p := ref2.(*backend.Plugin)
+			p := ref2.(*Plugin)
 
 			if rp, ok := pc.runningPlugins[plugin.Name]; !ok {
 				// We did fine our plugin in the list.  Send a create event (which will send a start event)
@@ -650,9 +649,9 @@ func (pc *PluginController) restartPlugin(mp models.Model) {
 func (pc *PluginController) deletePlugin(mp models.Model) {
 	plugin := mp.(*models.Plugin)
 
-	ref := &backend.Plugin{}
+	ref := &Plugin{}
 	rt := pc.Request(ref.Locks("create")...)
-	rt.Do(func(d backend.Stores) {
+	rt.Do(func(d Stores) {
 		rt.PublishEvent(models.EventFor(plugin, "stop"))
 		rt.PublishEvent(models.EventFor(plugin, "remove"))
 	})

@@ -460,6 +460,7 @@ type DataTracker struct {
 	macAddrMap          map[string]string
 	macAddrMux          *sync.RWMutex
 	licenses            models.LicenseBundle
+	pc                  *PluginController
 }
 
 func (p *DataTracker) LogFor(s string) logger.Logger {
@@ -806,7 +807,8 @@ func NewDataTracker(backend *DataStack,
 	staticPort, apiPort int, drpId string,
 	logger logger.Logger,
 	defaultPrefs map[string]string,
-	publishers *Publishers) *DataTracker {
+	publishers *Publishers,
+	pc *PluginController) *DataTracker {
 	res := &DataTracker{
 		Backend:           backend,
 		Secrets:           secrets,
@@ -832,6 +834,7 @@ func NewDataTracker(backend *DataStack,
 		macAddrMap:        map[string]string{},
 		macAddrMux:        &sync.RWMutex{},
 		secretsMux:        &sync.Mutex{},
+		pc:                pc,
 	}
 
 	// Make sure incoming writable backend has all stores created

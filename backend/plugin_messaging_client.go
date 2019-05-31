@@ -1,4 +1,4 @@
-package midlayer
+package backend
 
 import (
 	"bytes"
@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/digitalrebar/logger"
-	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/models"
 )
 
@@ -113,7 +112,7 @@ func (pc *PluginClient) Publish(e *models.Event) error {
 	return err
 }
 
-func (pc *PluginClient) Action(rt *backend.RequestTracker, a *models.Action) (interface{}, error) {
+func (pc *PluginClient) Action(rt *RequestTracker, a *models.Action) (interface{}, error) {
 	pc.Tracef("Action: started\n")
 	bytes, err := pc.post(pc, "/action", a)
 	var val interface{}
