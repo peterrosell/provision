@@ -34,7 +34,7 @@ func (fe *Frontend) InitWebSocket() {
 // Callers register or deregister values.
 // type.action.key = with * as wildcard spots.
 
-func wsFilterFunction(emap []string,
+func wsFilterFunction(l logger.Logger, emap []string,
 	auth *authBlob,
 	e *models.Event) bool {
 	// Check for an event to map.
@@ -57,7 +57,13 @@ func wsFilterFunction(emap []string,
 
 	// Make sure we are authorized to see this event.
 	if matched && auth != nil {
-		matched = auth.matchClaim(models.MakeRole("", e.Type, e.Action, e.Key).Compile())
+		mr := models.MakeRole("", e.Type, e.Action, e.Key).Compile()
+		matched = auth.matchClaim(mr)
+		if !matched {
+			l.Debugf("Failed to match because of claims: %v %v", mr, auth.claimsList)
+		}
+	} else if !matched {
+		l.Debugf("Failed to match because of no registration")
 	}
 	return matched
 }
@@ -89,7 +95,12 @@ func (f *Frontend) Publish(e *models.Event) error {
 			if !hasMap {
 				return false
 			}
-			return wsFilterFunction(emap, auth, e)
+			l := s.MustGet("logger").(logger.Logger).NoPublish()
+			b := wsFilterFunction(l, emap, auth, e)
+			if !b {
+				l.Debugf("Failed to forward event: %s.%s.%s", e.Type, e.Action, e.Key)
+			}
+			return b
 		})
 	}
 }
