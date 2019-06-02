@@ -30,20 +30,32 @@ Options:
     --skip-depends          # Skip OS dependency checks, for testing 'isolated' mode
     --no-sudo               # Do not use "sudo" prefix on commands (assume you're root)
     --fast-downloader       # (experimental) Use Fast Downloader (uses 'aria2')
+    --systemd               # Run the systemd enabling commands after installation.
+    --drp-id=<string>       # String to use as the DRP Identifier (only with --systemd)
+    --ha-id=<string>        # String to use as the HA Identifier (only with --systemd)
+    --drp-user=<string>     # DRP user to create after system start (only with --systemd)
+    --drp-password=<string> # DRP user passowrd to set after system start (only with --systemd)
+    --remove-rocketskates   # Remove the rocketskates user after system start (only with --systemd)
 
     install                 # Sets up an isolated or system 'production' enabled install.
     upgrade                 # Sets the installer to upgrade an existing 'dr-provision'
     remove                  # Removes the system enabled install.  Requires no other flags
 
 Defaults are:
-    version        = $DEFAULT_DRP_VERSION    (examples: 'tip', 'v3.6.0' or 'stable')
-    isolated       = false
-    nocontent      = false
-    upgrade        = false
-    force          = false
-    debug          = false
-    skip-run-check = false
-    skip-depends   = false
+    version             = $DEFAULT_DRP_VERSION    (examples: 'tip', 'v3.6.0' or 'stable')
+    isolated            = false
+    nocontent           = false
+    upgrade             = false
+    force               = false
+    debug               = false
+    skip-run-check      = false
+    skip-depends        = false
+    systemd             = false
+    remove-rocketskates = false
+    drp-id              = unset
+    ha-id               = unset
+    drp-user            = unset
+    drp-password        = unset
 EOFUSAGE
 
 exit 0
@@ -58,6 +70,8 @@ REMOVE_DATA=false
 SKIP_RUN_CHECK=false
 SKIP_DEPENDS=false
 FAST_DOWNLOADER=false
+SYSTEMD=false
+REMOVE_RS=false
 _sudo="sudo"
 
 # download URL locations; overridable via ENV variables
@@ -114,6 +128,24 @@ while (( $# > 0 )); do
             ;;
         --no-sudo)
             _sudo=""
+            ;;
+        --systemd)
+            SYSTEMD=true
+            ;;
+        --remove-rocketskates)
+            REMOVE_RS=true
+            ;;
+        --drp-user)
+            DRP_USER=${arg_data}
+            ;;
+        --drp-password)
+            DRP_PASSWORD="${arg_data}"
+            ;;
+        --drp-id)
+            DRP_ID="${arg_data}"
+            ;;
+        --ha-id)
+            HA_ID="${arg_data}"
             ;;
         --*)
             arg_key="${arg_key#--}"
@@ -479,6 +511,43 @@ case $MODE in
                      DEFAULT_CONTENT_FILE="/usr/share/dr-provision/default.yaml"
                      $_sudo mv drp-community-content.yaml $DEFAULT_CONTENT_FILE
                  fi
+
+                 if [[ $SYSTEMD == true ]] ; then
+                     mkdir -p /etc/systemd/system/dr-provision.service.d
+                     if [[ $DRP_ID ]] ; then
+                       cat > /etc/systemd/system/dr-provision.service.d/drpid.conf < EOF
+[ Service ]
+Environment=RS_DRP_ID=$DRP_ID
+EOF
+                     fi
+                     if [[ $HA_ID ]] ; then
+                       cat > /etc/systemd/system/dr-provision.service.d/haid.conf < EOF
+[ Service ]
+Environment=RS_HA_ID=$HA_ID
+EOF
+                     fi
+                     if [[ $IPADDR ]] ; then
+                       IPADDR="${IPADDR///*}"
+                       cat > /etc/systemd/system/dr-provision.service.d/ipaddr.conf < EOF
+[ Service ]
+Environment=RS_STATIC_IP=$IPADDR
+Environment=RS_FORCE_STATIC=true
+EOF
+                     fi
+
+                     $enabler
+                     $starter
+
+                     if [[ $DRP_USER ]] ; then
+                         drpcli users create $DRP_USER
+                         drpcli users password $DRP_USER "$DRP_PASSWORD"
+                         export RS_KEY="$DRP_USER:$DRP_PASSWORD"
+                         if [[ $REMOVE_RS == true ]] ; then
+                             drpcli users destroy rocketskates
+                         fi
+                     fi
+                 fi
+
              else
                  mkdir -p drp-data
                  TFTP_DIR="`pwd`/drp-data/tftpboot"
