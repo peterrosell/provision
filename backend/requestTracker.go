@@ -1041,7 +1041,11 @@ func (rt *RequestTracker) BuildAction(m models.Model,
 	}
 	fullParams, err := rt.validateAction(ma, params)
 	if err != nil && err.ContainsError() {
-		err.Key = m.Key()
+		if m != nil {
+			err.Key = m.Key()
+		} else {
+			err.Key = "system"
+		}
 		return nil, err
 	}
 	ma.Params = fullParams

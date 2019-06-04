@@ -238,70 +238,73 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 		}
 	}
 
+	if !checkAuth {
+		return res
+	}
 	// Check for plugin-based auth
-	if checkAuth {
-		// Assume that it is not a good user or good password
-		res = nil
-		var obj interface{}
-		var buildErr *models.Error
-		var runErr error
-		var action *models.Action
-		rt.Do(func(_ backend.Stores) {
-			action, buildErr = rt.BuildAction(nil,
-				"system", "authenticate", "",
-				map[string]interface{}{
-					"auth/username": username,
-					"auth/password": password,
-				},
-			)
-		})
-		if buildErr == nil {
-			rt.Publish(action.CommandSet, action.Command, "global", action)
-			obj, runErr = rt.RunAction(action)
+	// Assume that it is not a good user or good password
+	res = nil
+	var obj interface{}
+	var buildErr *models.Error
+	var runErr error
+	var action *models.Action
+	rt.Do(func(_ backend.Stores) {
+		action, buildErr = rt.BuildAction(nil,
+			"system", "authenticate", "",
+			map[string]interface{}{
+				"auth/username": username,
+				"auth/password": password,
+			},
+		)
+	})
+	if buildErr != nil {
+		return nil
+	}
+	rt.Publish(action.CommandSet, action.Command, "global", action)
+	obj, runErr = rt.RunAction(action)
+	if runErr != nil {
+		if !strings.Contains(runErr.Error(), "Action no longer available") {
+			f.Logger.Errorf("Failed to authenticate %s: %v", username, runErr)
 		}
-		if runErr == nil {
-			u := &models.User{}
-			if jerr := models.Remarshal(obj, u); jerr == nil {
-				// Upgrade RT to a user create level
-				rt = f.rt(c, "users:rw", "roles", "tenants:rw")
-				rt.Do(func(d backend.Stores) {
-					// Make sure someone didn't create it on me
-					if u2 := rt.Find("users", username); u2 != nil {
-						res = u2.(*backend.User)
-					}
-					// Create the object if not found.
-					if res == nil {
-						if _, err := rt.Create(u); err != nil {
-							f.Logger.Errorf("Failed to create user: %s, %v", username, err)
-						}
-						if u3 := rt.Find("users", username); u3 != nil {
-							res = u3.(*backend.User)
-							if !res.Validated || !res.Available {
-								f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
-								res = nil
-							}
-						}
-					} else {
-						// Always save the object to pick up role and tenant changes
-						if _, err := rt.Update(u); err != nil {
-							f.Logger.Errorf("Failed to update user: %s, %v", username, err)
-						}
-						if u3 := rt.Find("users", username); u3 != nil {
-							res = u3.(*backend.User)
-							if !res.Validated || !res.Available {
-								f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
-								res = nil
-							}
-						}
-					}
-				})
+		return nil
+	}
+	u := &models.User{}
+	if jerr := models.Remarshal(obj, u); jerr != nil {
+		return nil
+	}
+	// Upgrade RT to a user create level
+	rt = f.rt(c, "users:rw", "roles", "tenants:rw")
+	rt.Do(func(d backend.Stores) {
+		// Make sure someone didn't create it on me
+		if u2 := rt.Find("users", username); u2 != nil {
+			res = u2.(*backend.User)
+		}
+		// Create the object if not found.
+		if res == nil {
+			if _, err := rt.Create(u); err != nil {
+				f.Logger.Errorf("Failed to create user: %s, %v", username, err)
+			}
+			if u3 := rt.Find("users", username); u3 != nil {
+				res = u3.(*backend.User)
+				if !res.Validated || !res.Available {
+					f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
+					res = nil
+				}
 			}
 		} else {
-			if !strings.Contains(runErr.Error(), "Action no longer available") {
-				f.Logger.Errorf("Failed to authenticate %s: %v", username, runErr)
+			// Always save the object to pick up role and tenant changes
+			if _, err := rt.Update(u); err != nil {
+				f.Logger.Errorf("Failed to update user: %s, %v", username, err)
+			}
+			if u3 := rt.Find("users", username); u3 != nil {
+				res = u3.(*backend.User)
+				if !res.Validated || !res.Available {
+					f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
+					res = nil
+				}
 			}
 		}
-	}
+	})
 	return res
 }
 
@@ -359,15 +362,20 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
+			forbidden := &models.Error{
+				Code:     http.StatusForbidden,
+				Model:    `users`,
+				Messages: []string{"Access Denied"},
+			}
 			user := fe.authSource.GetUser(fe, c, string(userpass[0]), string(userpass[1]))
 			if user == nil {
 				l.Auditf("Failed Authenticated (no user) user %s from %s", userpass[0], c.ClientIP())
-				c.AbortWithStatus(http.StatusForbidden)
+				c.AbortWithStatusJSON(http.StatusForbidden, forbidden)
 				return
 			}
 			if !user.CheckPassword(string(userpass[1])) {
 				l.Auditf("Failed Authenticated (bad password) user %s from %s", userpass[0], c.ClientIP())
-				c.AbortWithStatus(http.StatusForbidden)
+				c.AbortWithStatusJSON(http.StatusForbidden, forbidden)
 				return
 			}
 			token = user.GenClaim(string(userpass[0]), time.Minute*2)
@@ -377,7 +385,11 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 			if err != nil {
 				l.Auditf("No DRP authentication token from %s", c.ClientIP())
 				c.Header("WWW-Authenticate", "dr-provision")
-				c.AbortWithStatus(http.StatusForbidden)
+				c.AbortWithStatusJSON(http.StatusForbidden, &models.Error{
+					Code:     http.StatusForbidden,
+					Model:    `system`,
+					Messages: []string{"Invalid Token"},
+				})
 				return
 			}
 			token = t
