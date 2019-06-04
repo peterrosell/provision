@@ -516,20 +516,20 @@ case $MODE in
                      mkdir -p /etc/systemd/system/dr-provision.service.d
                      if [[ $DRP_ID ]] ; then
                        cat > /etc/systemd/system/dr-provision.service.d/drpid.conf <<EOF
-[ Service ]
+[Service]
 Environment=RS_DRP_ID=$DRP_ID
 EOF
                      fi
                      if [[ $HA_ID ]] ; then
                        cat > /etc/systemd/system/dr-provision.service.d/haid.conf <<EOF
-[ Service ]
+[Service]
 Environment=RS_HA_ID=$HA_ID
 EOF
                      fi
                      if [[ $IPADDR ]] ; then
                        IPADDR="${IPADDR///*}"
                        cat > /etc/systemd/system/dr-provision.service.d/ipaddr.conf <<EOF
-[ Service ]
+[Service]
 Environment=RS_STATIC_IP=$IPADDR
 Environment=RS_FORCE_STATIC=true
 EOF
