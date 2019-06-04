@@ -515,31 +515,31 @@ case $MODE in
                  if [[ $SYSTEMD == true ]] ; then
                      mkdir -p /etc/systemd/system/dr-provision.service.d
                      if [[ $DRP_ID ]] ; then
-                       cat > /etc/systemd/system/dr-provision.service.d/drpid.conf < EOF
+                       cat > /etc/systemd/system/dr-provision.service.d/drpid.conf <<EOF
 [ Service ]
 Environment=RS_DRP_ID=$DRP_ID
 EOF
                      fi
                      if [[ $HA_ID ]] ; then
-                       cat > /etc/systemd/system/dr-provision.service.d/haid.conf < EOF
+                       cat > /etc/systemd/system/dr-provision.service.d/haid.conf <<EOF
 [ Service ]
 Environment=RS_HA_ID=$HA_ID
 EOF
                      fi
                      if [[ $IPADDR ]] ; then
                        IPADDR="${IPADDR///*}"
-                       cat > /etc/systemd/system/dr-provision.service.d/ipaddr.conf < EOF
+                       cat > /etc/systemd/system/dr-provision.service.d/ipaddr.conf <<EOF
 [ Service ]
 Environment=RS_STATIC_IP=$IPADDR
 Environment=RS_FORCE_STATIC=true
 EOF
                      fi
 
-                     $enabler
-                     $starter
+                     eval "$enabler"
+                     eval "$starter"
 
                      if [[ $DRP_USER ]] ; then
-                         drpcli users create $DRP_USER
+                         drpcli users create "{ \"Name\": \"$DRP_USER\", \"Roles\": [ \"superuser\" ] }"
                          drpcli users password $DRP_USER "$DRP_PASSWORD"
                          export RS_KEY="$DRP_USER:$DRP_PASSWORD"
                          if [[ $REMOVE_RS == true ]] ; then
