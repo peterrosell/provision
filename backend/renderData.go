@@ -573,7 +573,7 @@ func (r *RenderData) MachineRepos() []*Repo {
 		found = append(found, li)
 	}
 	found = append(found, r.fetchRepos(func(rd *Repo) bool {
-		if li != nil && rd.InstallSource {
+		if li != nil && li.renderStyle() != "apt" && rd.InstallSource {
 			return false
 		}
 		ok := rd.Arch == "any" && !rd.InstallSource
