@@ -875,7 +875,6 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 	} else {
 		indexes = map[string]index.Maker{}
 	}
-
 	for k, vs := range params {
 		switch k {
 		case "offset", "limit", "sort", "reverse", "slim", "decode":
@@ -951,7 +950,7 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 			}
 		}
 		if ok {
-			filters = append(filters, index.Sort(maker))
+			filters = append(filters, index.Use(maker))
 			subfilters := []index.Filter{}
 			for _, v := range vs {
 				f, err := convertValueToFilter(v)
@@ -966,7 +965,7 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 
 	if vs, ok := params["sort"]; ok {
 		for _, piece := range vs {
-			if maker, ok := indexes[piece]; ok {
+			if maker, ok := indexes[piece]; ok && maker.Sortable() {
 				filters = append(filters, index.Sort(maker))
 			} else {
 				return nil, fmt.Errorf("Not sortable: %s", piece)

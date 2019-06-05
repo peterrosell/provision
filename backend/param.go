@@ -79,21 +79,10 @@ func (p *Param) Indexes() map[string]index.Maker {
 			param.Name = s
 			return param, nil
 		})
-	res["Secure"] = index.Make(
-		false,
+	res["Secure"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
-			return (!fix(i).Secure) && fix(j).Secure
-		},
-		func(ref models.Model) (gte, gt index.Test) {
-			avail := fix(ref).Secure
-			return func(s models.Model) bool {
-					v := fix(s).Secure
-					return v || (v == avail)
-				},
-				func(s models.Model) bool {
-					return fix(s).Secure && !avail
-				}
+			return fix(i).Secure == fix(j).Secure
 		},
 		func(s string) (models.Model, error) {
 			res := fix(p.New())

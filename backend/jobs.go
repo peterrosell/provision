@@ -259,21 +259,10 @@ func (j *Job) Indexes() map[string]index.Maker {
 			job.Machine = id
 			return job, nil
 		})
-	res["Archived"] = index.Make(
-		false,
+	res["Archived"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
-			return (!fix(i).Archived) && fix(j).Archived
-		},
-		func(ref models.Model) (gte, gt index.Test) {
-			avail := fix(ref).Archived
-			return func(s models.Model) bool {
-					v := fix(s).Archived
-					return v || (v == avail)
-				},
-				func(s models.Model) bool {
-					return fix(s).Archived && !avail
-				}
+			return fix(i).Archived == fix(j).Archived
 		},
 		func(s string) (models.Model, error) {
 			res := fix(j.New())

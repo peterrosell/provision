@@ -188,21 +188,10 @@ func (n *Machine) Indexes() map[string]index.Maker {
 			m.Address = addr
 			return m, nil
 		})
-	res["Runnable"] = index.Make(
-		false,
+	res["Runnable"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
-			return (!fix(i).Runnable) && fix(j).Runnable
-		},
-		func(ref models.Model) (gte, gt index.Test) {
-			avail := fix(ref).Runnable
-			return func(s models.Model) bool {
-					v := fix(s).Runnable
-					return v || (v == avail)
-				},
-				func(s models.Model) bool {
-					return fix(s).Runnable && !avail
-				}
+			return fix(i).Runnable == fix(j).Runnable
 		},
 		func(s string) (models.Model, error) {
 			res := fix(n.New())
