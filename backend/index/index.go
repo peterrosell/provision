@@ -46,13 +46,14 @@ type Filler func(string) (models.Model, error)
 // Fill, which takes a string from a query parameter and turns it into
 // a models.Model that has the appropriate slot filled.
 type Maker struct {
-	keyOrder bool
-	Unique   bool
-	Type     string
-	Less     Cmp       `json:"-"`
-	Eq       Cmp       `json:"-"`
-	Tests    TestMaker `json:"-"`
-	Fill     Filler    `json:"-"`
+	keyOrder  bool
+	Unique    bool
+	Unordered bool
+	Type      string
+	Less      Cmp       `json:"-"`
+	Eq        Cmp       `json:"-"`
+	Tests     TestMaker `json:"-"`
+	Fill      Filler    `json:"-"`
 }
 
 func (m Maker) Sortable() bool { return m.Less != nil }
