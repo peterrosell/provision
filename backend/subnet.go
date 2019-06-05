@@ -366,21 +366,10 @@ func (s *Subnet) Indexes() map[string]index.Maker {
 			sub.Subnet.Subnet = st
 			return sub, nil
 		})
-	res["Enabled"] = index.Make(
-		false,
+	res["Enabled"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
-			return (!fix(i).Enabled) && fix(j).Enabled
-		},
-		func(ref models.Model) (gte, gt index.Test) {
-			avail := fix(ref).Enabled
-			return func(s models.Model) bool {
-					v := fix(s).Enabled
-					return v || (v == avail)
-				},
-				func(s models.Model) bool {
-					return fix(s).Enabled && !avail
-				}
+			return fix(i).Enabled == fix(j).Enabled
 		},
 		func(st string) (models.Model, error) {
 			res := &Subnet{Subnet: &models.Subnet{}}

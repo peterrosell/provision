@@ -97,21 +97,10 @@ func (b *BootEnv) Indexes() map[string]index.Maker {
 			res.OS.Name = s
 			return res, nil
 		})
-	res["OnlyUnknown"] = index.Make(
-		false,
+	res["OnlyUnknown"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
-			return !fix(i).OnlyUnknown && fix(j).OnlyUnknown
-		},
-		func(ref models.Model) (gte, gt index.Test) {
-			unknown := fix(ref).OnlyUnknown
-			return func(s models.Model) bool {
-					v := fix(s).OnlyUnknown
-					return v || (v == unknown)
-				},
-				func(s models.Model) bool {
-					return fix(s).OnlyUnknown && !unknown
-				}
+			return fix(i).OnlyUnknown == fix(j).OnlyUnknown
 		},
 		func(s string) (models.Model, error) {
 			res := fix(b.New())

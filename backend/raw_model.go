@@ -93,21 +93,10 @@ func (r *RawModel) Indexes() map[string]index.Maker {
 				})
 			iii = &ii
 		case "boolean":
-			ii := index.Make(
-				unique,
+			ii := index.MakeUnordered(
 				"boolean",
 				func(i, j models.Model) bool {
-					return (!fix(i).getBooleanValue(sfield)) && fix(j).getBooleanValue(sfield)
-				},
-				func(ref models.Model) (gte, gt index.Test) {
-					avail := fix(ref).getBooleanValue(sfield)
-					return func(s models.Model) bool {
-							v := fix(s).getBooleanValue(sfield)
-							return v || (v == avail)
-						},
-						func(s models.Model) bool {
-							return fix(s).getBooleanValue(sfield) && !avail
-						}
+					return fix(i).getBooleanValue(sfield) == fix(j).getBooleanValue(sfield)
 				},
 				func(s string) (models.Model, error) {
 					res := fix(r.New())

@@ -97,21 +97,10 @@ func (s *Stage) Indexes() map[string]index.Maker {
 			res.BootEnv = ss
 			return res, nil
 		})
-	res["Reboot"] = index.Make(
-		false,
+	res["Reboot"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
-			return !fix(i).Reboot && fix(j).Reboot
-		},
-		func(ref models.Model) (gte, gt index.Test) {
-			reboot := fix(ref).Reboot
-			return func(s models.Model) bool {
-					v := fix(s).Reboot
-					return v || (v == reboot)
-				},
-				func(s models.Model) bool {
-					return fix(s).Reboot && !reboot
-				}
+			return fix(i).Reboot == fix(j).Reboot
 		},
 		func(ss string) (models.Model, error) {
 			res := fix(s.New())
