@@ -1,5 +1,5 @@
-hash: 5e88528d4bb15241455837c1ee59c074d66fc16c1a5de04238db88bf40f3b32d
-updated: 2019-05-29T09:36:22.940962-05:00
+hash: a3a1f6501b826cd7d08971cdb810f0926ef70b1b76528b2f2cd1c3d8808df9c9
+updated: 2019-06-07T16:04:20.499471721-05:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -57,6 +57,10 @@ imports:
   - binding
   - json
   - render
+- name: github.com/go-ole/go-ole
+  version: 97b6244175ae18ea6eef668034fd6565847501c9
+  subpackages:
+  - oleutil
 - name: github.com/gofunky/semver
   version: b182ca44e05aea9918247472dc1cf6658577f423
 - name: github.com/golang/protobuf
@@ -189,12 +193,25 @@ imports:
   version: 76f58f330d76a55c5badc74f6212e8a15e742c77
 - name: github.com/russross/blackfriday
   version: 11635eb403ff09dbc3a6b5a007ab5ab09151c229
+- name: github.com/shirou/gopsutil
+  version: 5335e3fd506df4cb63de0a8239c7461d23063be6
+  subpackages:
+  - cpu
+  - host
+  - internal/common
+  - mem
+  - net
+  - process
+- name: github.com/shirou/w32
+  version: bb4de0191aa41b5507caa14b0650cdbddcd9280b
 - name: github.com/spf13/cobra
   version: 7c4570c3ebeb8129a1f7456d0908a8b676b6f9f1
   subpackages:
   - doc
 - name: github.com/spf13/pflag
   version: 3ebe029320b2676d667ae88da602a5f854788a8a
+- name: github.com/StackExchange/wmi
+  version: cbe66965904dbe8a6cd589e2298e5d8b986bd7dd
 - name: github.com/tylerb/graceful
   version: d72b0151351a13d0421b763b88f791469c4f5dc7
 - name: github.com/ugorji/go
@@ -258,6 +275,7 @@ imports:
   version: 0ffbfd41fbef8ffcf9b62b0b0aa3a5873ed7a4fe
   subpackages:
   - unix
+  - windows
 - name: golang.org/x/tools
   version: 82515cf89538b3e8a206be74377c01dee420b76d
   subpackages:
@@ -274,4 +292,6 @@ imports:
 - name: gopkg.in/yaml.v2
   version: 7b8349ac747c6a24702b762d2c4fd9266cf4f1d6
   repo: https://github.com/go-yaml/yaml
-testImports: []
+testImports:
+- name: github.com/digitalrebar/yaml
+  version: c6f6f8e5f481599a08ad706ea6028067837b19ce
