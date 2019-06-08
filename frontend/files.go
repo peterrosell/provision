@@ -280,8 +280,7 @@ func (f *Frontend) InitFileApi() {
 			os.Remove(fileName)
 			os.Rename(fileTmpName, fileName)
 
-			explode := c.Param(`explode`)
-			if explode == "true" {
+			if c.Query("explode") == "true" {
 				cmd := exec.Command("bsdtar", "-zxvf", fileName)
 				cmd.Dir = path.Dir(fileName)
 				if _, zerr := cmd.CombinedOutput(); zerr != nil {
@@ -291,6 +290,7 @@ func (f *Frontend) InitFileApi() {
 					return
 				}
 			}
+
 			c.JSON(http.StatusCreated, &models.BlobInfo{Path: name, Size: copied})
 		})
 
