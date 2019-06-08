@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
 
@@ -52,6 +53,8 @@ type FilesPathQueryParameter struct {
 type FilePathPathParameter struct {
 	// in: path
 	Path string `json:"path"`
+	// in: explode
+	Explode string `json:"explode"`
 }
 
 // FileData body of the upload
@@ -276,6 +279,18 @@ func (f *Frontend) InitFileApi() {
 
 			os.Remove(fileName)
 			os.Rename(fileTmpName, fileName)
+
+			explode := c.Param(`explode`)
+			if explode == "true" {
+				cmd := exec.Command("bsdtar", "-zxvf", fileName)
+				cmd.Dir = path.Dir(fileName)
+				if _, zerr := cmd.CombinedOutput(); zerr != nil {
+					err.Code = http.StatusBadRequest
+					err.AddError(zerr)
+					c.JSON(err.Code, err)
+					return
+				}
+			}
 			c.JSON(http.StatusCreated, &models.BlobInfo{Path: name, Size: copied})
 		})
 
