@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
@@ -50,6 +51,36 @@ func (p *Profile) Indexes() map[string]index.Maker {
 			profile := fix(p.New())
 			profile.Name = s
 			return profile, nil
+		})
+	res["Params"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Params
+			p2 := fix(j).Params
+			probes := map[string]bool{}
+			for k := range p2 {
+				probes[k] = false
+			}
+			for k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(s string) (models.Model, error) {
+			res := fix(p.New())
+			keys := strings.Split(s, ",")
+			res.Params = map[string]interface{}{}
+			for _, v := range keys {
+				res.Params[strings.TrimSpace(v)] = struct{}{}
+			}
+			return res, nil
 		})
 	return res
 }

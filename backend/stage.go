@@ -3,6 +3,7 @@ package backend
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"text/template"
 
@@ -111,6 +112,65 @@ func (s *Stage) Indexes() map[string]index.Maker {
 				res.Reboot = false
 			default:
 				return nil, errors.New("Reboot must be true or false")
+			}
+			return res, nil
+		})
+	res["Profiles"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Profiles
+			p2 := fix(j).Profiles
+			probes := map[string]bool{}
+			for _, k := range p2 {
+				probes[k] = false
+			}
+			for _, k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(ss string) (models.Model, error) {
+			res := fix(s.New())
+			res.Profiles = strings.Split(ss, ",")
+			for i := range res.Profiles {
+				res.Profiles[i] = strings.TrimSpace(res.Profiles[i])
+			}
+			return res, nil
+		})
+	res["Params"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Params
+			p2 := fix(j).Params
+			probes := map[string]bool{}
+			for k := range p2 {
+				probes[k] = false
+			}
+			for k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(ss string) (models.Model, error) {
+			res := fix(s.New())
+			keys := strings.Split(ss, ",")
+			res.Params = map[string]interface{}{}
+			for _, v := range keys {
+				res.Params[strings.TrimSpace(v)] = struct{}{}
 			}
 			return res, nil
 		})
