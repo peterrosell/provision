@@ -243,7 +243,7 @@ func (u *User) OnCreate() error {
 }
 
 var userLockMap = map[string][]string{
-	"get":     {"users", "roles", "tenants"},
+	"get":     {"users", "roles", "tenants", "params"},
 	"create":  {"users:rw", "roles", "tenants:rw"},
 	"update":  {"users:rw", "roles", "tenants:rw"},
 	"patch":   {"users:rw", "roles", "tenants:rw"},
