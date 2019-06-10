@@ -205,6 +205,65 @@ func (n *Machine) Indexes() map[string]index.Maker {
 			}
 			return res, nil
 		})
+	res["Profiles"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Profiles
+			p2 := fix(j).Profiles
+			probes := map[string]bool{}
+			for _, k := range p2 {
+				probes[k] = false
+			}
+			for _, k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(s string) (models.Model, error) {
+			res := fix(n.New())
+			res.Profiles = strings.Split(s, ",")
+			for i := range res.Profiles {
+				res.Profiles[i] = strings.TrimSpace(res.Profiles[i])
+			}
+			return res, nil
+		})
+	res["Params"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Params
+			p2 := fix(j).Params
+			probes := map[string]bool{}
+			for k := range p2 {
+				probes[k] = false
+			}
+			for k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(s string) (models.Model, error) {
+			res := fix(n.New())
+			keys := strings.Split(s, ",")
+			res.Params = map[string]interface{}{}
+			for _, v := range keys {
+				res.Params[strings.TrimSpace(v)] = struct{}{}
+			}
+			return res, nil
+		})
 	return res
 }
 
