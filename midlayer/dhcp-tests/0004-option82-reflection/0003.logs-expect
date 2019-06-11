@@ -1,0 +1,4 @@
+Subnet sub4: MAC:52:54:be:1e:10:10 is in my range, attempting lease creation.
+No matching subnet, will respond to 172.17.10.11 from 192.168.124.1
+Incoming iPXE request is sane
+xid 0xfd2b9978: Discovery handing out: 172.17.10.11 to 52:54:be:1e:10:10 via 192.168.124.1

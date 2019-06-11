@@ -58,24 +58,24 @@ func parseOptionCodes(b []byte) map[byte][]byte {
 // DHCP packet.
 type DhcpRequest struct {
 	logger.Logger
-	idxMap                        map[int][]*net.IPNet
-	nameMap                       map[int]string
-	srcAddr                       net.Addr
-	defaultIP, nextServer         net.IP
-	allocNet                      []net.IP
-	cm                            *ipv4.ControlMessage
-	request                       dhcp.Packet
-	replies                       []dhcp.Packet
-	pktOpts, outOpts, netBootOpts dhcp.Options
-	pinger                        pinger.Pinger
-	handler                       *DhcpHandler
-	lPort                         int
-	reqType                       dhcp.MessageType
-	offerNetBoot                  bool
-	duration                      time.Duration
-	start                         time.Time
-	machine                       *backend.Machine
-	bootEnv                       *backend.BootEnv
+	idxMap                            map[int][]*net.IPNet
+	nameMap                           map[int]string
+	srcAddr                           net.Addr
+	defaultIP, nextServer, nsOverride net.IP
+	allocNet                          []net.IP
+	cm                                *ipv4.ControlMessage
+	request                           dhcp.Packet
+	replies                           []dhcp.Packet
+	pktOpts, outOpts, netBootOpts     dhcp.Options
+	pinger                            pinger.Pinger
+	handler                           *DhcpHandler
+	lPort                             int
+	reqType                           dhcp.MessageType
+	offerNetBoot                      bool
+	duration                          time.Duration
+	start                             time.Time
+	machine                           *backend.Machine
+	bootEnv                           *backend.BootEnv
 }
 
 func (dhr *DhcpRequest) Reply(p dhcp.Packet) {
@@ -408,7 +408,11 @@ func (dhr *DhcpRequest) buildReply(
 			},
 		)
 	}
-	res := dhcp.ReplyPacket(dhr.request, mt, serverID, yAddr, dhr.duration, toAdd)
+	replId := serverID
+	if !dhr.nsOverride.IsUnspecified() {
+		replId = dhr.nsOverride
+	}
+	res := dhcp.ReplyPacket(dhr.request, mt, replId, yAddr, dhr.duration, toAdd)
 	if dhr.nextServer.IsGlobalUnicast() {
 		res.SetSIAddr(dhr.nextServer)
 	}
@@ -738,13 +742,16 @@ func (dhr *DhcpRequest) Process() (string, string) {
 	} else {
 		dhr.allocNet = dhr.listenIPs()
 	}
+	dhr.nsOverride = net.IPv4zero
 	if opt82, ok := dhr.pktOpts[82]; ok {
 		subOpts := parseOptionCodes(opt82)
 		if realSrc, ok := subOpts[5]; ok && len(realSrc) == 4 {
 			dhr.allocNet = []net.IP{net.IP(realSrc)}
 		}
+		if override, ok := subOpts[11]; ok && len(override) == 4 {
+			dhr.nsOverride = net.IP(override)
+		}
 	}
-
 	if t, ok := dhr.pktOpts[dhcp.OptionDHCPMessageType]; !ok || len(t) != 1 {
 		dhr.Errorf("Missing DHCP message type")
 		return "MissingType", "Error"
