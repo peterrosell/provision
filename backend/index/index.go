@@ -738,3 +738,26 @@ func Reverse() Filter {
 		return res, nil
 	}
 }
+
+// Uniq returns a filter that will uniq'ify an index.  Uniquification
+// always happens by key, and does not disturb the sort order
+func Uniq(q Filter) Filter {
+	return func(i *Index) (*Index, error) {
+		sf, err := q(i)
+		if err != nil {
+			return sf, err
+		}
+		seen := map[string]struct{}{}
+		objs := []models.Model{}
+		for j := range sf.objs {
+			k := sf.objs[j].Key()
+			if _, ok := seen[k]; ok {
+				continue
+			}
+			seen[k] = struct{}{}
+			objs = append(objs, sf.objs[j])
+		}
+		sf.objs = objs
+		return sf, nil
+	}
+}
