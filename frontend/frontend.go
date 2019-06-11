@@ -829,34 +829,45 @@ func assureDecode(c *gin.Context, val interface{}) bool {
 //   Except(valueLower, valueHigher)
 //
 func convertValueToFilter(v string) (index.Filter, error) {
+
 	args := strings.SplitN(v, "(", 2)
+	if len(args) == 1 || args[1] == "" || !strings.HasSuffix(args[1], ")") {
+		return index.Eq(v), nil
+	}
+	subargs := strings.TrimSuffix(args[1], ")")
 	switch args[0] {
 	case "Eq":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Eq(subargs[0]), nil
+		return index.Eq(subargs), nil
 	case "Lt":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Lt(subargs[0]), nil
+		return index.Lt(subargs), nil
 	case "Lte":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Lte(subargs[0]), nil
+		return index.Lte(subargs), nil
 	case "Gt":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Gt(subargs[0]), nil
+		return index.Gt(subargs), nil
 	case "Gte":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Gte(subargs[0]), nil
+		return index.Gte(subargs), nil
 	case "Ne":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Ne(subargs[0]), nil
+		return index.Ne(subargs), nil
 	case "Between":
-		subargs := strings.SplitN(args[1], ")", 2)
-		parts := strings.Split(subargs[0], ",")
+		parts := strings.Split(subargs, ",")
 		return index.Between(parts[0], parts[1]), nil
 	case "Except":
-		subargs := strings.SplitN(args[1], ")", 2)
-		parts := strings.Split(subargs[0], ",")
+		parts := strings.Split(subargs, ",")
 		return index.Except(parts[0], parts[1]), nil
+	case "In":
+		parts := strings.Split(subargs, ",")
+		subf := make([]index.Filter, len(parts))
+		for i := range parts {
+			subf[i] = index.Eq(parts[i])
+		}
+		return index.Uniq(index.Any(subf...)), nil
+	case "Nin":
+		parts := strings.Split(subargs, ",")
+		subf := make([]index.Filter, len(parts))
+		for i := range parts {
+			subf[i] = index.Ne(parts[i])
+		}
+		return index.Uniq(index.All(subf...)), nil
 	default:
 		return index.Eq(v), nil
 	}
