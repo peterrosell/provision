@@ -1,0 +1,14 @@
+proto:dhcp4 iface:eno1 ifaddr:0.0.0.0:68 lport:67
+op:0x01 htype:0x01 hlen:0x06 hops:0x00 xid:0xed2b9978 secs:0x0000 flags:0x0000
+ci:0.0.0.0 yi:0.0.0.0 si:0.0.0.0 gi:192.168.124.12 ch:52:54:be:1e:00:10
+option:code:053 val:"dis"
+option:code:057 val:"1472"
+option:code:093 val:"0"
+option:code:094 val:"1,2,1"
+option:code:060 val:"PXEClient:Arch:00000:UNDI:002001"
+option:code:077 val:"iPXE"
+option:code:055 val:"1,3,6,7,12,15,17,26,43,60,66,67,82,119,128,129,130,131,132,133,134,135,175,203"
+option:code:175 val:"177,5,1,128,134,16,14,235,3,1,0,0,23,1,1,34,1,1,19,1,1,17,1,1,39,1,1,25,1,1,16,1,2,33,1,1,21,1,1,24,1,1,18,1,1,35,1,1"
+option:code:061 val:"1,82,84,190,30,0,0"
+option:code:097 val:"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"
+option:code:082 val:"5,4,172,17,10,1"

@@ -108,6 +108,22 @@ func fakeServer() error {
 					{Code: 15, Value: "sub1.com"},
 				},
 			},
+			// DHCP via a gateway with option 82
+			{
+				Name:              "sub4",
+				Enabled:           true,
+				Subnet:            "172.17.10.8/24",
+				ActiveStart:       net.IPv4(172, 17, 10, 10),
+				ActiveEnd:         net.IPv4(172, 17, 10, 15),
+				ReservedLeaseTime: 7200,
+				ActiveLeaseTime:   60,
+				Strategy:          "MAC",
+				Options: []models.DhcpOption{
+					{Code: 3, Value: "172.17.10.1"},
+					{Code: 6, Value: "172.17.10.1"},
+					{Code: 15, Value: "sub4.com"},
+				},
+			},
 		}
 		for _, sub := range subs {
 			_, err := rt.Create(sub)

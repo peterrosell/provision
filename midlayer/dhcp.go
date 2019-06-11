@@ -32,28 +32,50 @@ func MacStrategy(p dhcp.Packet, options dhcp.Options) string {
 	return p.CHAddr().String()
 }
 
+func parseOptionCodes(b []byte) map[byte][]byte {
+	res := map[byte][]byte{}
+	for len(b) > 0 {
+		code := b[0]
+		if len(b) < 2 {
+			res[code] = []byte{}
+			b = b[1:]
+			continue
+		}
+		length := b[1]
+		if len(b) >= int(length)+2 {
+			res[code] = b[2 : int(length)+2]
+			b = b[int(length)+2:]
+		} else {
+			res[code] = b[2:]
+			b = []byte{}
+		}
+	}
+	return res
+}
+
 // DhcpRequest records all the information needed to handle a single
 // in-flight DHCP request.  One of these is created for every incoming
 // DHCP packet.
 type DhcpRequest struct {
 	logger.Logger
-	idxMap                        map[int][]*net.IPNet
-	nameMap                       map[int]string
-	srcAddr                       net.Addr
-	defaultIP, nextServer         net.IP
-	cm                            *ipv4.ControlMessage
-	request                       dhcp.Packet
-	replies                       []dhcp.Packet
-	pktOpts, outOpts, netBootOpts dhcp.Options
-	pinger                        pinger.Pinger
-	handler                       *DhcpHandler
-	lPort                         int
-	reqType                       dhcp.MessageType
-	offerNetBoot                  bool
-	duration                      time.Duration
-	start                         time.Time
-	machine                       *backend.Machine
-	bootEnv                       *backend.BootEnv
+	idxMap                            map[int][]*net.IPNet
+	nameMap                           map[int]string
+	srcAddr                           net.Addr
+	defaultIP, nextServer, nsOverride net.IP
+	allocNet                          []net.IP
+	cm                                *ipv4.ControlMessage
+	request                           dhcp.Packet
+	replies                           []dhcp.Packet
+	pktOpts, outOpts, netBootOpts     dhcp.Options
+	pinger                            pinger.Pinger
+	handler                           *DhcpHandler
+	lPort                             int
+	reqType                           dhcp.MessageType
+	offerNetBoot                      bool
+	duration                          time.Duration
+	start                             time.Time
+	machine                           *backend.Machine
+	bootEnv                           *backend.BootEnv
 }
 
 func (dhr *DhcpRequest) Reply(p dhcp.Packet) {
@@ -386,7 +408,11 @@ func (dhr *DhcpRequest) buildReply(
 			},
 		)
 	}
-	res := dhcp.ReplyPacket(dhr.request, mt, serverID, yAddr, dhr.duration, toAdd)
+	replId := serverID
+	if !dhr.nsOverride.IsUnspecified() {
+		replId = dhr.nsOverride
+	}
+	res := dhcp.ReplyPacket(dhr.request, mt, replId, yAddr, dhr.duration, toAdd)
 	if dhr.nextServer.IsGlobalUnicast() {
 		res.SetSIAddr(dhr.nextServer)
 	}
@@ -467,11 +493,7 @@ func (dhr *DhcpRequest) FakeLease(req net.IP) *backend.Lease {
 	for _, s := range dhr.handler.strats {
 		strategy := s.Name
 		token := s.GenToken(dhr.request, dhr.pktOpts)
-		via := []net.IP{dhr.request.GIAddr()}
-		if via[0] == nil || via[0].IsUnspecified() {
-			via = dhr.listenIPs()
-		}
-		lease := backend.FakeLeaseFor(rt, strategy, token, via)
+		lease := backend.FakeLeaseFor(rt, strategy, token, dhr.allocNet)
 		if lease == nil {
 			continue
 		}
@@ -546,16 +568,12 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 			dhr.nak(dhr.respondFrom(req))
 			return "NAK"
 		}
-		via := []net.IP{dhr.request.GIAddr()}
-		if via[0] == nil || via[0].IsUnspecified() {
-			via = dhr.listenIPs()
-		}
 		var lease *backend.Lease
 		var reservation *backend.Reservation
 		var subnet *backend.Subnet
 		rt := dhr.Request("leases:rw", "reservations", "subnets")
 		for _, s := range dhr.handler.strats {
-			lease, subnet, reservation, err = backend.FindLease(rt, s.Name, s.GenToken(dhr.request, dhr.pktOpts), req, via)
+			lease, subnet, reservation, err = backend.FindLease(rt, s.Name, s.GenToken(dhr.request, dhr.pktOpts), req, dhr.allocNet)
 			if lease == nil &&
 				subnet == nil &&
 				reservation == nil &&
@@ -616,17 +634,13 @@ func (dhr *DhcpRequest) ServeDHCP() string {
 		for _, s := range dhr.handler.strats {
 			strategy := s.Name
 			token := s.GenToken(dhr.request, dhr.pktOpts)
-			via := []net.IP{dhr.request.GIAddr()}
-			if via[0] == nil || via[0].IsUnspecified() {
-				via = dhr.listenIPs()
-			}
 			var (
 				lease *backend.Lease
 			)
 			rt := dhr.Request("leases:rw", "reservations", "subnets:rw")
 			for {
 				var fresh bool
-				lease, fresh = backend.FindOrCreateLease(rt, strategy, token, req, via)
+				lease, fresh = backend.FindOrCreateLease(rt, strategy, token, req, dhr.allocNet)
 				if lease == nil {
 					break
 				}
@@ -723,6 +737,21 @@ func (dhr *DhcpRequest) Process() (string, string) {
 		return "InvalidHlen", "Error"
 	}
 	dhr.pktOpts = dhr.request.ParseOptions()
+	if !dhr.request.GIAddr().IsUnspecified() {
+		dhr.allocNet = []net.IP{dhr.request.GIAddr()}
+	} else {
+		dhr.allocNet = dhr.listenIPs()
+	}
+	dhr.nsOverride = net.IPv4zero
+	if opt82, ok := dhr.pktOpts[82]; ok {
+		subOpts := parseOptionCodes(opt82)
+		if realSrc, ok := subOpts[5]; ok && len(realSrc) == 4 {
+			dhr.allocNet = []net.IP{net.IP(realSrc)}
+		}
+		if override, ok := subOpts[11]; ok && len(override) == 4 {
+			dhr.nsOverride = net.IP(override)
+		}
+	}
 	if t, ok := dhr.pktOpts[dhcp.OptionDHCPMessageType]; !ok || len(t) != 1 {
 		dhr.Errorf("Missing DHCP message type")
 		return "MissingType", "Error"
