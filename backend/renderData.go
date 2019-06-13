@@ -860,6 +860,28 @@ func (r *RenderData) Param(key string) (interface{}, error) {
 	return nil, fmt.Errorf("No such machine parameter %s", key)
 }
 
+func (r *RenderData) ParamExpand(key string) (interface{}, error) {
+	sobj, err := r.Param(key)
+	if err != nil {
+		return nil, err
+	}
+	s, ok := sobj.(string)
+	if !ok {
+		return sobj, nil
+	}
+
+	res := &bytes.Buffer{}
+	tmpl, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(s)
+	if err != nil {
+		return nil, fmt.Errorf("Error compiling parameter %s: %v", key, err)
+	}
+	tmpl = tmpl.Option("missingkey=error")
+	if err := tmpl.Execute(res, r); err != nil {
+		return nil, fmt.Errorf("Error rendering parameter %s: %v", key, err)
+	}
+	return res.String(), nil
+}
+
 // ParamAsJSON will return the specified parameter as a JSON
 // string or an error.
 func (r *RenderData) ParamAsJSON(key string) (string, error) {
