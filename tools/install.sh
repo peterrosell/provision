@@ -6,31 +6,34 @@ DEFAULT_DRP_VERSION=${DEFAULT_DRP_VERSION:-"stable"}
 
 usage() {
 cat <<EOFUSAGE
-Usage: $0 [--version=<Version to install>] [--nocontent] [--commit=<githash>]
-          [--isolate] [--ipaddr=<ip>] install | remove
+Usage: $0 [--version=<Version to install>] [--no-content] [--commit=<githash>]
+          [--isolate] [--ipaddr=<ip>] install | upgrade | remove
 
 Options:
     --debug=[true|false]    # Enables debug output
     --force=[true|false]    # Forces an overwrite of local install binaries and content
     --upgrade=[true|false]  # Turns on 'force' option to overwrite local binaries/content
     --isolated              # Sets up current directory as install location for drpcli
-                            # and dr-provision
+                            # and dr-provision (makes mess in current directory!)
     --no-content            # Don't add content to the system
     --zip-file=filename.zip # Don't download the dr-provision.zip file, instead use
                             # the referenced zip file (useful for airgap deployments)
+                            # NOTE: disables sha256sum checks - do this manually
     --ipaddr=<ip>           # The IP to use for the system identified IP.  The system
-                            # will attepmto to discover the value if not specified
-    --version=<string>      # Version identifier if downloading.  stable, tip, or
-                            # specific version label.  Defaults to: $DEFAULT_DRP_VERSION
-    --commit=<string>       # github commit file to wait for.  Unset assumes the files
+                            # will attempt to discover the value if not specified
+    --version=<string>      # Version identifier if downloading; stable, tip, or
+                            # specific version label, defaults to: $DEFAULT_DRP_VERSION
+    --commit=<string>       # github commit file to wait for; unset assumes the files
                             # are in place
     --remove-data           # Remove data as well as program pieces
     --skip-run-check        # Skip the process check for 'dr-provision' on new install
                             # only valid in '--isolated' install mode
-    --skip-depends          # Skip OS dependency checks, for testing 'isolated' mode
+    --skip-prereqs          # Skip OS dependency checks, for testing 'isolated' mode
     --no-sudo               # Do not use "sudo" prefix on commands (assume you're root)
     --fast-downloader       # (experimental) Use Fast Downloader (uses 'aria2')
-    --systemd               # Run the systemd enabling commands after installation.
+    --keep-installer        # In Production mode, do not purge the tmp installer artifacts
+    --startup               # Attempt to start the dr-provision service
+    --systemd               # Run the systemd enabling commands after installation
     --drp-id=<string>       # String to use as the DRP Identifier (only with --systemd)
     --ha-id=<string>        # String to use as the HA Identifier (only with --systemd)
     --drp-user=<string>     # DRP user to create after system start (only with --systemd)
@@ -42,20 +45,26 @@ Options:
     remove                  # Removes the system enabled install.  Requires no other flags
 
 Defaults are:
-    version             = $DEFAULT_DRP_VERSION    (examples: 'tip', 'v3.6.0' or 'stable')
-    isolated            = false
-    nocontent           = false
-    upgrade             = false
-    force               = false
-    debug               = false
-    skip-run-check      = false
-    skip-depends        = false
-    systemd             = false
-    remove-rocketskates = false
-    drp-id              = unset
-    ha-id               = unset
-    drp-user            = unset
-    drp-password        = unset
+    option:               value:           option:               value:
+    -------------------   ------------     ------------------    ------------
+    remove-rocketskates = false            version (*)         = $DEFAULT_DRP_VERSION
+    isolated            = false            nocontent           = false
+    upgrade             = false            force               = false
+    debug               = false            skip-run-check      = false
+    skip-prereqs        = false            systemd             = false
+    drp-id              = unset            ha-id               = unset
+    drp-user            = rocketskates     drp-password        = r0cketsk8ts
+    startup             = false            keep-installer      = false
+
+    * version examples: 'tip', 'v3.13.6' or 'stable'
+
+Prerequisites:
+    NOTE: By default, prerequisite packages will be installed if possible.  You must
+          manually install these first on a Mac OS X system. Package names may vary
+          depending on your operating system version/distro packaging naming scheme.
+
+    REQUIRED: 7zip, curl, jq, bsdtar
+    OPTIONAL: aria2c (if using experimental "fast downloader")
 EOFUSAGE
 
 exit 0
@@ -71,8 +80,12 @@ SKIP_RUN_CHECK=false
 SKIP_DEPENDS=false
 FAST_DOWNLOADER=false
 SYSTEMD=false
+STARTUP=false
 REMOVE_RS=false
+KEEP_INSTALLER=false
 _sudo="sudo"
+CLI="/usr/local/bin/drpcli"
+CLI_BKUP="/usr/local/bin/drpcli.drp-installer.backup"
 
 # download URL locations; overridable via ENV variables
 URL_BASE=${URL_BASE:-"https://github.com/digitalrebar/"}
@@ -96,7 +109,8 @@ while (( $# > 0 )); do
             DRP_VERSION=${arg_data}
             ;;
         --zip-file)
-            ZIP_FILE=${arg_data}
+            ZF=${arg_data}
+            ZIP_FILE=$(echo "$(cd $(dirname $ZF) && pwd)/$(basename $ZF)")
             ;;
         --isolated)
             ISOLATED=true
@@ -104,7 +118,7 @@ while (( $# > 0 )); do
         --skip-run-check)
             SKIP_RUN_CHECK=true
             ;;
-        --skip-dep*)
+        --skip-dep*|--skip-prereq*)
             SKIP_DEPENDS=true
             ;;
         --fast-downloader)
@@ -128,6 +142,13 @@ while (( $# > 0 )); do
             ;;
         --no-sudo)
             _sudo=""
+            ;;
+        --keep-installer)
+            KEEP_INSTALLER=true
+            ;;
+        --startup)
+            STARTUP=true
+            SYSTEMD=true
             ;;
         --systemd)
             SYSTEMD=true
@@ -164,6 +185,7 @@ done
 set -- "${args[@]}"
 
 DRP_VERSION=${DRP_VERSION:-"$DEFAULT_DRP_VERSION"}
+[[ "$ISOLATED" == "true" ]] && KEEP_INSTALLER=true
 
 [[ $DBG == true ]] && set -x
 
@@ -268,6 +290,18 @@ ensure_packages() {
             echo
             error=1
         fi
+        if ! which jq &>/dev/null; then
+            echo "Must have jq installed"
+            echo "E.g: brew install jq"
+            echo
+            error=1
+        fi
+        if ! which curl &>/dev/null; then
+            echo "Must have curl installed"
+            echo "E.g: brew install curl"
+            echo
+            error=1
+        fi
         if [[ "$FAST_DOWNLOADER" == "true" ]]; then
           if ! which aria2c  &>/dev/null; then
             echo "Install 'aria2' package"
@@ -289,6 +323,24 @@ ensure_packages() {
                 $_sudo yum install -y bsdtar
             elif [[ $OS_FAMILY == debian ]] ; then
                 $_sudo apt-get install -y bsdtar
+            fi
+        fi
+        if ! which jq &>/dev/null; then
+            echo "Installing jq"
+            if [[ $OS_FAMILY == rhel ]] ; then
+                install_epel
+                $_sudo yum install -y jq
+            elif [[ $OS_FAMILY == debian ]] ; then
+                $_sudo apt-get install -y jq
+            fi
+        fi
+        if ! which curl &>/dev/null; then
+            echo "Installing curl"
+            if [[ $OS_FAMILY == rhel ]] ; then
+                install_epel
+                $_sudo yum install -y curl
+            elif [[ $OS_FAMILY == debian ]] ; then
+                $_sudo apt-get install -y curl
             fi
         fi
         if ! which 7z &>/dev/null; then
@@ -425,7 +477,15 @@ case $MODE in
                  echo "Skipping 'dr-provision' service run check as requested ..."
              fi
 
-            [[ "$SKIP_DEPENDS" == "false" ]] && ensure_packages || echo "Skipping dependency checking as requested ... "
+             [[ "$SKIP_DEPENDS" == "false" ]] && ensure_packages || echo "Skipping dependency checks as requested ... "
+
+             if [[ "$ISOLATED" == "false" ]]; then
+                 TMP_INSTALLER_DIR=$(mktemp -d /tmp/drp.installer.XXXXXX)
+                 echo "Using temp directory to extract artifacts to and install from ('$TMP_INSTALLER_DIR')."
+                 OLD_PWD=$(pwd)
+                 cd $TMP_INSTALLER_DIR
+                 TMP_INST=$TMP_INSTALLER_DIR/tools/install.sh
+             fi
 
              # Are we in a build tree
              if [ -e server ] ; then
@@ -444,7 +504,7 @@ case $MODE in
                      if [[ -n "$ZIP_FILE" ]]
                      then
                        [[ "$ZIP_FILE" != "dr-provision.zip" ]] && cp "$ZIP_FILE" dr-provision.zip
-                       echo "WARNING:  No sha256sum check perforemd for '--zip-file' mode."
+                       echo "WARNING:  No sha256sum check performed for '--zip-file' mode."
                        echo "          We assume you've already verified your download file."
                      else
                        get $URL_BASE_DRP/$DRP_VERSION/$ZIP $URL_BASE_DRP/$DRP_VERSION/$SHA
@@ -462,8 +522,8 @@ case $MODE in
                  fi
                  echo "Installing Version $DRP_CONTENT_VERSION of Digital Rebar Provision Community Content"
                  if [[ -n "$ZIP_FILE" ]]; then
-                   echo "WARNING: '--zip-file' specified, still trying to downoad community content..."
-                   echo "         (specify '--nocontent' to skip download of community content"
+                   echo "WARNING: '--zip-file' specified, still trying to download community content..."
+                   echo "         (specify '--no-content' to skip download of community content"
                  fi
                  CC_YML=drp-community-content.yaml
                  CC_SHA=drp-community-content.sha256
@@ -472,6 +532,18 @@ case $MODE in
              fi
 
              if [[ $ISOLATED == false ]]; then
+                 INST="/usr/local/bin/drp-install.sh"
+                 $_sudo cp $TMP_INST $INST && $_sudo chmod 755 $INST
+                 echo "Install script saved to '$INST'"
+                 echo "(run '$INST remove' to uninstall DRP)"
+
+                 # move aside/preserve an existing drpcli - this machine might be under
+                 # control of another DRP Endpoint, and this will break the installer (text file busy)
+                 if [[ -f "$CLI" ]]; then
+                     echo "SAVING '/usr/local/bin/drpcli' to backup file ($CLI_BKUP)"
+                     $_sudo mv "$CLI" "$CLI_BKUP"
+                 fi
+
                  TFTP_DIR="/var/lib/dr-provision/tftpboot"
                  $_sudo cp "$binpath"/* "$bindest"
                  if [[ $initfile ]]; then
@@ -486,11 +558,18 @@ case $MODE in
                      else
                          $_sudo cp "$initfile" "$initdest"
                      fi
-                     echo
-                     echo "######### You can start the DigitalRebar Provision service with:"
-                     echo "$starter"
-                     echo "######### You can enable the DigitalRebar Provision service with:"
-                     echo "$enabler"
+                     # output our startup helper messages only if SYSTEMD isn't specified
+                     if [[ "$SYSTEMD" == "false" || "$STARTUP" == "false" ]]; then
+                        echo
+                        echo "######### You can start the DigitalRebar Provision service with:"
+                        echo "$starter"
+                        echo "######### You can enable the DigitalRebar Provision service with:"
+                        echo "$enabler"
+                    else
+                        echo "######### Attempt to execute startup procedures ('--startup' specified)"
+                        echo "$starter"
+                        echo "$enabler"
+                    fi
                  fi
 
                  # handle the v3.0.X to v3.1.0 directory structure.
@@ -538,6 +617,10 @@ EOF
                      eval "$enabler"
                      eval "$starter"
 
+                     if [[ $NO_CONTENT == false ]] ; then
+                         drpcli contents upload catalog:task-library-${DRP_CONTENT_VERSION}
+                     fi
+
                      if [[ $DRP_USER ]] ; then
                          drpcli users create "{ \"Name\": \"$DRP_USER\", \"Roles\": [ \"superuser\" ] }"
                          drpcli users password $DRP_USER "$DRP_PASSWORD"
@@ -546,8 +629,31 @@ EOF
                              drpcli users destroy rocketskates
                          fi
                      fi
+                 else
+                     if [[ "$STARTUP" == "true" ]]; then
+                         echo "######### Attempting startup of 'dr-provision' ('--startup' specified)"
+                         eval "$enabler"
+                         eval "$starter"
+
+                         drpcli info get > /dev/null 2>&1
+                         START_CHECK=$?
+
+                         if [[ "$NO_CONTENT" == "false" && "$START_CHECK" == "0" ]] ; then
+                             drpcli contents upload catalog:task-library-${DRP_CONTENT_VERSION}
+                         fi
+                     fi
                  fi
 
+                 cd $OLD_PWD
+                 if [[ "$KEEP_INSTALLER" == "false" ]]; then
+                     rm -rf $TMP_INSTALLER_DIR
+                 else
+                     echo ""
+                     echo "######### Installer artifacts are in '$TMP_INSTALLER_DIR' - to purge:"
+                     echo "$_sudo rm -rf $TMP_INSTALLER_DIR"
+                 fi
+
+             # do an "isolated" mode install
              else
                  mkdir -p drp-data
                  TFTP_DIR="`pwd`/drp-data/tftpboot"
@@ -563,12 +669,19 @@ EOF
                      ln -s $binpath/drpjoin drpjoin
                  fi
 
-                 echo
-                 echo "********************************************************************************"
-                 echo
-                 echo "# Run the following commands to start up dr-provision in a local isolated way."
-                 echo "# The server will store information and serve files from the drp-data directory."
-                 echo
+                 if [[ "$STARTUP" == "false" ]]; then
+                     echo
+                     echo "********************************************************************************"
+                     echo
+                     echo "# Run the following commands to start up dr-provision in a local isolated way."
+                     echo "# The server will store information and serve files from the drp-data directory."
+                     echo
+                 else
+                     echo
+                     echo "********************************************************************************"
+                     echo
+                     echo "# Will attempt to startup the 'dr-provision' service ... "
+                 fi
 
                  if [[ $IPADDR == "" ]] ; then
                      if [[ $OS_FAMILY == darwin ]]; then
@@ -605,11 +718,20 @@ EOF
                      fi
                  fi
 
-                 echo "$_sudo ./dr-provision --base-root=`pwd`/drp-data --local-content=\"\" --default-content=\"\" &"
+#SYG
+                 STARTER="$_sudo ./dr-provision --base-root=`pwd`/drp-data --local-content=\"\" --default-content=\"\" > drp.log 2>&1 &"
+                 [[ "$STARTUP" == "false" ]] && echo "$STARTER"
                  mkdir -p "`pwd`/drp-data/saas-content"
                  if [[ $NO_CONTENT == false ]] ; then
                      DEFAULT_CONTENT_FILE="`pwd`/drp-data/saas-content/default.yaml"
                      mv drp-community-content.yaml $DEFAULT_CONTENT_FILE
+                 fi
+
+                 if [[ "$STARTUP" == "true" ]]; then
+                     eval $STARTER
+                     echo "'dr-provision' running processes:"
+                     ps -eo pid,args -o comm  | grep -v grep | grep dr-provision
+                     echo
                  fi
 
                  EP="./"
@@ -619,8 +741,11 @@ EOF
              echo "# Once dr-provision is started, setup a base discovery configuration"
              echo "  ${EP}drpcli bootenvs uploadiso sledgehammer"
              echo "  ${EP}drpcli prefs set defaultWorkflow discover-base unknownBootEnv discovery defaultBootEnv sledgehammer defaultStage discover"
-             echo "# Add common utilities (sourced from RackN)"
-             echo "  ${EP}drpcli contents upload https://api.rackn.io/catalog/content/task-library"
+
+             if [[ $NO_CONTENT == true ]] ; then
+                 echo "# Add common utilities (sourced from RackN)"
+                 echo "  ${EP}drpcli contents upload https://api.rackn.io/catalog/content/task-library"
+             fi
              echo
              echo "# Optionally, locally cache the isos for common community operating systems"
              echo "  ${EP}drpcli bootenvs uploadiso ubuntu-18.04-install"
@@ -628,7 +753,7 @@ EOF
              echo
              [[ "$FAST_DOWNLOADER" == "true" ]] && show_fast_isos "ubuntu-16.04-install" "centos-7-install" "sledgehammer"
 
-             ;;
+         ;;
      remove)
          if [[ $ISOLATED == true ]] ; then
              echo "Remove the directory that the initial isolated install was done in."
@@ -640,12 +765,16 @@ EOF
          else
              echo "'dr-provision' service is not running, beginning removal process ... "
          fi
+         [[ -f "$CLI_BKUP" ]] && ( echo "Restoring original 'drpcli'."; $_sudo mv "$CLI_BKUP" "$CLI"; )
          echo "Removing program and service files"
          $_sudo rm -f "$bindest/dr-provision" "$bindest/drpcli" "$initdest"
+         [[ -d /etc/systemd/system/dr-provision.service.d ]] && rm -rf /etc/systemd/system/dr-provision.service.d
+         [[ -f /usr/local/bin/drp-install.sh ]] && rm -f /usr/local/bin/drp-install.sh
          if [[ $REMOVE_DATA == true ]] ; then
              echo "Removing data files"
              $_sudo rm -rf "/usr/share/dr-provision" "/etc/dr-provision" "/var/lib/dr-provision"
-         fi;;
+         fi
+         ;;
      *)
          echo "Unknown action \"$1\". Please use 'install', 'upgrade', or 'remove'";;
 esac
