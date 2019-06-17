@@ -20,7 +20,7 @@ Options:
                             # the referenced zip file (useful for airgap deployments)
                             # NOTE: disables sha256sum checks - do this manually
     --ipaddr=<ip>           # The IP to use for the system identified IP.  The system
-                            # will attepmt to discover the value if not specified
+                            # will attempt to discover the value if not specified
     --version=<string>      # Version identifier if downloading; stable, tip, or
                             # specific version label, defaults to: $DEFAULT_DRP_VERSION
     --commit=<string>       # github commit file to wait for; unset assumes the files
