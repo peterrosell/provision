@@ -335,7 +335,7 @@ ensure_packages() {
             fi
         fi
         if ! which curl &>/dev/null; then
-            echo "Installing jq"
+            echo "Installing curl"
             if [[ $OS_FAMILY == rhel ]] ; then
                 install_epel
                 $_sudo yum install -y curl
