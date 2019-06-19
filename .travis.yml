@@ -29,6 +29,8 @@ deploy:
   - dr-provision.sha256
   - embedded/assets/swagger.json
   - dr-provision-hash.*
+  - bin/linux/amd64/drbundler
+  - bin/linux/amd64/drpcli
   skip_cleanup: true
   on:
     repo: digitalrebar/provision
