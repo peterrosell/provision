@@ -41,6 +41,7 @@ import:
   subpackages:
   - sign
   - nacl
+  - ed25519
 - package: golang.org/x/tools
   subpackages:
   - cover
@@ -58,7 +59,7 @@ import:
   version: ^3.1.0
 - package: github.com/gofunky/semver
 - package: github.com/rackn/netwrangler
-  version: v0.5.1
+  version: master
 - package: github.com/j-keck/arping
 - package: github.com/shirou/gopsutil/
   version: ~v2.19
