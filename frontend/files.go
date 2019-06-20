@@ -1,6 +1,8 @@
 package frontend
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -49,7 +51,7 @@ type FilesPathQueryParameter struct {
 	Path string `json:"path"`
 }
 
-// swagger:parameters uploadFile getFile deleteFile
+// swagger:parameters uploadFile getFile deleteFile headFile
 type FilePathPathParameter struct {
 	// in: path
 	Path string `json:"path"`
@@ -138,6 +140,65 @@ func (f *Frontend) InitFileApi() {
 			}
 			c.Writer.Header().Set("Content-Type", "application/octet-stream")
 			c.File(fileName)
+		})
+
+	// swagger:route HEAD /files/{path} Files headFile
+	//
+	// See if a file exists and return a checksum in the header
+	//
+	// Return 200 if the file specified by {path} exists, or return NotFound.
+	//
+	//     Responses:
+	//       200: NoContentResponse
+	//       401: NoContentResponse
+	//       403: NoContentResponse
+	//       404: NoContentResponse
+	f.ApiGroup.HEAD("/files/*path",
+		func(c *gin.Context) {
+			if !f.assureSimpleAuth(c, f.rt(c), "files", "get", c.Param(`path`)) {
+				return
+			}
+			fileName := path.Join(f.FileRoot, `files`, path.Clean(c.Param(`path`)))
+			if st, err := os.Stat(fileName); err != nil || !st.Mode().IsRegular() {
+				res := &models.Error{
+					Code:  http.StatusNotFound,
+					Key:   c.Param(`path`),
+					Model: "files",
+					Type:  c.Request.Method,
+				}
+				res.Errorf("Not a regular file")
+				c.JSON(res.Code, res)
+				return
+			}
+
+			hasher := sha256.New()
+			f, err := os.Open(fileName)
+			if err != nil {
+				res := &models.Error{
+					Code:  http.StatusInternalServerError,
+					Key:   c.Param(`path`),
+					Model: "files",
+					Type:  c.Request.Method,
+				}
+				res.Errorf("Failed to open file: %s", err)
+				c.JSON(res.Code, res)
+				return
+			}
+			defer f.Close()
+			if _, err := io.Copy(hasher, f); err != nil {
+				res := &models.Error{
+					Code:  http.StatusInternalServerError,
+					Key:   c.Param(`path`),
+					Model: "files",
+					Type:  c.Request.Method,
+				}
+				res.Errorf("Failed to sum file: %s", err)
+				c.JSON(res.Code, res)
+				return
+			}
+
+			c.Header("X-DRP-SHA256SUM", hex.EncodeToString(hasher.Sum(nil)))
+			c.Status(http.StatusOK)
 		})
 
 	// swagger:route POST /files/{path} Files uploadFile
