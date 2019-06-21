@@ -888,7 +888,7 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 	}
 	for k, vs := range params {
 		switch k {
-		case "offset", "limit", "sort", "reverse", "slim", "decode":
+		case "offset", "limit", "sort", "reverse", "slim", "params", "decode":
 			continue
 		}
 		// Did we find an existing index?
@@ -1035,28 +1035,49 @@ func (f *Frontend) emptyList(c *gin.Context, statsOnly bool) {
 	}
 }
 
-func (f *Frontend) processItem(c *gin.Context, rt *backend.RequestTracker, obj models.Model, slim string) models.Model {
+func (f *Frontend) processItem(c *gin.Context, rt *backend.RequestTracker, obj models.Model, slim, params string) models.Model {
+	if f, ok := obj.(models.Filler); ok {
+		f.Fill()
+	}
+	if d, ok := obj.(models.Paramer); ok {
+		if f.wantDecodeSecure(c) {
+			tp := rt.GetParams(d, false, true)
+			d.SetParams(tp)
+		}
+		if params != "" {
+			tp := rt.GetParams(d, false, false)
+			tmp := map[string]interface{}{}
+			for _, param := range strings.Split(params, ",") {
+				if v, ok := tp[param]; ok {
+					tmp[param] = v
+				}
+			}
+			d.SetParams(tmp)
+			if o, ok := obj.(models.Partialer); ok {
+				o.SetPartial()
+			}
+		}
+		obj = d
+	}
 	for _, elide := range strings.Split(strings.ToLower(slim), ",") {
 		switch strings.TrimSpace(elide) {
 		case "meta":
 			if o, ok := obj.(models.MetaHaver); ok {
 				o.SetMeta(models.Meta{})
 			}
+			if o, ok := obj.(models.Partialer); ok {
+				o.SetPartial()
+			}
 		case "params":
-			if o, ok := obj.(models.Paramer); ok {
+			if o, ok := obj.(models.Paramer); ok && params == "" {
 				o.SetParams(map[string]interface{}{})
+			}
+			if o, ok := obj.(models.Partialer); ok {
+				o.SetPartial()
 			}
 		default:
 			// ignore for now -- will add more later, maybe
 		}
-	}
-	if f, ok := obj.(models.Filler); ok {
-		f.Fill()
-	}
-	if d, ok := obj.(models.Paramer); ok && f.wantDecodeSecure(c) {
-		params := rt.GetParams(d, false, true)
-		d.SetParams(params)
-		obj = d
 	}
 	if s, ok := obj.(Sanitizable); ok {
 		obj = s.Sanitize()
@@ -1083,6 +1104,7 @@ func (f *Frontend) list(c *gin.Context, ref store.KeySaver, statsOnly bool) {
 	}
 	var err error
 	slim := c.Query("slim")
+	params := c.Query("params")
 
 	rt.Do(func(d backend.Stores) {
 		var filters []index.Filter
@@ -1110,7 +1132,7 @@ func (f *Frontend) list(c *gin.Context, ref store.KeySaver, statsOnly bool) {
 
 		items := idx.Items()
 		for _, item := range items {
-			arr = append(arr, f.processItem(c, rt, models.Clone(item), slim))
+			arr = append(arr, f.processItem(c, rt, models.Clone(item), slim, params))
 		}
 	})
 
@@ -1162,7 +1184,7 @@ func (f *Frontend) Fetch(c *gin.Context, ref store.KeySaver, key string) {
 		return
 	}
 	rt.Do(func(_ backend.Stores) {
-		res = f.processItem(c, rt, res, c.Query("slim"))
+		res = f.processItem(c, rt, res, c.Query("slim"), c.Query("params"))
 	})
 	c.JSON(http.StatusOK, res)
 }
