@@ -314,9 +314,6 @@ type DataStack struct {
 func CleanUpStore(st store.Store) error {
 	st.Close()
 	switch st.Type() {
-	case "bolt":
-		fst, _ := st.(*store.Bolt)
-		return os.Remove(fst.Path)
 	case "file":
 		fst, _ := st.(*store.File)
 		return os.Remove(fst.Path)

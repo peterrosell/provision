@@ -49,8 +49,8 @@ import (
 	"github.com/digitalrebar/provision/frontend"
 	"github.com/digitalrebar/provision/midlayer"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/provision/utils"
 	"github.com/digitalrebar/provision/store"
+	"github.com/digitalrebar/provision/utils"
 )
 
 // EmbeddedAssetsExtractFunc is a function pointer that can set at initialization
@@ -76,8 +76,8 @@ type ProgOpts struct {
 	OurAddress          string `long:"static-ip" description:"IP address to advertise for the static HTTP file server" default:"" env:"RS_STATIC_IP"`
 	ForceStatic         bool   `long:"force-static" description:"Force the system to always use the static IP." env:"RS_FORCE_STATIC"`
 
-	BackEndType    string `long:"backend" description:"Storage to use for persistent data. Can be either 'consul', 'directory', or a store URI" default:"directory" env:"RS_BACKEND_TYPE"`
-	SecretsType    string `long:"secrets" description:"Storage to use for persistent data. Can be either 'consul', 'directory', or a store URI.  Will default to being the same as 'backend'" default:"" env:"RS_SECRETS_TYPE"`
+	BackEndType    string `long:"backend" description:"Storage to use for persistent data. Can be either 'directory', or a store URI" default:"directory" env:"RS_BACKEND_TYPE"`
+	SecretsType    string `long:"secrets" description:"Storage to use for persistent data. Can be either 'directory', or a store URI.  Will default to being the same as 'backend'" default:"" env:"RS_SECRETS_TYPE"`
 	LocalContent   string `long:"local-content" description:"Storage to use for local overrides." default:"directory:///etc/dr-provision?codec=yaml" env:"RS_LOCAL_CONTENT"`
 	DefaultContent string `long:"default-content" description:"Store URL for local content" default:"file:///usr/share/dr-provision/default.yaml?codec=yaml" env:"RS_DEFAULT_CONTENT"`
 
@@ -154,9 +154,6 @@ func processArgs(localLogger *log.Logger, cOpts *ProgOpts) error {
 	if cOpts.SecretsType == "directory" && strings.IndexRune(cOpts.SecretsRoot, filepath.Separator) != 0 {
 		cOpts.SecretsRoot = filepath.Join(cOpts.BaseRoot, cOpts.SecretsRoot)
 	}
-	if cOpts.SecretsType == "consul" && strings.IndexRune(cOpts.SecretsRoot, filepath.Separator) != 0 {
-		cOpts.SecretsRoot = fmt.Sprintf("/%s", cOpts.SecretsRoot)
-	}
 	if strings.IndexRune(cOpts.PluginRoot, filepath.Separator) != 0 {
 		cOpts.PluginRoot = filepath.Join(cOpts.BaseRoot, cOpts.PluginRoot)
 	}
@@ -168,9 +165,6 @@ func processArgs(localLogger *log.Logger, cOpts *ProgOpts) error {
 	}
 	if cOpts.BackEndType == "directory" && strings.IndexRune(cOpts.DataRoot, filepath.Separator) != 0 {
 		cOpts.DataRoot = filepath.Join(cOpts.BaseRoot, cOpts.DataRoot)
-	}
-	if cOpts.BackEndType == "consul" && strings.IndexRune(cOpts.DataRoot, filepath.Separator) != 0 {
-		cOpts.DataRoot = fmt.Sprintf("/%s", cOpts.DataRoot)
 	}
 	if strings.IndexRune(cOpts.LogRoot, filepath.Separator) != 0 {
 		cOpts.LogRoot = filepath.Join(cOpts.BaseRoot, cOpts.LogRoot)
@@ -219,11 +213,7 @@ func processArgs(localLogger *log.Logger, cOpts *ProgOpts) error {
 		}
 	}
 
-	if (cOpts.SecretsType == "consul") != (cOpts.BackEndType == "consul") {
-		return fmt.Errorf("Error: Secrets and writable store must both run consul, not %s and %s",
-			cOpts.SecretsType, cOpts.BackEndType)
-	}
-	// Validate HA args - Assumes a local consul server running talking to the "cluster"
+	// Validate HA args.
 	if cOpts.HaEnabled {
 		if cOpts.HaAddress == "" {
 			return fmt.Errorf("Error: HA must specify a VIP in CIDR format that DRP will move around")
@@ -372,11 +362,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	services := make([]midlayer.Service, 0, 0)
 
 	if cOpts.HaEnabled {
-		// If we are using consul, wait here. Otherwise, plow on through.
-		if cOpts.SecretsType == "consul" {
-			leader := midlayer.BecomeLeader(localLogger)
-			services = append(services, leader)
-		} else if cOpts.HaPassive {
+		if cOpts.HaPassive {
 			localLogger.Println("Waiting on SIGUSR1 to become active")
 			ch := make(chan os.Signal)
 			signal.Notify(ch, syscall.SIGUSR1)
