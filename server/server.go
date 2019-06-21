@@ -50,7 +50,7 @@ import (
 	"github.com/digitalrebar/provision/midlayer"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/provision/utils"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 // EmbeddedAssetsExtractFunc is a function pointer that can set at initialization

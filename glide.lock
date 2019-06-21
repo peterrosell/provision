@@ -1,5 +1,5 @@
-hash: a545ab8cfa78d734d2671937446905f9c213d9b1b27218711cb921572638abc9
-updated: 2019-06-20T14:35:26.322947107-05:00
+hash: a1809f86a0831f2d4ab8634cd793757bcba3563012b4c139d2c4263c12c6b938
+updated: 2019-06-21T09:32:38.410518087-05:00
 imports:
 - name: github.com/aokoli/goutils
   version: 3391d3790d23d03408670993e957e8f408993c34
@@ -21,8 +21,6 @@ imports:
   version: cc3309e15cd58c6b376ae175073698c2b930761e
 - name: github.com/digitalrebar/pinger
   version: ba19a5aef5741b243417dd6eb3fef2cda6df516c
-- name: github.com/digitalrebar/store
-  version: 1ca378d05667c875da2f3fcec134e46b547054e5
 - name: github.com/digitalrebar/tftp
   version: 16cec9e6ab956fe60b01f12bf7d41c5817dbbafb
 - name: github.com/dsnet/compress

@@ -15,7 +15,7 @@ import (
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 	"github.com/gofunky/semver"
 )
 
