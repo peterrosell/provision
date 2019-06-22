@@ -421,8 +421,8 @@ func (pc *PluginController) UploadPluginProvider(c *gin.Context, fileRoot, name 
 	os.Remove(ppName)
 	os.Rename(ppTmpName, ppName)
 	pc.AvailableProviders[pp.Name] = pp
-	pc.allPlugins(pp.Name, "stop", false)
-	pc.allPlugins(pp.Name, "start", pp.AutoStart)
+	pc.allPlugins(pp.Name, "stop", nil)
+	pc.allPlugins(pp.Name, "start", pp.AutoPlugin())
 	return &models.PluginProviderUploadInfo{Path: pp.Name, Size: copied}, nil
 }
 
