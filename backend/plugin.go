@@ -77,9 +77,11 @@ func (pc *PluginController) handleEvent(event *models.Event) {
 		defer pc.lock.Unlock()
 		switch event.Action {
 		case "create":
-			pc.allPlugins(event.Key, "start")
+			obj, _ := event.Model()
+			pp, _ := obj.(*models.PluginProvider)
+			pc.allPlugins(event.Key, "start", pp.AutoStart)
 		case "delete":
-			pc.allPlugins(event.Key, "stop")
+			pc.allPlugins(event.Key, "stop", false)
 		}
 	case "contents":
 		pc.lock.Lock()
@@ -100,12 +102,12 @@ func (pc *PluginController) handleEvent(event *models.Event) {
 			}
 		}
 		for _, v := range toStop {
-			pc.allPlugins(v.Name, "stop")
+			pc.allPlugins(v.Name, "stop", false)
 			delete(pc.AvailableProviders, v.Name)
 		}
 		for _, v := range toStart {
 			pc.AvailableProviders[v.Name] = v
-			pc.allPlugins(v.Name, "start")
+			pc.allPlugins(v.Name, "start", v.AutoStart)
 		}
 	}
 }
@@ -155,7 +157,7 @@ func (pc *PluginController) RestartPlugins() {
 	return
 }
 
-func (pc *PluginController) allPlugins(provider, action string) (err error) {
+func (pc *PluginController) allPlugins(provider, action string, autoStart bool) (err error) {
 	// Get all the plugins that have this as provider
 	ref := &Plugin{}
 	rt := pc.Request(ref.Locks("get")...)
@@ -166,9 +168,11 @@ func (pc *PluginController) allPlugins(provider, action string) (err error) {
 			return
 		}
 		arr := idx.Items()
+		found := false
 		for _, res := range arr {
 			plugin := res.(*Plugin)
 			if plugin.Provider == provider {
+				found = true
 				switch action {
 				case "start":
 					if _, ok := pc.runningPlugins[plugin.Name]; !ok {
@@ -180,6 +184,12 @@ func (pc *PluginController) allPlugins(provider, action string) (err error) {
 				default:
 					pc.Panicf("Invalid allPlugins call %s:%s", provider, action)
 				}
+			}
+		}
+		if !found && autoStart && action == "start" {
+			pl := &models.Plugin{Name: provider, Provider: provider}
+			if _, cerr := rt.Create(pl); cerr != nil {
+				err = cerr
 			}
 		}
 	})
