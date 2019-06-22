@@ -255,9 +255,31 @@ func (s *Stage) Validate() {
 	// We are syntactically valid, although we may not be useable.
 	s.renderers = renderers{}
 	// First, the stuff that must be correct in order for
-	for _, taskName := range s.Tasks {
-		if s.rt.find("tasks", taskName) == nil {
-			s.Errorf("Task %s does not exist", taskName)
+	bootenvs := s.rt.stores("bootenvs")
+	stages := s.rt.stores("stages")
+	tasks := s.rt.stores("tasks")
+	for i, ent := range s.Tasks {
+		parts := strings.SplitN(ent, ":", 2)
+		if len(parts) == 2 {
+			switch parts[0] {
+			case "stage":
+				if stages.Find(parts[1]) == nil {
+					s.Errorf("Stage %s (at %d) does not exist", parts[1], i)
+				}
+			case "bootenv":
+				if bootenvs.Find(parts[1]) == nil {
+					s.Errorf("BootEnv %s (at %d) does not exist", parts[1], i)
+				}
+			case "action":
+				continue
+			case "chroot":
+			default:
+				s.Errorf("%s (at %d) is malformed", ent, i)
+			}
+		} else {
+			if tasks.Find(ent) == nil {
+				s.Errorf("Task %s (at %d) does not exist", ent, i)
+			}
 		}
 	}
 	for _, profileName := range s.Profiles {
