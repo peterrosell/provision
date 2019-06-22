@@ -101,6 +101,8 @@ type StageGetParamsPathParameter struct {
 	Aggregate string `json:"aggregate"`
 	// in: query
 	Decode string `json:"decode"`
+	// in: query
+	Params string `json:"params"`
 	// in: path
 	// required: true
 	Name string `json:"name"`
@@ -140,6 +142,10 @@ type StageListPathParameter struct {
 	Reboot string
 	// in: query
 	BootEnv string
+	// in: query
+	Slim bool `json:"slim"`
+	// in: query
+	Params string `json:"params"`
 }
 
 // StageActionsPathParameter used to find a Stage / Actions in the path

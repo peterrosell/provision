@@ -115,6 +115,8 @@ type MachineGetParamsPathParameter struct {
 	Aggregate string `json:"aggregate"`
 	// in: query
 	Decode string `json:"decode"`
+	// in: query
+	Params string `json:"params"`
 	// in: path
 	// required: true
 	// swagger:strfmt uuid
@@ -204,6 +206,10 @@ type MachineListPathParameter struct {
 	Runnable string
 	// in: query
 	Decode bool `json:"decode"`
+	// in: query
+	Slim bool `json:"slim"`
+	// in: query
+	Params bool `json:"params"`
 }
 
 func (f *Frontend) InitMachineApi() {

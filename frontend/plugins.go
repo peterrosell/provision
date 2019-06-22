@@ -58,6 +58,8 @@ type PluginPatchBodyParameter struct {
 type PluginPathParameter struct {
 	// in: query
 	Decode string `json:"decode"`
+	// in: query
+	Params string `json:"params"`
 	// in: path
 	// required: true
 	Name string `json:"name"`
@@ -111,6 +113,10 @@ type PluginListPathParameter struct {
 	Provider string
 	// in: query
 	Decode bool `json:"decode"`
+	// in: query
+	Slim bool `json:"slim"`
+	// in: query
+	Params string `json:"params"`
 }
 
 // PluginActionsPathParameter used to find a Plugin / Actions in the path

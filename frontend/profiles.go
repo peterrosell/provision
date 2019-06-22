@@ -56,6 +56,8 @@ type ProfilePatchBodyParameter struct {
 type ProfilePathParameter struct {
 	// in: query
 	Decode string `json:"decode"`
+	// in: query
+	Params string `json:"params"`
 	// in: path
 	// required: true
 	Name string `json:"name"`
@@ -107,6 +109,10 @@ type ProfileListPathParameter struct {
 	Name string
 	// in: query
 	Decode bool `json:"decode"`
+	// in: query
+	Slim bool `json:"slim"`
+	// in: query
+	Params string `json:"params"`
 }
 
 // ProfileActionsPathParameter used to find a Profile / Actions in the path
