@@ -79,9 +79,9 @@ func (pc *PluginController) handleEvent(event *models.Event) {
 		case "create":
 			obj, _ := event.Model()
 			pp, _ := obj.(*models.PluginProvider)
-			pc.allPlugins(event.Key, "start", pp.AutoStart)
+			pc.allPlugins(event.Key, "start", pp.AutoPlugin())
 		case "delete":
-			pc.allPlugins(event.Key, "stop", false)
+			pc.allPlugins(event.Key, "stop", nil)
 		}
 	case "contents":
 		pc.lock.Lock()
@@ -102,12 +102,12 @@ func (pc *PluginController) handleEvent(event *models.Event) {
 			}
 		}
 		for _, v := range toStop {
-			pc.allPlugins(v.Name, "stop", false)
+			pc.allPlugins(v.Name, "stop", nil)
 			delete(pc.AvailableProviders, v.Name)
 		}
 		for _, v := range toStart {
 			pc.AvailableProviders[v.Name] = v
-			pc.allPlugins(v.Name, "start", v.AutoStart)
+			pc.allPlugins(v.Name, "start", v.AutoPlugin())
 		}
 	}
 }
@@ -157,10 +157,10 @@ func (pc *PluginController) RestartPlugins() {
 	return
 }
 
-func (pc *PluginController) allPlugins(provider, action string, autoStart bool) (err error) {
+func (pc *PluginController) allPlugins(provider, action string, pl *models.Plugin) (err error) {
 	// Get all the plugins that have this as provider
 	ref := &Plugin{}
-	rt := pc.Request(ref.Locks("get")...)
+	rt := pc.Request(ref.Locks("create")...)
 	rt.Do(func(d Stores) {
 		var idx *index.Index
 		idx, err = index.All([]index.Filter{index.Native()}...)(&d(ref.Prefix()).Index)
@@ -186,8 +186,7 @@ func (pc *PluginController) allPlugins(provider, action string, autoStart bool) 
 				}
 			}
 		}
-		if !found && autoStart && action == "start" {
-			pl := &models.Plugin{Name: provider, Provider: provider}
+		if !found && pl != nil && action == "start" {
 			if _, cerr := rt.Create(pl); cerr != nil {
 				err = cerr
 			}
