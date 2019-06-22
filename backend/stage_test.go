@@ -36,6 +36,13 @@ func TestStageCrud(t *testing.T) {
 		{"Create Stage with invalid models.TemplateInfo (invalid Path)", rt.Create, &models.Stage{Name: "test 3", BootEnv: "local", Templates: []models.TemplateInfo{{Name: "test 3", Path: "{{ .Env.Name }", ID: "ok"}}}, false},
 		{"Create Stage with valid models.TemplateInfo (not available}", rt.Create, &models.Stage{Name: "test 1", BootEnv: "local", Templates: []models.TemplateInfo{{Name: "unavailable", Path: "{{ .Env.Name }}", ID: "ok"}}}, true},
 		{"Create Stage with valid models.TemplateInfo (available)", rt.Create, &models.Stage{Name: "available", BootEnv: "local", Templates: []models.TemplateInfo{{Name: "ipxe", Path: "{{ .Env.Name }}", ID: "ok"}}}, true},
+
+		{"Create Stage with valid action task", rt.Create, &models.Stage{Name: "actiontask", Tasks: []string{"action:callback:callbackDo"}}, true},
+		{"Create Stage with bad action task", rt.Create, &models.Stage{Name: "badactiontask", Tasks: []string{"action:callbackDo"}}, false},
+		{"Create Stage with valid good bootenv", rt.Create, &models.Stage{Name: "goodbootenv", Tasks: []string{"bootenv:local"}}, true},
+		{"Create Stage with bad bootenv", rt.Create, &models.Stage{Name: "badbootenv", Tasks: []string{"bootenv:fred"}}, true},
+		{"Create Stage with valid good stage", rt.Create, &models.Stage{Name: "goodstage", Tasks: []string{"stage:available"}}, true},
+		{"Create Stage with bad stage", rt.Create, &models.Stage{Name: "badstage", Tasks: []string{"stage:fred"}}, true},
 	}
 
 	for _, test := range tests {
@@ -46,8 +53,8 @@ func TestStageCrud(t *testing.T) {
 	rt.Do(func(d Stores) {
 		bes := d("stages").Items()
 		if bes != nil {
-			if len(bes) != 9 {
-				t.Errorf("List function should have returned: 9, but got %d\n", len(bes))
+			if len(bes) != 14 {
+				t.Errorf("List function should have returned: 14, but got %d\n", len(bes))
 			}
 		} else {
 			t.Errorf("List function returned nil!!")
