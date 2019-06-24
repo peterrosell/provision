@@ -3,6 +3,8 @@ package index
 import (
 	"errors"
 	"fmt"
+	"log"
+	"regexp"
 	s "sort"
 
 	"github.com/digitalrebar/provision/models"
@@ -28,6 +30,8 @@ type TestMaker func(models.Model) (Test, Test)
 // from a string to the appropriate type for the index.
 type Filler func(string) (models.Model, error)
 
+type Matcher func(models.Model, *regexp.Regexp) bool
+
 // Maker is used to hold reference functions for a specific index on a
 // specific struct.  The functions are:
 //
@@ -49,9 +53,11 @@ type Maker struct {
 	keyOrder  bool
 	Unique    bool
 	Unordered bool
+	Regex     bool
 	Type      string
 	Less      Cmp       `json:"-"`
 	Eq        Cmp       `json:"-"`
+	Match     Matcher   `json:"-"`
 	Tests     TestMaker `json:"-"`
 	Fill      Filler    `json:"-"`
 }
@@ -62,7 +68,11 @@ func (m Maker) EqualItems(a, b models.Model) bool {
 	if m.Eq != nil {
 		return m.Eq(a, b)
 	}
-	return m.Less(a, b) == m.Less(b, a)
+	if m.Less != nil {
+		return m.Less(a, b) == m.Less(b, a)
+	}
+	log.Panicf("Maker %s has no equality or order testing!", m.Type)
+	return false
 }
 
 // Index declares a struct field that can be indexed for a given
@@ -104,9 +114,9 @@ func MakeKey() Maker {
 		keyOrder: true,
 		Unique:   true,
 		Type:     "string",
-		Less: func(i, j models.Model) bool {
-			return i.Key() < j.Key()
-		},
+		Less:     func(i, j models.Model) bool { return i.Key() < j.Key() },
+		Eq:       func(i, j models.Model) bool { return i.Key() == j.Key() },
+		Match:    func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(i.Key()) },
 		Tests: func(ref models.Model) (gte, gt Test) {
 			key := ref.Key()
 			return func(s models.Model) bool { return s.Key() >= key },
@@ -214,11 +224,13 @@ func MakeBaseIndexes(m models.Model) map[string]Maker {
 	}
 	if _, ok := m.(models.Bundler); ok {
 		fix := func(m models.Model) models.Bundler { return m.(models.Bundler) }
-		res["Bundle"] = Make(
-			false,
-			"string",
-			func(i, j models.Model) bool { return fix(i).GetBundle() < fix(j).GetBundle() },
-			func(ref models.Model) (gte, gt Test) {
+		res["Bundle"] = Maker{
+			Unique: false,
+			Type:   "string",
+			Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).GetBundle()) },
+			Less:   func(i, j models.Model) bool { return fix(i).GetBundle() < fix(j).GetBundle() },
+			Eq:     func(i, j models.Model) bool { return fix(i).GetBundle() == fix(j).GetBundle() },
+			Tests: func(ref models.Model) (gte, gt Test) {
 				refBundle := fix(ref).GetBundle()
 				return func(s models.Model) bool {
 						return fix(s).GetBundle() >= refBundle
@@ -227,9 +239,10 @@ func MakeBaseIndexes(m models.Model) map[string]Maker {
 						return fix(s).GetBundle() > refBundle
 					}
 			},
-			func(s string) (models.Model, error) {
+			Fill: func(s string) (models.Model, error) {
 				return FakeBundler(s), nil
-			})
+			},
+		}
 	}
 	return res
 }
@@ -638,6 +651,20 @@ func Eq(ref string) Filter {
 			return i.subset(lower, upper), nil
 		}
 		return i.selectItems(func(t models.Model) bool { return i.EqualItems(t, refTest) }), nil
+	}
+}
+
+// Re returns a filter that will keep all items that match ref as a regular expression
+func Re(ref string) Filter {
+	re, reErr := regexp.Compile(ref)
+	return func(i *Index) (*Index, error) {
+		if reErr != nil {
+			return nil, reErr
+		}
+		if i.Match == nil {
+			return nil, errors.New("cannot match via regular expression")
+		}
+		return i.selectItems(func(t models.Model) bool { return i.Match(t, re) }), nil
 	}
 }
 

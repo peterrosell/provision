@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"regexp"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
@@ -33,16 +34,16 @@ func (r *Reservation) SaveClean() store.KeySaver {
 func (r *Reservation) Indexes() map[string]index.Maker {
 	fix := AsReservation
 	res := index.MakeBaseIndexes(r)
-	res["Addr"] = index.Make(
-		false,
-		"IP Address",
-		func(i, j models.Model) bool {
+	res["Addr"] = index.Maker{
+		Unique: false,
+		Type:   "IP Address",
+		Less: func(i, j models.Model) bool {
 			n, o := big.Int{}, big.Int{}
 			n.SetBytes(fix(i).Addr.To16())
 			o.SetBytes(fix(j).Addr.To16())
 			return n.Cmp(&o) == -1
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			addr := &big.Int{}
 			addr.SetBytes(fix(ref).Addr.To16())
 			return func(s models.Model) bool {
@@ -56,7 +57,7 @@ func (r *Reservation) Indexes() map[string]index.Maker {
 					return o.Cmp(addr) == 1
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			addr := net.ParseIP(s)
 			if addr == nil {
 				return nil, fmt.Errorf("Invalid Address: %s", s)
@@ -64,12 +65,15 @@ func (r *Reservation) Indexes() map[string]index.Maker {
 			res := fix(r.New())
 			res.Addr = addr
 			return res, nil
-		})
-	res["Token"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Token < fix(j).Token },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Token"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Token < fix(j).Token },
+		Eq:     func(i, j models.Model) bool { return fix(i).Token == fix(j).Token },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Token) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			token := fix(ref).Token
 			return func(s models.Model) bool {
 					return fix(s).Token >= token
@@ -78,16 +82,19 @@ func (r *Reservation) Indexes() map[string]index.Maker {
 					return fix(s).Token > token
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			res := fix(r.New())
 			res.Token = s
 			return res, nil
-		})
-	res["Strategy"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Strategy < fix(j).Strategy },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Strategy"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Strategy < fix(j).Strategy },
+		Eq:     func(i, j models.Model) bool { return fix(i).Strategy == fix(j).Strategy },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Strategy) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			strategy := fix(ref).Strategy
 			return func(s models.Model) bool {
 					return fix(s).Strategy >= strategy
@@ -96,21 +103,22 @@ func (r *Reservation) Indexes() map[string]index.Maker {
 					return fix(s).Strategy > strategy
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			res := fix(r.New())
 			res.Strategy = s
 			return res, nil
-		})
-	res["NextServer"] = index.Make(
-		false,
-		"IP Address",
-		func(i, j models.Model) bool {
+		},
+	}
+	res["NextServer"] = index.Maker{
+		Unique: false,
+		Type:   "IP Address",
+		Less: func(i, j models.Model) bool {
 			n, o := big.Int{}, big.Int{}
 			n.SetBytes(fix(i).NextServer.To16())
 			o.SetBytes(fix(j).NextServer.To16())
 			return n.Cmp(&o) == -1
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			addr := &big.Int{}
 			addr.SetBytes(fix(ref).NextServer.To16())
 			return func(s models.Model) bool {
@@ -124,7 +132,7 @@ func (r *Reservation) Indexes() map[string]index.Maker {
 					return o.Cmp(addr) == 1
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			addr := net.ParseIP(s)
 			if addr == nil {
 				return nil, fmt.Errorf("Invalid Address: %s", s)
@@ -132,7 +140,8 @@ func (r *Reservation) Indexes() map[string]index.Maker {
 			res := fix(r.New())
 			res.NextServer = addr
 			return res, nil
-		})
+		},
+	}
 	return res
 }
 

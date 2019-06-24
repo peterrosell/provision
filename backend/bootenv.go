@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"text/template"
@@ -57,13 +58,13 @@ func (b *BootEnv) SaveClean() store.KeySaver {
 func (b *BootEnv) Indexes() map[string]index.Maker {
 	fix := AsBootEnv
 	res := index.MakeBaseIndexes(b)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).Name < fix(j).Name
-		},
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			name := fix(ref).Name
 			return func(s models.Model) bool {
 					return fix(s).Name >= name
@@ -72,18 +73,19 @@ func (b *BootEnv) Indexes() map[string]index.Maker {
 					return fix(s).Name > name
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			res := fix(b.New())
 			res.Name = s
 			return res, nil
-		})
-	res["OsName"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).OS.Name < fix(j).OS.Name
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+	}
+	res["OsName"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).OS.Name < fix(j).OS.Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).OS.Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).OS.Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			name := fix(ref).OS.Name
 			return func(s models.Model) bool {
 					return fix(s).OS.Name >= name
@@ -92,11 +94,12 @@ func (b *BootEnv) Indexes() map[string]index.Maker {
 					return fix(s).OS.Name > name
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			res := fix(b.New())
 			res.OS.Name = s
 			return res, nil
-		})
+		},
+	}
 	res["OnlyUnknown"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {

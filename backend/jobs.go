@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -103,11 +104,12 @@ func (j *Job) UUID() string {
 func (j *Job) Indexes() map[string]index.Maker {
 	fix := AsJob
 	res := index.MakeBaseIndexes(j)
-	res["Uuid"] = index.Make(
-		true,
-		"UUID string",
-		func(i, j models.Model) bool { return fix(i).Uuid.String() < fix(j).Uuid.String() },
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Uuid"] = index.Maker{
+		Unique: true,
+		Type:   "UUID string",
+		Less:   func(i, j models.Model) bool { return fix(i).Uuid.String() < fix(j).Uuid.String() },
+		Eq:     func(i, j models.Model) bool { return fix(i).Uuid.String() == fix(j).Uuid.String() },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refUuid := fix(ref).Uuid.String()
 			return func(s models.Model) bool {
 					return fix(s).Uuid.String() >= refUuid
@@ -116,7 +118,7 @@ func (j *Job) Indexes() map[string]index.Maker {
 					return fix(s).Uuid.String() > refUuid
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			id := uuid.Parse(s)
 			if id == nil {
 				return nil, fmt.Errorf("Invalid UUID: %s", s)
@@ -124,12 +126,14 @@ func (j *Job) Indexes() map[string]index.Maker {
 			job := fix(j.New())
 			job.Uuid = id
 			return job, nil
-		})
-	res["Previous"] = index.Make(
-		false,
-		"UUID string",
-		func(i, j models.Model) bool { return fix(i).Previous.String() < fix(j).Previous.String() },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Previous"] = index.Maker{
+		Unique: false,
+		Type:   "UUID string",
+		Less:   func(i, j models.Model) bool { return fix(i).Previous.String() < fix(j).Previous.String() },
+		Eq:     func(i, j models.Model) bool { return fix(i).Previous.String() == fix(j).Previous.String() },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refUuid := fix(ref).Previous.String()
 			return func(s models.Model) bool {
 					return fix(s).Previous.String() >= refUuid
@@ -138,7 +142,7 @@ func (j *Job) Indexes() map[string]index.Maker {
 					return fix(s).Previous.String() > refUuid
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			id := uuid.Parse(s)
 			if id == nil {
 				return nil, fmt.Errorf("Invalid UUID: %s", s)
@@ -146,12 +150,15 @@ func (j *Job) Indexes() map[string]index.Maker {
 			job := fix(j.New())
 			job.Previous = id
 			return job, nil
-		})
-	res["Stage"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Stage < fix(j).Stage },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Stage"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Stage < fix(j).Stage },
+		Eq:     func(i, j models.Model) bool { return fix(i).Stage == fix(j).Stage },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(j).Stage) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refStage := fix(ref).Stage
 			return func(s models.Model) bool {
 					return fix(s).Stage >= refStage
@@ -160,16 +167,19 @@ func (j *Job) Indexes() map[string]index.Maker {
 					return fix(s).Stage > refStage
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			job := fix(j.New())
 			job.Stage = s
 			return job, nil
-		})
-	res["Workflow"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Workflow < fix(j).Workflow },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Workflow"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Workflow < fix(j).Workflow },
+		Eq:     func(i, j models.Model) bool { return fix(i).Workflow == fix(j).Workflow },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(j).Workflow) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refWorkflow := fix(ref).Workflow
 			return func(s models.Model) bool {
 					return fix(s).Workflow >= refWorkflow
@@ -178,16 +188,19 @@ func (j *Job) Indexes() map[string]index.Maker {
 					return fix(s).Workflow > refWorkflow
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			job := fix(j.New())
 			job.Workflow = s
 			return job, nil
-		})
-	res["BootEnv"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).BootEnv < fix(j).BootEnv },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["BootEnv"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).BootEnv < fix(j).BootEnv },
+		Eq:     func(i, j models.Model) bool { return fix(i).BootEnv == fix(j).BootEnv },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(j).BootEnv) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refBootEnv := fix(ref).BootEnv
 			return func(s models.Model) bool {
 					return fix(s).BootEnv >= refBootEnv
@@ -196,16 +209,19 @@ func (j *Job) Indexes() map[string]index.Maker {
 					return fix(s).BootEnv > refBootEnv
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			job := fix(j.New())
 			job.BootEnv = s
 			return job, nil
-		})
-	res["Task"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Task < fix(j).Task },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Task"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Task < fix(j).Task },
+		Eq:     func(i, j models.Model) bool { return fix(i).Task == fix(j).Task },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(j).Task) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refTask := fix(ref).Task
 			return func(s models.Model) bool {
 					return fix(s).Task >= refTask
@@ -214,16 +230,19 @@ func (j *Job) Indexes() map[string]index.Maker {
 					return fix(s).Task > refTask
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			job := fix(j.New())
 			job.Task = s
 			return job, nil
-		})
-	res["State"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).State < fix(j).State },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["State"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).State < fix(j).State },
+		Eq:     func(i, j models.Model) bool { return fix(i).State == fix(j).State },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(j).State) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refState := fix(ref).State
 			return func(s models.Model) bool {
 					return fix(s).State >= refState
@@ -232,16 +251,18 @@ func (j *Job) Indexes() map[string]index.Maker {
 					return fix(s).State > refState
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			job := fix(j.New())
 			job.State = s
 			return job, nil
-		})
-	res["Machine"] = index.Make(
-		true,
-		"UUID string",
-		func(i, j models.Model) bool { return fix(i).Machine.String() < fix(j).Machine.String() },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Machine"] = index.Maker{
+		Unique: true,
+		Type:   "UUID string",
+		Less:   func(i, j models.Model) bool { return fix(i).Machine.String() < fix(j).Machine.String() },
+		Eq:     func(i, j models.Model) bool { return fix(i).Machine.String() == fix(j).Machine.String() },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refMachine := fix(ref).Machine.String()
 			return func(s models.Model) bool {
 					return fix(s).Machine.String() >= refMachine
@@ -250,7 +271,7 @@ func (j *Job) Indexes() map[string]index.Maker {
 					return fix(s).Machine.String() > refMachine
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			id := uuid.Parse(s)
 			if id == nil {
 				return nil, fmt.Errorf("Invalid UUID: %s", s)
@@ -258,7 +279,8 @@ func (j *Job) Indexes() map[string]index.Maker {
 			job := fix(j.New())
 			job.Machine = id
 			return job, nil
-		})
+		},
+	}
 	res["Archived"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {

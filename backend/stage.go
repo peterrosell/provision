@@ -3,6 +3,7 @@ package backend
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"text/template"
@@ -58,13 +59,13 @@ func (s *Stage) HasProfile(name string) bool {
 func (s *Stage) Indexes() map[string]index.Maker {
 	fix := AsStage
 	res := index.MakeBaseIndexes(s)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).Name < fix(j).Name
-		},
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			name := fix(ref).Name
 			return func(ss models.Model) bool {
 					return fix(ss).Name >= name
@@ -73,18 +74,19 @@ func (s *Stage) Indexes() map[string]index.Maker {
 					return fix(ss).Name > name
 				}
 		},
-		func(ss string) (models.Model, error) {
+		Fill: func(ss string) (models.Model, error) {
 			res := fix(s.New())
 			res.Name = ss
 			return res, nil
-		})
-	res["BootEnv"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).BootEnv < fix(j).BootEnv
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+	}
+	res["BootEnv"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).BootEnv < fix(j).BootEnv },
+		Eq:     func(i, j models.Model) bool { return fix(i).BootEnv == fix(j).BootEnv },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).BootEnv) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			bootenv := fix(ref).BootEnv
 			return func(ss models.Model) bool {
 					return fix(ss).BootEnv >= bootenv
@@ -93,11 +95,12 @@ func (s *Stage) Indexes() map[string]index.Maker {
 					return fix(ss).BootEnv > bootenv
 				}
 		},
-		func(ss string) (models.Model, error) {
+		Fill: func(ss string) (models.Model, error) {
 			res := fix(s.New())
 			res.BootEnv = ss
 			return res, nil
-		})
+		},
+	}
 	res["Reboot"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
@@ -112,6 +115,35 @@ func (s *Stage) Indexes() map[string]index.Maker {
 				res.Reboot = false
 			default:
 				return nil, errors.New("Reboot must be true or false")
+			}
+			return res, nil
+		})
+	res["Tasks"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Tasks
+			p2 := fix(j).Tasks
+			probes := map[string]bool{}
+			for _, k := range p2 {
+				probes[k] = false
+			}
+			for _, k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(ss string) (models.Model, error) {
+			res := fix(s.New())
+			res.Tasks = strings.Split(ss, ",")
+			for i := range res.Tasks {
+				res.Tasks[i] = strings.TrimSpace(res.Tasks[i])
 			}
 			return res, nil
 		})
@@ -198,15 +230,15 @@ func (s *Stage) ParameterMaker(rt *RequestTracker, parameter string) (index.Make
 	}
 	param := AsParam(pobj)
 
-	return index.Make(
-		false,
-		"parameter",
-		func(i, j models.Model) bool {
+	return index.Maker{
+		Unique: false,
+		Type:   "parameter",
+		Less: func(i, j models.Model) bool {
 			ip, _ := rt.GetParam(fix(i), parameter, true, false)
 			jp, _ := rt.GetParam(fix(j), parameter, true, false)
 			return GeneralLessThan(ip, jp)
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			jp, _ := rt.GetParam(fix(ref), parameter, true, false)
 			return func(si models.Model) bool {
 					ip, _ := rt.GetParam(fix(si), parameter, true, false)
@@ -217,7 +249,7 @@ func (s *Stage) ParameterMaker(rt *RequestTracker, parameter string) (index.Make
 					return GeneralGreaterThan(ip, jp)
 				}
 		},
-		func(str string) (models.Model, error) {
+		Fill: func(str string) (models.Model, error) {
 			obj, err := GeneralValidateParam(param, str)
 			if err != nil {
 				return nil, err
@@ -226,7 +258,8 @@ func (s *Stage) ParameterMaker(rt *RequestTracker, parameter string) (index.Make
 			res.Params = map[string]interface{}{}
 			res.Params[parameter] = obj
 			return res, nil
-		}), nil
+		},
+	}, nil
 
 }
 

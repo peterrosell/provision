@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/digitalrebar/provision/backend/index"
@@ -68,13 +69,13 @@ func (t *Tenant) New() store.KeySaver {
 func (t *Tenant) Indexes() map[string]index.Maker {
 	fix := AsTenant
 	res := index.MakeBaseIndexes(t)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).Name < fix(j).Name
-		},
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			name := fix(ref).Name
 			return func(s models.Model) bool {
 					return fix(s).Name >= name
@@ -83,11 +84,12 @@ func (t *Tenant) Indexes() map[string]index.Maker {
 					return fix(s).Name > name
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			res := fix(t.New())
 			res.Name = s
 			return res, nil
-		})
+		},
+	}
 	return res
 }
 

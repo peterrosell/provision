@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"regexp"
+
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/store"
@@ -68,13 +70,14 @@ func (r *Role) New() store.KeySaver {
 func (r *Role) Indexes() map[string]index.Maker {
 	fix := AsRole
 	res := index.MakeBaseIndexes(r)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).Name < fix(j).Name
-		},
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			name := fix(ref).Name
 			return func(s models.Model) bool {
 					return fix(s).Name >= name
@@ -83,11 +86,12 @@ func (r *Role) Indexes() map[string]index.Maker {
 					return fix(s).Name > name
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			res := fix(r.New())
 			res.Name = s
 			return res, nil
-		})
+		},
+	}
 	return res
 }
 

@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -838,6 +840,8 @@ func convertValueToFilter(v string) (index.Filter, error) {
 	switch args[0] {
 	case "Eq":
 		return index.Eq(subargs), nil
+	case "Re":
+		return index.Re(subargs), nil
 	case "Lt":
 		return index.Lt(subargs), nil
 	case "Lte":
@@ -906,10 +910,10 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 				// Did we find an meta-based object?
 				if _, found := ref.(models.MetaHaver); found && strings.HasPrefix(k, "Meta.") {
 					parameter := strings.TrimPrefix(k, "Meta.")
-					maker = index.Make(
-						false,
-						"meta",
-						func(i, j models.Model) bool {
+					maker = index.Maker{
+						Unique: false,
+						Type:   "meta",
+						Less: func(i, j models.Model) bool {
 							var ip, jp interface{}
 							if im, iok := i.(models.MetaHaver); iok {
 								m := im.GetMeta()
@@ -921,7 +925,30 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 							}
 							return backend.GeneralLessThan(ip, jp)
 						},
-						func(ref models.Model) (gte, gt index.Test) {
+						Eq: func(i, j models.Model) bool {
+							var ip, jp interface{}
+							if im, iok := i.(models.MetaHaver); iok {
+								m := im.GetMeta()
+								ip, _ = m[parameter]
+							}
+							if jm, jok := j.(models.MetaHaver); jok {
+								m := jm.GetMeta()
+								jp, _ = m[parameter]
+							}
+							return reflect.DeepEqual(ip, jp)
+						},
+						Match: func(i models.Model, re *regexp.Regexp) bool {
+							obj, ok := i.(models.MetaHaver)
+							if !ok {
+								return false
+							}
+							v, ok := obj.GetMeta()[parameter]
+							if !ok {
+								return false
+							}
+							return re.MatchString(v)
+						},
+						Tests: func(ref models.Model) (gte, gt index.Test) {
 							var jp interface{}
 							if jm, jok := ref.(models.MetaHaver); jok {
 								m := jm.GetMeta()
@@ -944,7 +971,7 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 									return backend.GeneralGreaterThan(ip, jp)
 								}
 						},
-						func(s string) (models.Model, error) {
+						Fill: func(s string) (models.Model, error) {
 							res, _ := models.New(ref.Prefix())
 							if jm, jok := res.(models.MetaHaver); jok {
 								m := models.Meta{}
@@ -952,7 +979,8 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 								jm.SetMeta(m)
 							}
 							return res, nil
-						})
+						},
+					}
 					ok = true
 				}
 			}
