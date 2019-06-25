@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"regexp"
 	"strings"
 	"sync"
 	"text/template"
@@ -103,11 +104,13 @@ func (t *Task) New() store.KeySaver {
 func (t *Task) Indexes() map[string]index.Maker {
 	fix := AsTask
 	res := index.MakeBaseIndexes(t)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refName := fix(ref).Name
 			return func(s models.Model) bool {
 					return fix(s).Name >= refName
@@ -116,11 +119,12 @@ func (t *Task) Indexes() map[string]index.Maker {
 					return fix(s).Name > refName
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			task := fix(t.New())
 			task.Name = s
 			return task, nil
-		})
+		},
+	}
 	return res
 }
 

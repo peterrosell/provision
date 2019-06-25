@@ -55,6 +55,7 @@ func indexesFor(i Indexer) map[string]index.Maker {
 	res := map[string]index.Maker{}
 	for k, v := range i.Indexes() {
 		v.Unordered = !v.Sortable()
+		v.Regex = v.Match != nil
 		res[k] = v
 	}
 	return res
@@ -162,6 +163,7 @@ func (f *Frontend) InitIndexApi() {
 			staticIndexes := idxer.Indexes()
 			if staticIndex, ok := staticIndexes[c.Param("param")]; ok {
 				staticIndex.Unordered = !staticIndex.Sortable()
+				staticIndex.Regex = staticIndex.Match != nil
 				c.JSON(http.StatusOK, staticIndex)
 			}
 			dpm, ok := bm.(dynParameter)
@@ -184,6 +186,7 @@ func (f *Frontend) InitIndexApi() {
 				return
 			}
 			dynIndex.Unordered = !dynIndex.Sortable()
+			dynIndex.Regex = dynIndex.Match != nil
 			c.JSON(http.StatusOK, dynIndex)
 		})
 }

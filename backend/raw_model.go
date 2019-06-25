@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
@@ -73,11 +74,13 @@ func (r *RawModel) Indexes() map[string]index.Maker {
 
 		switch t {
 		case "string":
-			ii := index.Make(
-				unique,
-				"string",
-				func(i, j models.Model) bool { return fix(i).getStringValue(sfield) < fix(j).getStringValue(sfield) },
-				func(ref models.Model) (gte, gt index.Test) {
+			ii := index.Maker{
+				Unique: unique,
+				Type:   "string",
+				Less:   func(i, j models.Model) bool { return fix(i).getStringValue(sfield) < fix(j).getStringValue(sfield) },
+				Eq:     func(i, j models.Model) bool { return fix(i).getStringValue(sfield) == fix(j).getStringValue(sfield) },
+				Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).getStringValue(sfield)) },
+				Tests: func(ref models.Model) (gte, gt index.Test) {
 					refField := fix(ref).getStringValue(sfield)
 					return func(s models.Model) bool {
 							return fix(s).getStringValue(sfield) >= refField
@@ -86,11 +89,12 @@ func (r *RawModel) Indexes() map[string]index.Maker {
 							return fix(s).getStringValue(sfield) > refField
 						}
 				},
-				func(s string) (models.Model, error) {
+				Fill: func(s string) (models.Model, error) {
 					rm := fix(r.New())
 					(*rm.RawModel)[sfield] = s
 					return rm, nil
-				})
+				},
+			}
 			iii = &ii
 		case "boolean":
 			ii := index.MakeUnordered(

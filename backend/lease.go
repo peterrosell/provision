@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"regexp"
 	"time"
 
 	"github.com/digitalrebar/provision/backend/index"
@@ -31,16 +32,16 @@ func (l *Lease) SaveClean() store.KeySaver {
 func (l *Lease) Indexes() map[string]index.Maker {
 	fix := AsLease
 	res := index.MakeBaseIndexes(l)
-	res["Addr"] = index.Make(
-		false,
-		"IP Address",
-		func(i, j models.Model) bool {
+	res["Addr"] = index.Maker{
+		Unique: false,
+		Type:   "IP Address",
+		Less: func(i, j models.Model) bool {
 			n, o := big.Int{}, big.Int{}
 			n.SetBytes(fix(i).Addr.To16())
 			o.SetBytes(fix(j).Addr.To16())
 			return n.Cmp(&o) == -1
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			addr := &big.Int{}
 			addr.SetBytes(fix(ref).Addr.To16())
 			return func(s models.Model) bool {
@@ -54,7 +55,7 @@ func (l *Lease) Indexes() map[string]index.Maker {
 					return o.Cmp(addr) == 1
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			ip := net.ParseIP(s)
 			if ip == nil {
 				return nil, errors.New("Addr must be an IP address")
@@ -62,12 +63,15 @@ func (l *Lease) Indexes() map[string]index.Maker {
 			lease := fix(l.New())
 			lease.Addr = ip
 			return lease, nil
-		})
-	res["Token"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Token < fix(j).Token },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Token"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Token < fix(j).Token },
+		Eq:     func(i, j models.Model) bool { return fix(i).Token == fix(j).Token },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Token) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			token := fix(ref).Token
 			return func(s models.Model) bool {
 					return fix(s).Token >= token
@@ -76,16 +80,19 @@ func (l *Lease) Indexes() map[string]index.Maker {
 					return fix(s).Token > token
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			lease := fix(l.New())
 			lease.Token = s
 			return lease, nil
-		})
-	res["Strategy"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Strategy < fix(j).Strategy },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Strategy"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Strategy < fix(j).Strategy },
+		Eq:     func(i, j models.Model) bool { return fix(i).Strategy == fix(j).Strategy },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Strategy) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			strategy := fix(ref).Strategy
 			return func(s models.Model) bool {
 					return fix(s).Strategy >= strategy
@@ -94,16 +101,19 @@ func (l *Lease) Indexes() map[string]index.Maker {
 					return fix(s).Strategy > strategy
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			lease := fix(l.New())
 			lease.Strategy = s
 			return lease, nil
-		})
-	res["State"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).State < fix(j).State },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["State"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).State < fix(j).State },
+		Eq:     func(i, j models.Model) bool { return fix(i).State == fix(j).State },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).State) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			strategy := fix(ref).State
 			return func(s models.Model) bool {
 					return fix(s).State >= strategy
@@ -112,16 +122,17 @@ func (l *Lease) Indexes() map[string]index.Maker {
 					return fix(s).State > strategy
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			lease := fix(l.New())
 			lease.State = s
 			return lease, nil
-		})
-	res["ExpireTime"] = index.Make(
-		false,
-		"Date/Time string",
-		func(i, j models.Model) bool { return fix(i).ExpireTime.Before(fix(j).ExpireTime) },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["ExpireTime"] = index.Maker{
+		Unique: false,
+		Type:   "Date/Time string",
+		Less:   func(i, j models.Model) bool { return fix(i).ExpireTime.Before(fix(j).ExpireTime) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			expireTime := fix(ref).ExpireTime
 			return func(s models.Model) bool {
 					ttime := fix(s).ExpireTime
@@ -131,7 +142,7 @@ func (l *Lease) Indexes() map[string]index.Maker {
 					return fix(s).ExpireTime.After(expireTime)
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			t := &time.Time{}
 			if err := t.UnmarshalText([]byte(s)); err != nil {
 				return nil, fmt.Errorf("ExpireTime is not valid: %v", err)
@@ -139,7 +150,8 @@ func (l *Lease) Indexes() map[string]index.Maker {
 			lease := fix(l.New())
 			lease.ExpireTime = *t
 			return lease, nil
-		})
+		},
+	}
 	return res
 }
 

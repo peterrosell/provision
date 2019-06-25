@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/digitalrebar/provision/backend/index"
@@ -62,11 +63,12 @@ func (n *Machine) HasTask(s string) bool {
 func (n *Machine) Indexes() map[string]index.Maker {
 	fix := AsMachine
 	res := index.MakeBaseIndexes(n)
-	res["Uuid"] = index.Make(
-		true,
-		"UUID string",
-		func(i, j models.Model) bool { return fix(i).Uuid.String() < fix(j).Uuid.String() },
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Uuid"] = index.Maker{
+		Unique: true,
+		Type:   "UUID string",
+		Less:   func(i, j models.Model) bool { return fix(i).Uuid.String() < fix(j).Uuid.String() },
+		Eq:     func(i, j models.Model) bool { return fix(i).Uuid.String() == fix(j).Uuid.String() },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refUuid := fix(ref).Uuid.String()
 			return func(s models.Model) bool {
 					return fix(s).Uuid.String() >= refUuid
@@ -75,7 +77,7 @@ func (n *Machine) Indexes() map[string]index.Maker {
 					return fix(s).Uuid.String() > refUuid
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			id := uuid.Parse(s)
 			if id == nil {
 				return nil, fmt.Errorf("Invalid UUID: %s", s)
@@ -83,12 +85,15 @@ func (n *Machine) Indexes() map[string]index.Maker {
 			m := fix(n.New())
 			m.Uuid = id
 			return m, nil
-		})
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refName := fix(ref).Name
 			return func(s models.Model) bool {
 					return fix(s).Name >= refName
@@ -97,16 +102,19 @@ func (n *Machine) Indexes() map[string]index.Maker {
 					return fix(s).Name > refName
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			m := fix(n.New())
 			m.Name = s
 			return m, nil
-		})
-	res["Stage"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Stage < fix(j).Stage },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Stage"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Stage < fix(j).Stage },
+		Eq:     func(i, j models.Model) bool { return fix(i).Stage == fix(j).Stage },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Stage) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refStage := fix(ref).Stage
 			return func(s models.Model) bool {
 					return fix(s).Stage >= refStage
@@ -115,16 +123,19 @@ func (n *Machine) Indexes() map[string]index.Maker {
 					return fix(s).Stage > refStage
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			m := fix(n.New())
 			m.Stage = s
 			return m, nil
-		})
-	res["Workflow"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Workflow < fix(j).Workflow },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Workflow"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Workflow < fix(j).Workflow },
+		Eq:     func(i, j models.Model) bool { return fix(i).Workflow == fix(j).Workflow },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Workflow) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refWorkflow := fix(ref).Workflow
 			return func(s models.Model) bool {
 					return fix(s).Workflow >= refWorkflow
@@ -133,16 +144,19 @@ func (n *Machine) Indexes() map[string]index.Maker {
 					return fix(s).Workflow > refWorkflow
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			m := fix(n.New())
 			m.Workflow = s
 			return m, nil
-		})
-	res["BootEnv"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).BootEnv < fix(j).BootEnv },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["BootEnv"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).BootEnv < fix(j).BootEnv },
+		Eq:     func(i, j models.Model) bool { return fix(i).BootEnv == fix(j).BootEnv },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).BootEnv) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refBootEnv := fix(ref).BootEnv
 			return func(s models.Model) bool {
 					return fix(s).BootEnv >= refBootEnv
@@ -151,21 +165,22 @@ func (n *Machine) Indexes() map[string]index.Maker {
 					return fix(s).BootEnv > refBootEnv
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			m := fix(n.New())
 			m.BootEnv = s
 			return m, nil
-		})
-	res["Address"] = index.Make(
-		false,
-		"IP Address",
-		func(i, j models.Model) bool {
+		},
+	}
+	res["Address"] = index.Maker{
+		Unique: false,
+		Type:   "IP Address",
+		Less: func(i, j models.Model) bool {
 			n, o := big.Int{}, big.Int{}
 			n.SetBytes(fix(i).Address.To16())
 			o.SetBytes(fix(j).Address.To16())
 			return n.Cmp(&o) == -1
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			addr := &big.Int{}
 			addr.SetBytes(fix(ref).Address.To16())
 			return func(s models.Model) bool {
@@ -179,7 +194,7 @@ func (n *Machine) Indexes() map[string]index.Maker {
 					return o.Cmp(addr) == 1
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			addr := net.ParseIP(s)
 			if addr == nil {
 				return nil, fmt.Errorf("Invalid address: %s", s)
@@ -187,7 +202,8 @@ func (n *Machine) Indexes() map[string]index.Maker {
 			m := fix(n.New())
 			m.Address = addr
 			return m, nil
-		})
+		},
+	}
 	res["Runnable"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
@@ -275,15 +291,15 @@ func (n *Machine) ParameterMaker(rt *RequestTracker, parameter string) (index.Ma
 	}
 	param := AsParam(pobj)
 
-	return index.Make(
-		false,
-		"parameter",
-		func(i, j models.Model) bool {
+	return index.Maker{
+		Unique: false,
+		Type:   "parameter",
+		Less: func(i, j models.Model) bool {
 			ip, _ := rt.GetParam(fix(i), parameter, true, false)
 			jp, _ := rt.GetParam(fix(j), parameter, true, false)
 			return GeneralLessThan(ip, jp)
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			jp, _ := rt.GetParam(fix(ref), parameter, true, false)
 			return func(s models.Model) bool {
 					ip, _ := rt.GetParam(fix(s), parameter, true, false)
@@ -294,7 +310,7 @@ func (n *Machine) ParameterMaker(rt *RequestTracker, parameter string) (index.Ma
 					return GeneralGreaterThan(ip, jp)
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			obj, err := GeneralValidateParam(param, s)
 			if err != nil {
 				return nil, err
@@ -303,7 +319,8 @@ func (n *Machine) ParameterMaker(rt *RequestTracker, parameter string) (index.Ma
 			res.Params = map[string]interface{}{}
 			res.Params[parameter] = obj
 			return res, nil
-		}), nil
+		},
+	}, nil
 
 }
 
