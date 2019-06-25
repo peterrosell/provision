@@ -15,7 +15,7 @@ import (
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 	"github.com/gofunky/semver"
 )
 
@@ -314,9 +314,6 @@ type DataStack struct {
 func CleanUpStore(st store.Store) error {
 	st.Close()
 	switch st.Type() {
-	case "bolt":
-		fst, _ := st.(*store.Bolt)
-		return os.Remove(fst.Path)
 	case "file":
 		fst, _ := st.(*store.File)
 		return os.Remove(fst.Path)

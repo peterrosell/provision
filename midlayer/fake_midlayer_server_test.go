@@ -10,7 +10,7 @@ import (
 	"github.com/digitalrebar/pinger"
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 var tmpDir string

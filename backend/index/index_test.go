@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 type testThing int64

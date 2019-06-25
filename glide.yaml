@@ -6,11 +6,6 @@ import:
 - package: github.com/gin-contrib/location
 - package: github.com/gin-contrib/gzip
 - package: github.com/gin-contrib/cors
-- package: gopkg.in/mgo.v2
-  version: v2
-  repo: https://github.com/go-mgo/mgo
-  subpackages:
-  - bson
 - package: gopkg.in/yaml.v2
   version: v2
   repo: https://github.com/go-yaml/yaml
@@ -18,11 +13,7 @@ import:
 - package: github.com/VictorLowther/jsonpatch2
 - package: github.com/ghodss/yaml
 - package: github.com/digitalrebar/logger
-- package: github.com/digitalrebar/store
 - package: github.com/digitalrebar/pinger
-- package: github.com/hashicorp/consul
-  subpackages:
-  - api
 - package: github.com/spf13/cobra
   subpackages:
   - doc

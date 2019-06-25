@@ -17,7 +17,7 @@ import (
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
 	"github.com/digitalrebar/provision/utils"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 	"github.com/galthaus/gzip"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/location"

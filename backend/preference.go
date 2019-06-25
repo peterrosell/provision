@@ -2,7 +2,7 @@ package backend
 
 import (
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 // Pref tracks a global DigitalRebar Provision preference -- things like the
