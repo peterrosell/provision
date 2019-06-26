@@ -145,8 +145,7 @@ func (f *Frontend) FileCommonFuncs(base string) (func(*gin.Context), func(*gin.C
 					return
 				}
 			case `multipart/form-data`:
-				header, headErr := c.FormFile("file")
-				if headErr != nil {
+				if _, headErr := c.FormFile("file"); headErr != nil {
 					err.Code = http.StatusBadRequest
 					err.AddError(headErr)
 					err.Errorf("Cannot find multipart file")
