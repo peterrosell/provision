@@ -18,8 +18,8 @@ import (
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/provision/utils"
 	"github.com/digitalrebar/provision/store"
+	"github.com/digitalrebar/provision/utils"
 	"github.com/galthaus/gzip"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/location"
@@ -390,7 +390,7 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusForbidden, &models.Error{
 					Code:     http.StatusForbidden,
 					Model:    `system`,
-					Messages: []string{"Invalid Token"},
+					Messages: []string{fmt.Sprintf("Invalid Token :%v", err), hdrParts[1]},
 				})
 				return
 			}
