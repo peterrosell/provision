@@ -1,21 +1,10 @@
 package frontend
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
-	"os"
-	"os/exec"
-	"path"
-	"strings"
-
 	"github.com/digitalrebar/provision/models"
-	"github.com/gin-gonic/gin"
 )
 
+// FilePaths is a list of files
 type FilePaths []string
 
 // FilesResponse returned on a successful GET of files
@@ -67,6 +56,8 @@ type FileData struct {
 }
 
 func (f *Frontend) InitFileApi() {
+	list, get, head, post, delete := f.FileCommonFuncs("files")
+
 	// swagger:route GET /files Files listFiles
 	//
 	// Lists files in files directory or subdirectory per query parameter
@@ -79,32 +70,7 @@ func (f *Frontend) InitFileApi() {
 	//       401: NoContentResponse
 	//       403: NoContentResponse
 	//       404: ErrorResponse
-	f.ApiGroup.GET("/files",
-		func(c *gin.Context) {
-			pathPart, _ := c.GetQuery("path")
-			if pathPart == "" {
-				pathPart = "/"
-			}
-			if !f.assureSimpleAuth(c, f.rt(c), "files", "list", pathPart) {
-				return
-			}
-			ents, err := ioutil.ReadDir(path.Join(f.FileRoot, "files", path.Clean(pathPart)))
-			if err != nil {
-				c.JSON(http.StatusNotFound,
-					models.NewError("API ERROR", http.StatusNotFound,
-						fmt.Sprintf("list: error listing files: %v", err)))
-				return
-			}
-			res := make(FilePaths, 0, 0)
-			for _, ent := range ents {
-				if ent.Mode().IsRegular() {
-					res = append(res, ent.Name())
-				} else if ent.Mode().IsDir() {
-					res = append(res, ent.Name()+"/")
-				}
-			}
-			c.JSON(http.StatusOK, res)
-		})
+	f.ApiGroup.GET("/files", list)
 
 	// swagger:route GET /files/{path} Files getFile
 	//
@@ -121,26 +87,7 @@ func (f *Frontend) InitFileApi() {
 	//       401: NoContentResponse
 	//       403: NoContentResponse
 	//       404: ErrorResponse
-	f.ApiGroup.GET("/files/*path",
-		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, f.rt(c), "files", "get", c.Param(`path`)) {
-				return
-			}
-			fileName := path.Join(f.FileRoot, `files`, path.Clean(c.Param(`path`)))
-			if st, err := os.Stat(fileName); err != nil || !st.Mode().IsRegular() {
-				res := &models.Error{
-					Code:  http.StatusNotFound,
-					Key:   c.Param(`path`),
-					Model: "files",
-					Type:  c.Request.Method,
-				}
-				res.Errorf("Not a regular file")
-				c.JSON(res.Code, res)
-				return
-			}
-			c.Writer.Header().Set("Content-Type", "application/octet-stream")
-			c.File(fileName)
-		})
+	f.ApiGroup.GET("/files/*path", get)
 
 	// swagger:route HEAD /files/{path} Files headFile
 	//
@@ -153,53 +100,7 @@ func (f *Frontend) InitFileApi() {
 	//       401: NoContentResponse
 	//       403: NoContentResponse
 	//       404: NoContentResponse
-	f.ApiGroup.HEAD("/files/*path",
-		func(c *gin.Context) {
-			if !f.assureSimpleAuth(c, f.rt(c), "files", "get", c.Param(`path`)) {
-				return
-			}
-			fileName := path.Join(f.FileRoot, `files`, path.Clean(c.Param(`path`)))
-			if st, err := os.Stat(fileName); err != nil || !st.Mode().IsRegular() {
-				res := &models.Error{
-					Code:  http.StatusNotFound,
-					Key:   c.Param(`path`),
-					Model: "files",
-					Type:  c.Request.Method,
-				}
-				res.Errorf("Not a regular file")
-				c.JSON(res.Code, res)
-				return
-			}
-
-			hasher := sha256.New()
-			f, err := os.Open(fileName)
-			if err != nil {
-				res := &models.Error{
-					Code:  http.StatusInternalServerError,
-					Key:   c.Param(`path`),
-					Model: "files",
-					Type:  c.Request.Method,
-				}
-				res.Errorf("Failed to open file: %s", err)
-				c.JSON(res.Code, res)
-				return
-			}
-			defer f.Close()
-			if _, err := io.Copy(hasher, f); err != nil {
-				res := &models.Error{
-					Code:  http.StatusInternalServerError,
-					Key:   c.Param(`path`),
-					Model: "files",
-					Type:  c.Request.Method,
-				}
-				res.Errorf("Failed to sum file: %s", err)
-				c.JSON(res.Code, res)
-				return
-			}
-
-			c.Header("X-DRP-SHA256SUM", hex.EncodeToString(hasher.Sum(nil)))
-			c.Status(http.StatusOK)
-		})
+	f.ApiGroup.HEAD("/files/*path", head)
 
 	// swagger:route POST /files/{path} Files uploadFile
 	//
@@ -223,137 +124,7 @@ func (f *Frontend) InitFileApi() {
 	//       409: ErrorResponse
 	//       415: ErrorResponse
 	//       507: ErrorResponse
-	f.ApiGroup.POST("/files/*path",
-		func(c *gin.Context) {
-			err := &models.Error{
-				Model: "files",
-				Key:   c.Param(`path`),
-				Type:  c.Request.Method,
-			}
-			name := c.Param(`path`)
-			if !f.assureSimpleAuth(c, f.rt(c), "files", "post", name) {
-				return
-			}
-			var copied int64
-			ctype := c.Request.Header.Get(`Content-Type`)
-			switch strings.Split(ctype, "; ")[0] {
-			case `application/octet-stream`:
-				if c.Request.Body == nil {
-					err.Code = http.StatusBadRequest
-					err.Errorf("Missing upload body")
-					c.JSON(err.Code, err)
-					return
-				}
-			case `multipart/form-data`:
-				header, headErr := c.FormFile("file")
-				if headErr != nil {
-					err.Code = http.StatusBadRequest
-					err.AddError(headErr)
-					err.Errorf("Cannot find multipart file")
-					c.JSON(err.Code, err)
-					return
-				}
-				name = path.Base(header.Filename)
-			default:
-				err.Code = http.StatusBadRequest
-				err.Errorf("Want content-type application/octet-stream, not %s", ctype)
-				c.JSON(err.Code, err)
-				return
-			}
-			if strings.HasSuffix(name, "/") {
-				err.Code = http.StatusForbidden
-				err.Errorf("Cannot upload a directory")
-				c.JSON(err.Code, err)
-				return
-			}
-
-			fileTmpName := path.Join(f.FileRoot, `files`, fmt.Sprintf(`.%s.part`, path.Clean(name)))
-			fileName := path.Join(f.FileRoot, `files`, path.Clean(name))
-
-			if mkdirErr := os.MkdirAll(path.Dir(fileName), 0755); mkdirErr != nil {
-				err.Code = http.StatusConflict
-				err.Errorf("Cannot create directory %s", path.Dir(name))
-				c.JSON(err.Code, err)
-				return
-			}
-			if _, openErr := os.Open(fileTmpName); openErr == nil {
-				os.Remove(fileName)
-				err.Code = http.StatusConflict
-				err.Errorf("File already uploading")
-				err.AddError(openErr)
-				c.JSON(err.Code, err)
-				return
-			}
-			tgt, openErr := os.Create(fileTmpName)
-			defer tgt.Close()
-			if openErr != nil {
-				os.Remove(fileName)
-				err.Code = http.StatusConflict
-				err.Errorf("Unable to upload")
-				err.AddError(openErr)
-				c.JSON(err.Code, err)
-				return
-			}
-			var copyErr error
-			switch strings.Split(ctype, "; ")[0] {
-			case `application/octet-stream`:
-				copied, copyErr = io.Copy(tgt, c.Request.Body)
-				if copyErr != nil {
-					os.Remove(fileName)
-					os.Remove(fileTmpName)
-					err.Code = http.StatusInsufficientStorage
-					err.AddError(copyErr)
-					c.JSON(err.Code, err)
-					return
-				}
-
-				if c.Request.ContentLength > 0 && copied != c.Request.ContentLength {
-					os.Remove(fileName)
-					os.Remove(fileTmpName)
-					err.Code = http.StatusBadRequest
-					err.Errorf("%d bytes expected, but only %d bytes received",
-						c.Request.ContentLength,
-						copied)
-					c.JSON(err.Code, err)
-					return
-				}
-			case `multipart/form-data`:
-				header, _ := c.FormFile("file")
-				file, headerErr := header.Open()
-				if headerErr != nil {
-					err.Code = http.StatusBadRequest
-					err.AddError(headerErr)
-					c.JSON(err.Code, err)
-					return
-				}
-				defer file.Close()
-				copied, copyErr = io.Copy(tgt, file)
-				if copyErr != nil {
-					err.Code = http.StatusBadRequest
-					err.AddError(copyErr)
-					c.JSON(err.Code, err)
-					return
-				}
-				file.Close()
-			}
-			tgt.Close()
-
-			os.Remove(fileName)
-			os.Rename(fileTmpName, fileName)
-
-			if c.Query("explode") == "true" {
-				cmd := exec.Command("bsdtar", "-zxvf", fileName)
-				cmd.Dir = path.Dir(fileName)
-				if _, zerr := cmd.CombinedOutput(); zerr != nil {
-					err.Code = http.StatusBadRequest
-					err.AddError(zerr)
-					c.JSON(err.Code, err)
-					return
-				}
-			}
-
-			c.JSON(http.StatusCreated, &models.BlobInfo{Path: name, Size: copied})
-		})
+	f.ApiGroup.POST("/files/*path", post)
 
 	// swagger:route DELETE /files/{path} Files deleteFile
 	//
@@ -367,31 +138,5 @@ func (f *Frontend) InitFileApi() {
 	//       403: NoContentResponse
 	//       404: ErrorResponse
 	//       422: ErrorResponse
-	f.ApiGroup.DELETE("/files/*path",
-		func(c *gin.Context) {
-			name := c.Param(`path`)
-			err := &models.Error{
-				Model: "files",
-				Key:   name,
-				Type:  c.Request.Method,
-			}
-			if !f.assureSimpleAuth(c, f.rt(c), "files", "delete", name) {
-				return
-			}
-			fileName := path.Join(f.FileRoot, `files`, name)
-			if !strings.HasPrefix(fileName, path.Join(f.FileRoot, `files`)) {
-				err.Code = http.StatusForbidden
-				err.Errorf("Cannot delete")
-				c.JSON(err.Code, err)
-				return
-			}
-			if rmErr := os.Remove(fileName); rmErr != nil {
-				err.Code = http.StatusNotFound
-				err.Errorf("Unable to delete")
-				c.JSON(err.Code, err)
-				return
-			}
-			c.Data(http.StatusNoContent, gin.MIMEJSON, nil)
-		})
-
+	f.ApiGroup.DELETE("/files/*path", delete)
 }
