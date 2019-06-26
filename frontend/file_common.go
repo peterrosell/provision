@@ -153,7 +153,6 @@ func (f *Frontend) FileCommonFuncs(base string) (func(*gin.Context), func(*gin.C
 					c.JSON(err.Code, err)
 					return
 				}
-				name = path.Base(header.Filename)
 			default:
 				err.Code = http.StatusBadRequest
 				err.Errorf("Want content-type application/octet-stream, not %s", ctype)
