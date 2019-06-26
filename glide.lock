@@ -155,7 +155,7 @@ imports:
   - plugins/storage
   - plugins/system
 - name: github.com/rackn/netwrangler
-  version: 5de4a1f7a059943710d4cc746f2b0ac09dab7f49
+  version: 32fe57948c3cb2d29b638e9d67901ecb56f74202
   subpackages:
   - netplan
   - rhel
