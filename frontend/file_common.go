@@ -124,15 +124,6 @@ func (f *Frontend) FileCommonFuncs(base string) (func(*gin.Context), func(*gin.C
 			if !f.assureSimpleAuth(c, f.rt(c), base, "post", name) {
 				return
 			}
-			fileTmpName := path.Join(f.FileRoot, base, fmt.Sprintf(`.%s.part`, path.Clean(name)))
-			fileName := path.Join(f.FileRoot, base, path.Clean(name))
-
-			if mkdirErr := os.MkdirAll(path.Dir(fileName), 0755); mkdirErr != nil {
-				err.Code = http.StatusConflict
-				err.Errorf("Cannot create directory %s", path.Dir(name))
-				c.JSON(err.Code, err)
-				return
-			}
 
 			var copied int64
 			ctype := c.Request.Header.Get(`Content-Type`)
@@ -145,12 +136,16 @@ func (f *Frontend) FileCommonFuncs(base string) (func(*gin.Context), func(*gin.C
 					return
 				}
 			case `multipart/form-data`:
-				if _, headErr := c.FormFile("file"); headErr != nil {
+				header, headErr := c.FormFile("file")
+				if headErr != nil {
 					err.Code = http.StatusBadRequest
 					err.AddError(headErr)
 					err.Errorf("Cannot find multipart file")
 					c.JSON(err.Code, err)
 					return
+				}
+				if name == "/" {
+					name = path.Base(header.Filename)
 				}
 			default:
 				err.Code = http.StatusBadRequest
@@ -161,6 +156,15 @@ func (f *Frontend) FileCommonFuncs(base string) (func(*gin.Context), func(*gin.C
 			if strings.HasSuffix(name, "/") {
 				err.Code = http.StatusForbidden
 				err.Errorf("Cannot upload a directory")
+				c.JSON(err.Code, err)
+				return
+			}
+
+			fileTmpName := path.Join(f.FileRoot, base, fmt.Sprintf(`.%s.part`, path.Clean(name)))
+			fileName := path.Join(f.FileRoot, base, path.Clean(name))
+			if mkdirErr := os.MkdirAll(path.Dir(fileName), 0755); mkdirErr != nil {
+				err.Code = http.StatusConflict
+				err.Errorf("Cannot create directory %s", path.Dir(name))
 				c.JSON(err.Code, err)
 				return
 			}
