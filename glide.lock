@@ -148,7 +148,7 @@ imports:
   - nfs
   - xfs
 - name: github.com/rackn/gohai
-  version: 3b86ba4b49a2df48a25bcac7a0e234fbff157ed0
+  version: 051c7e46fbcc8298c7c09778719760b57d488bcc
   subpackages:
   - plugins/dmi
   - plugins/net
@@ -197,7 +197,7 @@ imports:
   - internal/xlog
   - lzma
 - name: github.com/VictorLowther/godmi
-  version: 270258a8252d31faabd760000198a51fee1b24d9
+  version: b196e787bc0d48e173e019e3afa3e19c76b04bfe
 - name: github.com/VictorLowther/jsonpatch2
   version: a3386fdb359634d937f41d6f66af3df4d25c5ae4
   subpackages:
