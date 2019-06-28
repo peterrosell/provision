@@ -405,7 +405,7 @@ func (b *BootEnv) sledgeExploder(rt *RequestTracker, arch string, archInfo model
 		defer explodeMux.Unlock()
 		sPath := filepath.Join(lp, path.Dir(archInfo.Kernel))
 		if _, err := os.Stat(b.localPathFor(rt, archInfo.Kernel, arch)); err == nil {
-			rt.Infof("BootEnv %s: %s slready exists", b.Name, sPath)
+			rt.Infof("BootEnv %s: %s already exists", b.Name, sPath)
 			return
 		}
 		rt.Errorf("Sledgehammer: Extracting %s to %s", archInfo.IsoFile, lp)
