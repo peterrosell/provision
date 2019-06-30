@@ -11,7 +11,7 @@ ifeq ($(TARGET_MACHINE), x86_64)
 	BASE_IMAGE=debian:stable-slim
 else
 	CPU_ARCH=armv7
-	BASE_IMAGE=balenalib/rpi-raspbian:stretch-20190403
+	BASE_IMAGE=balenalib/rpi-raspbian:stretch-20190619
 endif
 
 DOCKER_IMAGE=provision:latest-$(DRP_VERSION)-$(CPU_ARCH)
