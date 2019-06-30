@@ -51,4 +51,4 @@ VOLUME ["/provision/drp-data"]
 ENTRYPOINT ["dr-provision", "--base-root=/provision/drp-data", "--local-content=", "--default-content="]
 CMD []
 
-USER nobody
+#USER nobody
