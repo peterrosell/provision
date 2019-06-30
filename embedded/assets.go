@@ -68,6 +68,7 @@ func ExtractAssets(replaceRoot, fileRoot string) error {
 		"drpcli.amd64.linux":   "files",
 		"drpcli.arm64.linux":   "files",
 		"drpcli.amd64.windows": "files",
+		"drpcli.amd64.darwin":  "files",
 
 		// General ISO things
 		"explode_iso.sh":       "",
@@ -94,6 +95,7 @@ func ExtractAssets(replaceRoot, fileRoot string) error {
 		"wimboot":        "",
 		"grubarm64.efi":  "",
 		"grubamd64.efi":  "",
+		"grub.pxe":       "",
 	}
 
 	for src, dest := range assets {

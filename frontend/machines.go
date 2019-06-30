@@ -115,6 +115,8 @@ type MachineGetParamsPathParameter struct {
 	Aggregate string `json:"aggregate"`
 	// in: query
 	Decode string `json:"decode"`
+	// in: query
+	Params string `json:"params"`
 	// in: path
 	// required: true
 	// swagger:strfmt uuid
@@ -204,6 +206,10 @@ type MachineListPathParameter struct {
 	Runnable string
 	// in: query
 	Decode bool `json:"decode"`
+	// in: query
+	Slim bool `json:"slim"`
+	// in: query
+	Params bool `json:"params"`
 }
 
 func (f *Frontend) InitMachineApi() {
@@ -321,6 +327,9 @@ func (f *Frontend) InitMachineApi() {
 			}
 			if b.Uuid == nil || len(b.Uuid) == 0 {
 				b.Uuid = uuid.NewRandom()
+			}
+			if c.Query("force") == "true" {
+				b.ForceChange()
 			}
 			f.create(c, b)
 		})

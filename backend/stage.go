@@ -2,12 +2,15 @@ package backend
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
+	"strings"
 	"sync"
 	"text/template"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 // Stage encapsulates tasks we want to run a machine
@@ -56,13 +59,13 @@ func (s *Stage) HasProfile(name string) bool {
 func (s *Stage) Indexes() map[string]index.Maker {
 	fix := AsStage
 	res := index.MakeBaseIndexes(s)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).Name < fix(j).Name
-		},
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			name := fix(ref).Name
 			return func(ss models.Model) bool {
 					return fix(ss).Name >= name
@@ -71,18 +74,19 @@ func (s *Stage) Indexes() map[string]index.Maker {
 					return fix(ss).Name > name
 				}
 		},
-		func(ss string) (models.Model, error) {
+		Fill: func(ss string) (models.Model, error) {
 			res := fix(s.New())
 			res.Name = ss
 			return res, nil
-		})
-	res["BootEnv"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).BootEnv < fix(j).BootEnv
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+	}
+	res["BootEnv"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).BootEnv < fix(j).BootEnv },
+		Eq:     func(i, j models.Model) bool { return fix(i).BootEnv == fix(j).BootEnv },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).BootEnv) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			bootenv := fix(ref).BootEnv
 			return func(ss models.Model) bool {
 					return fix(ss).BootEnv >= bootenv
@@ -91,26 +95,16 @@ func (s *Stage) Indexes() map[string]index.Maker {
 					return fix(ss).BootEnv > bootenv
 				}
 		},
-		func(ss string) (models.Model, error) {
+		Fill: func(ss string) (models.Model, error) {
 			res := fix(s.New())
 			res.BootEnv = ss
 			return res, nil
-		})
-	res["Reboot"] = index.Make(
-		false,
+		},
+	}
+	res["Reboot"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
-			return !fix(i).Reboot && fix(j).Reboot
-		},
-		func(ref models.Model) (gte, gt index.Test) {
-			reboot := fix(ref).Reboot
-			return func(s models.Model) bool {
-					v := fix(s).Reboot
-					return v || (v == reboot)
-				},
-				func(s models.Model) bool {
-					return fix(s).Reboot && !reboot
-				}
+			return fix(i).Reboot == fix(j).Reboot
 		},
 		func(ss string) (models.Model, error) {
 			res := fix(s.New())
@@ -121,6 +115,94 @@ func (s *Stage) Indexes() map[string]index.Maker {
 				res.Reboot = false
 			default:
 				return nil, errors.New("Reboot must be true or false")
+			}
+			return res, nil
+		})
+	res["Tasks"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Tasks
+			p2 := fix(j).Tasks
+			probes := map[string]bool{}
+			for _, k := range p2 {
+				probes[k] = false
+			}
+			for _, k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(ss string) (models.Model, error) {
+			res := fix(s.New())
+			res.Tasks = strings.Split(ss, ",")
+			for i := range res.Tasks {
+				res.Tasks[i] = strings.TrimSpace(res.Tasks[i])
+			}
+			return res, nil
+		})
+	res["Profiles"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Profiles
+			p2 := fix(j).Profiles
+			probes := map[string]bool{}
+			for _, k := range p2 {
+				probes[k] = false
+			}
+			for _, k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(ss string) (models.Model, error) {
+			res := fix(s.New())
+			res.Profiles = strings.Split(ss, ",")
+			for i := range res.Profiles {
+				res.Profiles[i] = strings.TrimSpace(res.Profiles[i])
+			}
+			return res, nil
+		})
+	res["Params"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Params
+			p2 := fix(j).Params
+			probes := map[string]bool{}
+			for k := range p2 {
+				probes[k] = false
+			}
+			for k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(ss string) (models.Model, error) {
+			res := fix(s.New())
+			keys := strings.Split(ss, ",")
+			res.Params = map[string]interface{}{}
+			for _, v := range keys {
+				res.Params[strings.TrimSpace(v)] = struct{}{}
 			}
 			return res, nil
 		})
@@ -140,6 +222,47 @@ func (s *Stage) genRoot(commonRoot *template.Template, e models.ErrorAdder) *tem
 	return res
 }
 
+func (s *Stage) ParameterMaker(rt *RequestTracker, parameter string) (index.Maker, error) {
+	fix := AsStage
+	pobj := rt.find("params", parameter)
+	if pobj == nil {
+		return index.Maker{}, fmt.Errorf("Filter not found: %s", parameter)
+	}
+	param := AsParam(pobj)
+
+	return index.Maker{
+		Unique: false,
+		Type:   "parameter",
+		Less: func(i, j models.Model) bool {
+			ip, _ := rt.GetParam(fix(i), parameter, true, false)
+			jp, _ := rt.GetParam(fix(j), parameter, true, false)
+			return GeneralLessThan(ip, jp)
+		},
+		Tests: func(ref models.Model) (gte, gt index.Test) {
+			jp, _ := rt.GetParam(fix(ref), parameter, true, false)
+			return func(si models.Model) bool {
+					ip, _ := rt.GetParam(fix(si), parameter, true, false)
+					return GeneralGreaterThanEqual(ip, jp)
+				},
+				func(si models.Model) bool {
+					ip, _ := rt.GetParam(fix(si), parameter, true, false)
+					return GeneralGreaterThan(ip, jp)
+				}
+		},
+		Fill: func(str string) (models.Model, error) {
+			obj, err := GeneralValidateParam(param, str)
+			if err != nil {
+				return nil, err
+			}
+			res := fix(s.New())
+			res.Params = map[string]interface{}{}
+			res.Params[parameter] = obj
+			return res, nil
+		},
+	}, nil
+
+}
+
 // Validate ensures that the Stage is valid and available.
 // Setting those flags as appropriate.  Profiles, Tasks,
 // and BootEnv are validate for presence.  Renderers are
@@ -150,6 +273,11 @@ func (s *Stage) Validate() {
 		ti.SanityCheck(idx, s, false)
 	}
 	s.AddError(index.CheckUnique(s, s.rt.stores("stages").Items()))
+	if pk, err := s.rt.PrivateKeyFor(s); err == nil {
+		ValidateParams(s.rt, s, s.Params, pk)
+	} else {
+		s.Errorf("Unable to get key: %v", err)
+	}
 	if !s.SetValid() {
 		// If we have not been validated at this point, return.
 		return
@@ -160,9 +288,31 @@ func (s *Stage) Validate() {
 	// We are syntactically valid, although we may not be useable.
 	s.renderers = renderers{}
 	// First, the stuff that must be correct in order for
-	for _, taskName := range s.Tasks {
-		if s.rt.find("tasks", taskName) == nil {
-			s.Errorf("Task %s does not exist", taskName)
+	bootenvs := s.rt.stores("bootenvs")
+	stages := s.rt.stores("stages")
+	tasks := s.rt.stores("tasks")
+	for i, ent := range s.Tasks {
+		parts := strings.SplitN(ent, ":", 2)
+		if len(parts) == 2 {
+			switch parts[0] {
+			case "stage":
+				if stages.Find(parts[1]) == nil {
+					s.Errorf("Stage %s (at %d) does not exist", parts[1], i)
+				}
+			case "bootenv":
+				if bootenvs.Find(parts[1]) == nil {
+					s.Errorf("BootEnv %s (at %d) does not exist", parts[1], i)
+				}
+			case "action":
+				continue
+			case "chroot":
+			default:
+				s.Errorf("%s (at %d) is malformed", ent, i)
+			}
+		} else {
+			if tasks.Find(ent) == nil {
+				s.Errorf("Task %s (at %d) does not exist", ent, i)
+			}
 		}
 	}
 	for _, profileName := range s.Profiles {
@@ -323,17 +473,17 @@ func (s *Stage) render(rt *RequestTracker, m *Machine, e models.ErrorAdder) rend
 // AfterSave registers new renderers after successful save.
 func (s *Stage) AfterSave() {
 	if s.Available && s.renderers != nil {
-		s.renderers.register(s.rt.dt.FS)
+		s.renderers.register(s.rt)
 	}
 	s.renderers = nil
 }
 
 var stageLockMap = map[string][]string{
-	"get":     {"stages"},
-	"create":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"update":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"patch":   {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"delete":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
+	"get":     {"stages", "params"},
+	"create":  {"stages:rw", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw", "params"},
+	"update":  {"stages:rw", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw", "params"},
+	"patch":   {"stages:rw", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw", "params"},
+	"delete":  {"stages:rw", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows", "params"},
 	"actions": {"stages", "profiles", "params"},
 }
 

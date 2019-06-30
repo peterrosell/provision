@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 
 	"github.com/VictorLowther/jsonpatch2"
 )
@@ -34,11 +35,13 @@ var (
 	}
 
 	addedActions = map[string]string{
-		"users":    "token, password",
-		"jobs":     "log",
-		"machines": "getSecure, updateSecure, updateTaskList",
-		"plugins":  "getSecure, updateSecure",
-		"profiles": "getSecure, updateSecure",
+		"users":     "token, password",
+		"jobs":      "log",
+		"machines":  "getSecure, updateSecure, updateTaskList",
+		"plugins":   "getSecure, updateSecure",
+		"profiles":  "getSecure, updateSecure",
+		"stages":    "getSecure, updateSecure",
+		"rawModels": "getSecure, updateSecure",
 	}
 
 	overriddenActions = map[string]string{
@@ -71,7 +74,28 @@ var (
 		}
 		return res
 	}()
+	actionScopeLock = &sync.Mutex{}
 )
+
+// UpdateAllScopesWithRawModel adds new role scopes for a specialized
+// RawModel
+func UpdateAllScopesWithRawModel(prefix string) {
+	actionScopeLock.Lock()
+	defer actionScopeLock.Unlock()
+	actions := map[string]struct{}{}
+	for k2, v2 := range basicActions {
+		actions[k2] = v2
+	}
+	for k2, v2 := range valScopedActions {
+		actions[k2] = v2
+	}
+	if v, ok := addedActions["rawModels"]; ok {
+		for i := range csm(v) {
+			actions[i] = struct{}{}
+		}
+	}
+	allScopes[prefix] = actions
+}
 
 type actionNode struct {
 	items map[string]struct{}
@@ -148,6 +172,7 @@ func (a claim) contains(b claim) bool {
 // Claims is a compiled list of claims from a Role.
 type Claims []claim
 
+// Claims returns true if all of the claims in a are a superset of b
 func (a Claims) Contains(b Claims) bool {
 	finalRes := true
 	res := false
@@ -166,8 +191,10 @@ func (a Claims) Contains(b Claims) bool {
 	return finalRes
 }
 
+// ClaimsList is a list of Claims derived from a Role.
 type ClaimsList []Claims
 
+// Match returns true if one of the entries in c contains wanted
 func (c ClaimsList) Match(wanted Claims) bool {
 	for i := range c {
 		if c[i].Contains(wanted) {
@@ -187,6 +214,8 @@ type Claim struct {
 }
 
 func (c *Claim) compile(e ErrorAdder) claim {
+	actionScopeLock.Lock()
+	defer actionScopeLock.Unlock()
 	res := map[string]scopeNode{}
 	if c.Scope == "*" {
 		for k := range allScopes {
@@ -253,7 +282,8 @@ func makeClaims(things ...string) []*Claim {
 	return res
 }
 
-// Role is used to determine which API endpoints are available.
+// Role is used to determine which operations on which API endpoints are permitted.
+//
 // swagger:model
 type Role struct {
 	Validation

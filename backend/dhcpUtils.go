@@ -385,7 +385,9 @@ func FakeLeaseFor(rt *RequestTracker,
 		subnet, via := findSubnetForVias(rt, vias)
 		_, reservation, _ = findViaReservation(rt, subnet, strategy, token, nil, true)
 		lease, _ = findViaSubnet(rt, subnet, strategy, token, nil, via, true)
-		mergeOptions(rt, lease, reservation, subnet)
+		if lease != nil {
+			mergeOptions(rt, lease, reservation, subnet)
+		}
 	})
 	return
 }

@@ -171,6 +171,12 @@ or, in "production" mode:
 
 Start the "dr-provision" binary as an ordinary user, and now it will have permission to bind to privileged ports 67 and 69.
 
+For automated upgrades from within DRP, the user that is running DRP needs to have the following in /etc/sudousers.  In this example, `drp-user` is the user running DRP.  This will allow DRP to update itself.
+  ::
+
+    drp-user ALL=(ALL:ALL) NOPASSWD:/usr/sbin/setcap
+
+
 .. note:: The *setcap* command must reference the actual binary itself, and can not be pointed at a symbolic link.  Additional refinement of the capabilities may be possible.  For extremely security conscious setups, you may want to refer to the StackOverflow discussion (eg setting capabilities on a per-user basis, etc.):
   https://stackoverflow.com/questions/1956732/is-it-possible-to-configure-linux-capabilities-per-user
 
@@ -208,4 +214,42 @@ For *iolated* installs, remove the directory used to contain the isolated instal
   ::
 
     sudo rm -rf dr-provision-install
+
+
+Running the RackN UX Locally
+============================
+
+Setting up DRP to host the RackN UX locally is trivial.  The DRP server includes an embedded web server that can host the UX files from a local directory.  The RackN UX can also be set up using any other HTTP server, however this document only addresses the setup related to using DRP as the HTTP server.
+
+The RackN UX uses the rackn-license content pack for entitlements so no external login to the RacKN SaaS is required.
+
+The RackN UX will still attempt to connect the RackN SaaS for updates and the catalog; however, the system will operate even if these calls fail.  This can be turned off by setting a parameter in the global profile, `ux-air-gap`, to `true`.
+
+Setup
++++++
+
+Before starting, you'll need a copy of the RackN UX and to have installed a `rackn-license.json` content package in the DRP server.  These items require a current RackN license - using them without a valid enterprise or trial license is a copyright violation.
+
+Extract the RackN UX files into a directory named `ux` at the same level as the `drp-data` directory.  The account running your `dr-server` must have read permission for this directory.
+
+It is OK to use a different directory - the different directory can be specified with the `--local-ui` command line option for dr-provision.  The option specifies the directory containing the UX files.  If the path is relative, it will be assumed to be relative to the `data-root` option.
+
+
+Running the UX from DRP
++++++++++++++++++++++++
+
+By unpacking the files in the `ux` directory within the `data-root` directory or specifying the `--local-ui` option, the DRP endpoint will serve that directory as `/local-ui` and `/ux`.
+
+The endpoint will detect file changes so no restart is required if you update or change the RackN UX files.
+
+If you are using the default port, you can access the local UX from `https://127.0.0.1:8092/ux`.  NOTE: This will only serve the files for the UX; it will not ensure that the UX starts connecting to the current DRP instance.  To address that, continue below.
+
+Redirecting URL
++++++++++++++++
+
+If you are hosting a local UX, you should change the DRP endpoint UX redirect.  This is the site that is presented if you visit the DRP endpoints root URL, `/`, or the official UI url, `/ui`.  To use the local ux, add `--ui-url=/ux` to the `dr-provision` command line arguments.
+
+If you have connect to this DRP Endpoint previously, you may need to clear the browsers permanent redirect cache to start using the new feature.
+
+* Air Gap mode - the RackN UX disables all external calls and only operates against the local DRP endpoint.
 

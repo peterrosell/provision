@@ -2,7 +2,7 @@ package backend
 
 import (
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 // Pref tracks a global DigitalRebar Provision preference -- things like the
@@ -26,10 +26,10 @@ func AsPref(v models.Model) *Pref {
 
 var prefLockMap = map[string][]string{
 	"get":     {"preferences"},
-	"create":  {"preferences", "bootenvs", "stages", "workflows", "profiles", "params"},
-	"update":  {"preferences", "bootenvs", "stages", "workflows", "profiles", "params"},
-	"patch":   {"preferences", "bootenvs", "stages", "workflows", "profiles", "params"},
-	"delete":  {"preferences", "bootenvs", "stages", "workflows", "profiles", "params"},
+	"create":  {"preferences:rw", "bootenvs", "stages", "workflows", "profiles", "params"},
+	"update":  {"preferences:rw", "bootenvs", "stages", "workflows", "profiles", "params"},
+	"patch":   {"preferences:rw", "bootenvs", "stages", "workflows", "profiles", "params"},
+	"delete":  {"preferences:rw", "bootenvs", "stages", "workflows", "profiles", "params"},
 	"actions": {"preferences", "profiles", "params", "bootenvs", "stages", "workflows"},
 }
 

@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,10 +17,9 @@ import (
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/backend/index"
-	"github.com/digitalrebar/provision/midlayer"
 	"github.com/digitalrebar/provision/models"
+	"github.com/digitalrebar/provision/store"
 	"github.com/digitalrebar/provision/utils"
-	"github.com/digitalrebar/store"
 	"github.com/galthaus/gzip"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/location"
@@ -48,6 +49,7 @@ type Lockable interface {
 }
 
 type authBlob struct {
+	logger.Logger
 	f                           *Frontend
 	claim                       *backend.DrpCustomClaims
 	claimsList                  models.ClaimsList
@@ -62,13 +64,13 @@ func (a *authBlob) tenantOK(prefix, key string) bool {
 	if a.tenantMembers != nil && a.tenantMembers[prefix] != nil {
 		_, res = a.tenantMembers[prefix][key]
 	}
-	a.f.Logger.Tracef("tenantOK: %s:%s: %v", prefix, key, res)
+	a.Tracef("tenantOK: %s:%s: %v", prefix, key, res)
 	return res
 }
 
 func (a *authBlob) tenantSelect(scope string) index.Filter {
 	if a.tenantMembers == nil {
-		a.f.Logger.Tracef("tenantSelect: %s: not scoped, allowed", scope)
+		a.Tracef("tenantSelect: %s: not scoped, allowed", scope)
 		return nil
 	}
 	test := func(m models.Model) bool {
@@ -90,7 +92,7 @@ func (a *authBlob) tenantSelect(scope string) index.Filter {
 		case *backend.Reservation:
 			return a.tenantOK("machines", a.f.dt.MacToMachineUUID(o.Token))
 		}
-		a.f.Logger.Tracef("tenantSelect: %s:%s: default denied", prefix, key)
+		a.Tracef("tenantSelect: %s:%s: default denied", prefix, key)
 		return false
 	}
 	return index.Select(test)
@@ -159,7 +161,7 @@ type Frontend struct {
 	MgmtApi    *gin.Engine
 	ApiGroup   *gin.RouterGroup
 	dt         *backend.DataTracker
-	pc         *midlayer.PluginController
+	pc         *backend.PluginController
 	authSource AuthSource
 	pubs       *backend.Publishers
 	melody     *melody.Melody
@@ -238,58 +240,73 @@ func (d DefaultAuthSource) GetUser(f *Frontend, c *gin.Context, username, passwo
 		}
 	}
 
+	if !checkAuth {
+		return res
+	}
 	// Check for plugin-based auth
-	if checkAuth {
-		// Assume that it is not a good user or good password
-		res = nil
-		ma := &models.Action{
-			Model:   nil,
-			Plugin:  "",
-			Command: "authenticate",
-			Params: map[string]interface{}{
+	// Assume that it is not a good user or good password
+	res = nil
+	var obj interface{}
+	var buildErr *models.Error
+	var runErr error
+	var action *models.Action
+	rt.Do(func(_ backend.Stores) {
+		action, buildErr = rt.BuildAction(nil,
+			"system", "authenticate", "",
+			map[string]interface{}{
 				"auth/username": username,
 				"auth/password": password,
 			},
+		)
+	})
+	if buildErr != nil {
+		return nil
+	}
+	rt.Publish(action.CommandSet, action.Command, "global", action)
+	obj, runErr = rt.RunAction(action)
+	if runErr != nil {
+		if !strings.Contains(runErr.Error(), "Action no longer available") {
+			f.Logger.Errorf("Failed to authenticate %s: %v", username, runErr)
 		}
-		if obj, runErr := f.pc.Actions.Run(rt, "system", ma); runErr == nil {
-			u := &models.User{}
-			if jerr := models.Remarshal(obj, u); jerr == nil {
-				// Upgrade RT to a user create level
-				rt = f.rt(c, "users", "roles", "tenants")
-				rt.Do(func(d backend.Stores) {
-					// Make sure someone didn't create it on me
-					if u2 := rt.Find("users", username); u2 != nil {
-						res = u2.(*backend.User)
-					}
-					// Create the object if not found.
-					if res == nil {
-						if _, err := rt.Create(u); err != nil {
-							f.Logger.Errorf("Failed to create user: %s, %v", username, err)
-						}
-						if u3 := rt.Find("users", username); u3 != nil {
-							res = u3.(*backend.User)
-							if !res.Validated || !res.Available {
-								f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
-								res = nil
-							}
-						}
-					} else {
-						// Always save the object to pick up role and tenant changes
-						if _, err := rt.Update(u); err != nil {
-							f.Logger.Errorf("Failed to update user: %s, %v", username, err)
-						}
-						if u3 := rt.Find("users", username); u3 != nil {
-							res = u3.(*backend.User)
-							if !res.Validated || !res.Available {
-								f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
-								res = nil
-							}
-						}
-					}
-				})
+		return nil
+	}
+	u := &models.User{}
+	if jerr := models.Remarshal(obj, u); jerr != nil {
+		return nil
+	}
+	// Upgrade RT to a user create level
+	rt = f.rt(c, "users:rw", "roles", "tenants:rw")
+	rt.Do(func(d backend.Stores) {
+		// Make sure someone didn't create it on me
+		if u2 := rt.Find("users", username); u2 != nil {
+			res = u2.(*backend.User)
+		}
+		// Create the object if not found.
+		if res == nil {
+			if _, err := rt.Create(u); err != nil {
+				f.Logger.Errorf("Failed to create user: %s, %v", username, err)
+			}
+			if u3 := rt.Find("users", username); u3 != nil {
+				res = u3.(*backend.User)
+				if !res.Validated || !res.Available {
+					f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
+					res = nil
+				}
+			}
+		} else {
+			// Always save the object to pick up role and tenant changes
+			if _, err := rt.Update(u); err != nil {
+				f.Logger.Errorf("Failed to update user: %s, %v", username, err)
+			}
+			if u3 := rt.Find("users", username); u3 != nil {
+				res = u3.(*backend.User)
+				if !res.Validated || !res.Available {
+					f.Logger.Errorf("user: %s is not valid, %v", username, res.Errors)
+					res = nil
+				}
 			}
 		}
-	}
+	})
 	return res
 }
 
@@ -300,11 +317,19 @@ func NewDefaultAuthSource(dt *backend.DataTracker) (das AuthSource) {
 
 func (fe *Frontend) userAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var l logger.Logger
+		if ll, ok := c.Get("logger"); ok {
+			l = ll.(logger.Logger)
+		} else {
+			fe.Logger.Panicf("No logger on context")
+		}
+		startTime := time.Now()
+		l.Tracef("Auth validation started")
 		authHeader := c.Request.Header.Get("Authorization")
 		if len(authHeader) == 0 {
 			authHeader = c.Query("token")
 			if len(authHeader) == 0 {
-				fe.l(c).Warnf("No authentication header or token")
+				l.Warnf("No authentication header or token")
 				c.Header("WWW-Authenticate", "dr-provision")
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
@@ -318,7 +343,7 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 		}
 		hdrParts := strings.SplitN(authHeader, " ", 2)
 		if len(hdrParts) != 2 || (hdrParts[0] != "Basic" && hdrParts[0] != "Bearer") {
-			fe.l(c).Warnf("Bad auth header: %s", authHeader)
+			l.Warnf("Bad auth header: %s", authHeader)
 			c.Header("WWW-Authenticate", "dr-provision")
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
@@ -327,37 +352,46 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 		if hdrParts[0] == "Basic" {
 			hdr, err := base64.StdEncoding.DecodeString(hdrParts[1])
 			if err != nil {
-				fe.l(c).Warnf("Malformed basic auth string: %s", hdrParts[1])
+				l.Warnf("Malformed basic auth string: %s", hdrParts[1])
 				c.Header("WWW-Authenticate", "dr-provision")
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
 			userpass := bytes.SplitN(hdr, []byte(`:`), 2)
 			if len(userpass) != 2 {
-				fe.l(c).Warnf("Malformed basic auth string: %s", hdrParts[1])
+				l.Warnf("Malformed basic auth string: %s", hdrParts[1])
 				c.Header("WWW-Authenticate", "dr-provision")
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
+			forbidden := &models.Error{
+				Code:     http.StatusForbidden,
+				Model:    `users`,
+				Messages: []string{"Access Denied"},
+			}
 			user := fe.authSource.GetUser(fe, c, string(userpass[0]), string(userpass[1]))
 			if user == nil {
-				fe.rt(c).Auditf("Failed Authenticated (no user) user %s from %s", userpass[0], c.ClientIP())
-				c.AbortWithStatus(http.StatusForbidden)
+				l.Auditf("Failed Authenticated (no user) user %s from %s", userpass[0], c.ClientIP())
+				c.AbortWithStatusJSON(http.StatusForbidden, forbidden)
 				return
 			}
 			if !user.CheckPassword(string(userpass[1])) {
-				fe.rt(c).Auditf("Failed Authenticated (bad password) user %s from %s", userpass[0], c.ClientIP())
-				c.AbortWithStatus(http.StatusForbidden)
+				l.Auditf("Failed Authenticated (bad password) user %s from %s", userpass[0], c.ClientIP())
+				c.AbortWithStatusJSON(http.StatusForbidden, forbidden)
 				return
 			}
-			token = user.GenClaim(string(userpass[0]), 30)
-			fe.rt(c).Auditf("Authenticated user %s from %s", userpass[0], c.ClientIP())
+			token = user.GenClaim(string(userpass[0]), time.Minute*2)
+			l.Auditf("Authenticated user %s from %s", userpass[0], c.ClientIP())
 		} else if hdrParts[0] == "Bearer" {
 			t, err := fe.dt.GetToken(string(hdrParts[1]))
 			if err != nil {
-				fe.l(c).Auditf("No DRP authentication token from %s", c.ClientIP())
+				l.Auditf("No DRP authentication token from %s", c.ClientIP())
 				c.Header("WWW-Authenticate", "dr-provision")
-				c.AbortWithStatus(http.StatusForbidden)
+				c.AbortWithStatusJSON(http.StatusForbidden, &models.Error{
+					Code:     http.StatusForbidden,
+					Model:    `system`,
+					Messages: []string{fmt.Sprintf("Invalid Token :%v", err), hdrParts[1]},
+				})
 				return
 			}
 			token = t
@@ -392,12 +426,11 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 			}
 		})
 		if valid {
-			if k, ok := c.Get("logger"); ok {
-				logger := k.(logger.Logger)
-				logger.SetPrincipal(auth.Principal())
-				c.Set("logger", logger)
-			}
+			l = l.SetPrincipal(auth.Principal())
+			auth.Logger = l
+			c.Set("logger", l)
 			c.Set("DRP-AUTH", auth)
+			l.Tracef("Auth success in %s", time.Since(startTime))
 			c.Next()
 			return
 		}
@@ -408,7 +441,7 @@ func (fe *Frontend) userAuth() gin.HandlerFunc {
 		if userString == "" {
 			userString = "Unknown User"
 		}
-		fe.rt(c).Auditf("Failed Authenticated user %s from %s", userString, c.ClientIP())
+		l.Auditf("Failed Authenticated user %s from %s", userString, c.ClientIP())
 		err := &models.Error{
 			Type: "AUTH",
 			Code: http.StatusForbidden,
@@ -464,7 +497,7 @@ func NewFrontend(
 	authSource AuthSource,
 	pubs *backend.Publishers,
 	drpids []string,
-	pc *midlayer.PluginController,
+	pc *backend.PluginController,
 	noDhcp, noTftp, noProv, noBinl bool,
 	saasDir string) (me *Frontend) {
 	me = &Frontend{
@@ -500,6 +533,14 @@ func NewFrontend(
 
 	mgmtApi.Use(func(c *gin.Context) {
 		l := me.Logger.Fork()
+		clientIP := c.ClientIP()
+		path := c.Request.URL.Path
+		raw := c.Request.URL.RawQuery
+		method := c.Request.Method
+		if raw != "" {
+			path = path + "?" + raw
+		}
+		start := time.Now()
 		if logLevel := c.GetHeader("X-Log-Request"); logLevel != "" {
 			lvl, err := logger.ParseLevel(logLevel)
 			if err != nil {
@@ -511,18 +552,11 @@ func NewFrontend(
 		if logToken := c.GetHeader("X-Log-Token"); logToken != "" {
 			l.Errorf("Log token: %s", logToken)
 		}
+		l.Tracef("API: starting %s %s", c.Request.Method, path)
 		c.Set("logger", l)
-		start := time.Now()
-		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
 		c.Next()
-		latency := time.Now().Sub(start)
-		clientIP := c.ClientIP()
-		method := c.Request.Method
+		latency := time.Since(start)
 		statusCode := c.Writer.Status()
-		if raw != "" {
-			path = path + "?" + raw
-		}
 		l.Debugf("API: st: %d lt: %13v ip: %15s m: %s %s",
 			statusCode,
 			latency,
@@ -645,6 +679,7 @@ func NewFrontend(
 	if len(localUI) != 0 {
 		lgr.Infof("Running Local UI from %s\n", localUI)
 		mgmtApi.Static("/local-ui", localUI)
+		mgmtApi.Static("/ux", localUI)
 	}
 
 	// UI points to the cloud
@@ -695,6 +730,8 @@ func (f *Frontend) assureAuth(c *gin.Context,
 	scope, action, specific string) bool {
 	auth := f.getAuth(c)
 	rt.Claims = auth.claimsList
+	rt.AuthUser = auth.currentUser
+	rt.AuthMachine = auth.currentMachine
 	if auth.matchClaim(wantsClaims) && auth.isLicensed(scope, action) {
 		f.Logger.Tracef("assureAuth: claims '%s:%s:%s' granted", scope, action, specific)
 		return true
@@ -794,34 +831,47 @@ func assureDecode(c *gin.Context, val interface{}) bool {
 //   Except(valueLower, valueHigher)
 //
 func convertValueToFilter(v string) (index.Filter, error) {
+
 	args := strings.SplitN(v, "(", 2)
+	if len(args) == 1 || args[1] == "" || !strings.HasSuffix(args[1], ")") {
+		return index.Eq(v), nil
+	}
+	subargs := strings.TrimSuffix(args[1], ")")
 	switch args[0] {
 	case "Eq":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Eq(subargs[0]), nil
+		return index.Eq(subargs), nil
+	case "Re":
+		return index.Re(subargs), nil
 	case "Lt":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Lt(subargs[0]), nil
+		return index.Lt(subargs), nil
 	case "Lte":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Lte(subargs[0]), nil
+		return index.Lte(subargs), nil
 	case "Gt":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Gt(subargs[0]), nil
+		return index.Gt(subargs), nil
 	case "Gte":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Gte(subargs[0]), nil
+		return index.Gte(subargs), nil
 	case "Ne":
-		subargs := strings.SplitN(args[1], ")", 2)
-		return index.Ne(subargs[0]), nil
+		return index.Ne(subargs), nil
 	case "Between":
-		subargs := strings.SplitN(args[1], ")", 2)
-		parts := strings.Split(subargs[0], ",")
+		parts := strings.Split(subargs, ",")
 		return index.Between(parts[0], parts[1]), nil
 	case "Except":
-		subargs := strings.SplitN(args[1], ")", 2)
-		parts := strings.Split(subargs[0], ",")
+		parts := strings.Split(subargs, ",")
 		return index.Except(parts[0], parts[1]), nil
+	case "In":
+		parts := strings.Split(subargs, ",")
+		subf := make([]index.Filter, len(parts))
+		for i := range parts {
+			subf[i] = index.Eq(parts[i])
+		}
+		return index.Uniq(index.Any(subf...)), nil
+	case "Nin":
+		parts := strings.Split(subargs, ",")
+		subf := make([]index.Filter, len(parts))
+		for i := range parts {
+			subf[i] = index.Ne(parts[i])
+		}
+		return index.Uniq(index.All(subf...)), nil
 	default:
 		return index.Eq(v), nil
 	}
@@ -840,10 +890,9 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 	} else {
 		indexes = map[string]index.Maker{}
 	}
-
 	for k, vs := range params {
 		switch k {
-		case "offset", "limit", "sort", "reverse", "slim", "decode":
+		case "offset", "limit", "sort", "reverse", "slim", "params", "decode":
 			continue
 		}
 		// Did we find an existing index?
@@ -861,10 +910,10 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 				// Did we find an meta-based object?
 				if _, found := ref.(models.MetaHaver); found && strings.HasPrefix(k, "Meta.") {
 					parameter := strings.TrimPrefix(k, "Meta.")
-					maker = index.Make(
-						false,
-						"meta",
-						func(i, j models.Model) bool {
+					maker = index.Maker{
+						Unique: false,
+						Type:   "meta",
+						Less: func(i, j models.Model) bool {
 							var ip, jp interface{}
 							if im, iok := i.(models.MetaHaver); iok {
 								m := im.GetMeta()
@@ -876,7 +925,30 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 							}
 							return backend.GeneralLessThan(ip, jp)
 						},
-						func(ref models.Model) (gte, gt index.Test) {
+						Eq: func(i, j models.Model) bool {
+							var ip, jp interface{}
+							if im, iok := i.(models.MetaHaver); iok {
+								m := im.GetMeta()
+								ip, _ = m[parameter]
+							}
+							if jm, jok := j.(models.MetaHaver); jok {
+								m := jm.GetMeta()
+								jp, _ = m[parameter]
+							}
+							return reflect.DeepEqual(ip, jp)
+						},
+						Match: func(i models.Model, re *regexp.Regexp) bool {
+							obj, ok := i.(models.MetaHaver)
+							if !ok {
+								return false
+							}
+							v, ok := obj.GetMeta()[parameter]
+							if !ok {
+								return false
+							}
+							return re.MatchString(v)
+						},
+						Tests: func(ref models.Model) (gte, gt index.Test) {
 							var jp interface{}
 							if jm, jok := ref.(models.MetaHaver); jok {
 								m := jm.GetMeta()
@@ -899,7 +971,7 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 									return backend.GeneralGreaterThan(ip, jp)
 								}
 						},
-						func(s string) (models.Model, error) {
+						Fill: func(s string) (models.Model, error) {
 							res, _ := models.New(ref.Prefix())
 							if jm, jok := res.(models.MetaHaver); jok {
 								m := models.Meta{}
@@ -907,7 +979,8 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 								jm.SetMeta(m)
 							}
 							return res, nil
-						})
+						},
+					}
 					ok = true
 				}
 			}
@@ -916,7 +989,7 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 			}
 		}
 		if ok {
-			filters = append(filters, index.Sort(maker))
+			filters = append(filters, index.Use(maker))
 			subfilters := []index.Filter{}
 			for _, v := range vs {
 				f, err := convertValueToFilter(v)
@@ -931,7 +1004,7 @@ func (f *Frontend) processFilters(rt *backend.RequestTracker, d backend.Stores, 
 
 	if vs, ok := params["sort"]; ok {
 		for _, piece := range vs {
-			if maker, ok := indexes[piece]; ok {
+			if maker, ok := indexes[piece]; ok && maker.Sortable() {
 				filters = append(filters, index.Sort(maker))
 			} else {
 				return nil, fmt.Errorf("Not sortable: %s", piece)
@@ -990,28 +1063,49 @@ func (f *Frontend) emptyList(c *gin.Context, statsOnly bool) {
 	}
 }
 
-func (f *Frontend) processItem(c *gin.Context, rt *backend.RequestTracker, obj models.Model, slim string) models.Model {
+func (f *Frontend) processItem(c *gin.Context, rt *backend.RequestTracker, obj models.Model, slim, params string) models.Model {
+	if f, ok := obj.(models.Filler); ok {
+		f.Fill()
+	}
+	if d, ok := obj.(models.Paramer); ok {
+		if f.wantDecodeSecure(c) {
+			tp := rt.GetParams(d, false, true)
+			d.SetParams(tp)
+		}
+		if params != "" {
+			tp := rt.GetParams(d, false, false)
+			tmp := map[string]interface{}{}
+			for _, param := range strings.Split(params, ",") {
+				if v, ok := tp[param]; ok {
+					tmp[param] = v
+				}
+			}
+			d.SetParams(tmp)
+			if o, ok := obj.(models.Partialer); ok {
+				o.SetPartial()
+			}
+		}
+		obj = d
+	}
 	for _, elide := range strings.Split(strings.ToLower(slim), ",") {
 		switch strings.TrimSpace(elide) {
 		case "meta":
 			if o, ok := obj.(models.MetaHaver); ok {
 				o.SetMeta(models.Meta{})
 			}
+			if o, ok := obj.(models.Partialer); ok {
+				o.SetPartial()
+			}
 		case "params":
-			if o, ok := obj.(models.Paramer); ok {
+			if o, ok := obj.(models.Paramer); ok && params == "" {
 				o.SetParams(map[string]interface{}{})
+			}
+			if o, ok := obj.(models.Partialer); ok {
+				o.SetPartial()
 			}
 		default:
 			// ignore for now -- will add more later, maybe
 		}
-	}
-	if f, ok := obj.(models.Filler); ok {
-		f.Fill()
-	}
-	if d, ok := obj.(models.Paramer); ok && f.wantDecodeSecure(c) {
-		params := rt.GetParams(d, false, true)
-		d.SetParams(params)
-		obj = d
 	}
 	if s, ok := obj.(Sanitizable); ok {
 		obj = s.Sanitize()
@@ -1038,6 +1132,7 @@ func (f *Frontend) list(c *gin.Context, ref store.KeySaver, statsOnly bool) {
 	}
 	var err error
 	slim := c.Query("slim")
+	params := c.Query("params")
 
 	rt.Do(func(d backend.Stores) {
 		var filters []index.Filter
@@ -1065,7 +1160,7 @@ func (f *Frontend) list(c *gin.Context, ref store.KeySaver, statsOnly bool) {
 
 		items := idx.Items()
 		for _, item := range items {
-			arr = append(arr, f.processItem(c, rt, models.Clone(item), slim))
+			arr = append(arr, f.processItem(c, rt, models.Clone(item), slim, params))
 		}
 	})
 
@@ -1117,7 +1212,7 @@ func (f *Frontend) Fetch(c *gin.Context, ref store.KeySaver, key string) {
 		return
 	}
 	rt.Do(func(_ backend.Stores) {
-		res = f.processItem(c, rt, res, c.Query("slim"))
+		res = f.processItem(c, rt, res, c.Query("slim"), c.Query("params"))
 	})
 	c.JSON(http.StatusOK, res)
 }
@@ -1126,7 +1221,7 @@ func (f *Frontend) create(c *gin.Context, val store.KeySaver) {
 	tenant := f.getAuth(c).currentTenant
 	locks := val.(Lockable).Locks("create")
 	if tenant != "" {
-		locks = append(locks, "tenants")
+		locks = append(locks, "tenants:rw")
 	}
 	rt := f.rt(c, locks...)
 	if !f.assureSimpleAuth(c, rt, val.Prefix(), "create", "") {
@@ -1264,7 +1359,7 @@ func (f *Frontend) Remove(c *gin.Context, ref store.KeySaver, key string) {
 	var err error
 	var res models.Model
 	locks := ref.(Lockable).Locks("delete")
-	locks = append(locks, "tenants")
+	locks = append(locks, "tenants:rw")
 	rt := f.rt(c, locks...)
 	res = f.Find(c, rt, ref.Prefix(), key)
 	if res == nil {

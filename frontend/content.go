@@ -7,7 +7,7 @@ import (
 
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 	"github.com/gin-gonic/gin"
 )
 

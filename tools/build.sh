@@ -16,12 +16,12 @@ fi
 
 # Work out the GO version we are working with:
 GO_VERSION=$(go version | awk '{ print $3 }' | sed 's/go//')
-WANTED_VER=(1 10)
+WANTED_VER=(1 12)
 if ! [[ "$GO_VERSION" =~ ([0-9]+)\.([0-9]+) ]]; then
     echo "Cannot figure out what version of Go is installed"
     exit 1
 elif ! (( ${BASH_REMATCH[1]} > ${WANTED_VER[0]} || ${BASH_REMATCH[2]} >= ${WANTED_VER[1]} )); then
-    echo "Go Version needs to be 1.10 or higher: currently $GO_VERSION"
+    echo "Go Version needs to be ${WANTED_VER[0]}.${WANTED_VER[1]} or higher: currently $GO_VERSION"
     exit -1
 fi
 
@@ -106,9 +106,11 @@ for build in ${builds}; do
     echo "Building binaries for ${arch}${ver_part} ${os} (staging to: '$BLD/$binpath')"
     mkdir -p "$binpath"
     go build -ldflags "$VERFLAGS" -o "$binpath/drpcli${ext}" cmds/drpcli/drpcli.go
-    go build -ldflags "$VERFLAGS" -o "$binpath/dr-provision${ext}" cmds/dr-provision/dr-provision.go
-    go generate cmds/incrementer/incrementer.go
-    go build -ldflags "$VERFLAGS" -o "$binpath/incrementer${ext}" cmds/incrementer/incrementer.go cmds/incrementer/content.go
+    if [[ $GOOS != windows ]]; then
+        go build -ldflags "$VERFLAGS" -o "$binpath/dr-provision${ext}" cmds/dr-provision/dr-provision.go
+        go generate cmds/incrementer/incrementer.go
+        go build -ldflags "$VERFLAGS" -o "$binpath/incrementer${ext}" cmds/incrementer/incrementer.go cmds/incrementer/content.go
+    fi
     go build -ldflags "$VERFLAGS" -o "$binpath/drbundler${ext}" cmds/drbundler/drbundler.go
 
     cp tools/drpjoin "$binpath/drpjoin"

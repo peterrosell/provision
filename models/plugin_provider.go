@@ -3,7 +3,7 @@ package models
 import (
 	"fmt"
 
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 // Plugin Provider describes the available functions that could be
@@ -18,6 +18,7 @@ type PluginProvider struct {
 	// This is used to indicate what version the plugin is built for
 	PluginVersion int
 
+	AutoStart        bool
 	HasPublish       bool
 	AvailableActions []AvailableAction
 
@@ -85,6 +86,8 @@ func (p *PluginProvider) Fill() {
 	}
 }
 
+// Store extracts the content bundle in the Content field of the
+// PluginProvider into a Store.
 func (p *PluginProvider) Store() (store.Store, error) {
 	content := &Content{}
 	content.Fill()
@@ -105,8 +108,27 @@ func (p *PluginProvider) Store() (store.Store, error) {
 		content.Meta.Source = "FromPluginProvider"
 	}
 	content.Meta.Type = "plugin"
+	meta := content.GenerateMetaMap()
+	if v, ok := meta["Color"]; ok {
+		meta["color"] = v
+	}
+	if v, ok := meta["Icon"]; ok {
+		meta["icon"] = v
+	}
+	p.SetMeta(meta)
 	s, _ := store.Open("memory:///")
 	return s, content.ToStore(s)
+}
+
+// AutoPlugin - builds a plugin model if auto start is true, otherwise nil
+func (p *PluginProvider) AutoPlugin() *Plugin {
+	if p.AutoStart {
+		pl := &Plugin{Name: p.Name, Provider: p.Name}
+		pl.Fill()
+		pl.SetMeta(p.GetMeta())
+		return pl
+	}
+	return nil
 }
 
 // swagger:model
@@ -115,9 +137,9 @@ type PluginProviderUploadInfo struct {
 	Size int64  `json:"size"`
 }
 
-// Plugins can provide actions for machines
-// Assumes that there are parameters on the
-// call in addition to the machine.
+// AvailableAction is an Action that a Plugin instantiated by a
+// PluginProvider.  Assumes that there are parameters on the call in
+// addition to the machine.
 //
 // swagger:model
 type AvailableAction struct {
@@ -137,18 +159,14 @@ func (a *AvailableAction) Fill() {
 	}
 }
 
-//
-// Params is built from the caller, plus
-// the machine, plus profiles, plus global.
-//
-// This is used by the frontend to talk to
-// the plugin.
-//
+// Action is an additional command that can be added to other Models
+// by a Plugin.
 type Action struct {
-	Model   interface{}
-	Plugin  string
-	Command string
-	Params  map[string]interface{}
+	Model      interface{}
+	Plugin     string
+	Command    string
+	CommandSet string
+	Params     map[string]interface{}
 }
 
 func (m *Action) Fill() {

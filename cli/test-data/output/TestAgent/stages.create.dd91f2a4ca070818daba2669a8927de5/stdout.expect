@@ -9,6 +9,8 @@
   "Meta": {},
   "Name": "noisyStage",
   "OptionalParams": [],
+  "Params": {},
+  "Partial": false,
   "Profiles": [],
   "ReadOnly": false,
   "Reboot": false,

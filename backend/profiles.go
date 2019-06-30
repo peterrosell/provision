@@ -2,10 +2,12 @@ package backend
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 // Profile represents a set of key/values to use in
@@ -33,11 +35,13 @@ func (p *Profile) SaveClean() store.KeySaver {
 func (p *Profile) Indexes() map[string]index.Maker {
 	fix := AsProfile
 	res := index.MakeBaseIndexes(p)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refName := fix(ref).Name
 			return func(s models.Model) bool {
 					return fix(s).Name >= refName
@@ -46,10 +50,41 @@ func (p *Profile) Indexes() map[string]index.Maker {
 					return fix(s).Name > refName
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			profile := fix(p.New())
 			profile.Name = s
 			return profile, nil
+		},
+	}
+	res["Params"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Params
+			p2 := fix(j).Params
+			probes := map[string]bool{}
+			for k := range p2 {
+				probes[k] = false
+			}
+			for k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(s string) (models.Model, error) {
+			res := fix(p.New())
+			keys := strings.Split(s, ",")
+			res.Params = map[string]interface{}{}
+			for _, v := range keys {
+				res.Params[strings.TrimSpace(v)] = struct{}{}
+			}
+			return res, nil
 		})
 	return res
 }
@@ -62,15 +97,15 @@ func (p *Profile) ParameterMaker(rt *RequestTracker, parameter string) (index.Ma
 	}
 	param := AsParam(pobj)
 
-	return index.Make(
-		false,
-		"parameter",
-		func(i, j models.Model) bool {
+	return index.Maker{
+		Unique: false,
+		Type:   "parameter",
+		Less: func(i, j models.Model) bool {
 			ip, _ := rt.GetParam(fix(i), parameter, true, false)
 			jp, _ := rt.GetParam(fix(j), parameter, true, false)
 			return GeneralLessThan(ip, jp)
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			jp, _ := rt.GetParam(fix(ref), parameter, true, false)
 			return func(s models.Model) bool {
 					ip, _ := rt.GetParam(fix(s), parameter, true, false)
@@ -81,7 +116,7 @@ func (p *Profile) ParameterMaker(rt *RequestTracker, parameter string) (index.Ma
 					return GeneralGreaterThan(ip, jp)
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			obj, err := GeneralValidateParam(param, s)
 			if err != nil {
 				return nil, err
@@ -90,7 +125,8 @@ func (p *Profile) ParameterMaker(rt *RequestTracker, parameter string) (index.Ma
 			res.Params = map[string]interface{}{}
 			res.Params[parameter] = obj
 			return res, nil
-		}), nil
+		},
+	}, nil
 
 }
 
@@ -169,10 +205,10 @@ func (p *Profile) AfterDelete() {
 
 var profileLockMap = map[string][]string{
 	"get":     {"profiles", "params"},
-	"create":  {"profiles", "tasks", "params"},
-	"update":  {"profiles", "tasks", "params"},
-	"patch":   {"profiles", "tasks", "params"},
-	"delete":  {"stages", "profiles", "machines"},
+	"create":  {"profiles:rw", "tasks", "params"},
+	"update":  {"profiles:rw", "tasks", "params"},
+	"patch":   {"profiles:rw", "tasks", "params"},
+	"delete":  {"stages", "profiles:rw", "machines"},
 	"actions": {"profiles", "params"},
 }
 

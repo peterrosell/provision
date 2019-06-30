@@ -196,6 +196,7 @@ func TestMachineCli(t *testing.T) {
 	cliTest(false, false, "profiles", "set", "stage-prof", "param", "sp-param", "to", "val").run(t)
 	cliTest(false, false, "machines", "stage", "3e7031fe-3062-45f1-835c-92541bc9cbd3", "stage2", "--force").run(t)
 	cliTest(false, false, "stages", "addprofile", "stage2", "stage-prof").run(t)
+	cliTest(false, false, "stages", "set", "stage2", "param", "sp-direct-param", "to", "val2").run(t)
 
 	cliTest(false, false, "machines", "params", "3e7031fe-3062-45f1-835c-92541bc9cbd3").run(t)
 	cliTest(false, false, "machines", "params", "3e7031fe-3062-45f1-835c-92541bc9cbd3", "--aggregate").run(t)
@@ -456,5 +457,55 @@ Arch: %s`, i, arch)).run(t)
 Name: test-%d
 Arch: %s`, i, arch)).run(t)
 	}
+	verifyClean(t)
+}
+
+func TestMachineLocked(t *testing.T) {
+	cliTest(false, false, "machines", "create", "-").Stdin(machineCreateInputString).run(t)
+	cliTest(false, false, "machines", "update", "3e7031fe-3062-45f1-835c-92541bc9cbd3", "-").Stdin(`{"Locked":true}`).run(t)
+	cliTest(false, true, "machines", "update", "3e7031fe-3062-45f1-835c-92541bc9cbd3", "-").Stdin(`{"Address":"192.168.124.20"}`).run(t)
+	cliTest(false, false, "machines", "update", "3e7031fe-3062-45f1-835c-92541bc9cbd3", "-").Stdin(`{"Locked":false}`).run(t)
+	cliTest(false, false, "machines", "update", "3e7031fe-3062-45f1-835c-92541bc9cbd3", "-").Stdin(`{"Address":"192.168.124.20"}`).run(t)
+	cliTest(false, false, "machines", "update", "3e7031fe-3062-45f1-835c-92541bc9cbd3", "-").Stdin(`{"Locked":true}`).run(t)
+	cliTest(false, false, "machines", "update", "3e7031fe-3062-45f1-835c-92541bc9cbd3", "-").Stdin(`{"Address":"192.168.124.30","Locked":false}`).run(t)
+	cliTest(false, false, "machines", "update", "3e7031fe-3062-45f1-835c-92541bc9cbd3", "-").Stdin(`{"Locked":true}`).run(t)
+	cliTest(false, true, "machines", "destroy", "3e7031fe-3062-45f1-835c-92541bc9cbd3").run(t)
+	cliTest(false, false, "machines", "update", "3e7031fe-3062-45f1-835c-92541bc9cbd3", "-").Stdin(`{"Locked":false}`).run(t)
+	cliTest(false, false, "machines", "destroy", "3e7031fe-3062-45f1-835c-92541bc9cbd3").run(t)
+	verifyClean(t)
+}
+
+func TestMachineProfilesAndParams(t *testing.T) {
+	cliTest(false, false, "machines", "create", "bob").run(t)
+	cliTest(false, false, "machines", "create", "fred").run(t)
+	cliTest(false, false, "machines", "create", "julius").run(t)
+	cliTest(false, false, "profiles", "create", "foo").run(t)
+	cliTest(false, false, "profiles", "create", "bar").run(t)
+	cliTest(false, false, "machines", "update", "Name:bob", "-").Stdin(`{"Profiles":["foo","bar"]}`).run(t)
+	cliTest(false, false, "machines", "update", "Name:fred", "-").Stdin(`{"Profiles":["bar"]}`).run(t)
+	cliTest(false, false, "machines", "set", "Name:julius", "param", "dog", "to", "bark").run(t)
+	cliTest(false, false, "machines", "set", "Name:bob", "param", "dog", "to", "bark").run(t)
+	cliTest(false, false, "machines", "set", "Name:fred", "param", "cat", "to", "meow").run(t)
+	cliTest(false, false, "machines", "set", "Name:julius", "param", "cat", "to", "meow").run(t)
+	cliTest(false, false, "machines", "set", "Name:bob", "param", "bird", "to", "tweet").run(t)
+	cliTest(false, false, "machines", "set", "Name:fred", "param", "bird", "to", "tweet").run(t)
+	for _, op := range []string{"Eq", "Ne"} {
+		for _, profiles := range []string{"foo,bar", "bar"} {
+			cliTest(false, false, "machines", "list", "Profiles", op, profiles, "sort", "Name").run(t)
+		}
+		for _, params := range []string{"dog", "cat", "bird", "dog,cat", "cat,bird", "bird,dog"} {
+			cliTest(false, false, "machines", "list", "Params", op, params, "sort", "Name").run(t)
+		}
+	}
+	cliTest(false, false, "machines", "list", "Profiles", "In", "foo,bar", "sort", "Name").run(t)
+	cliTest(false, false, "machines", "list", "Profiles", "Nin", "foo,bar", "sort", "Name").run(t)
+	cliTest(false, false, "machines", "list", "Name", "In", "fred,bob", "sort", "Name").run(t)
+	cliTest(false, false, "machines", "list", "Name", "Nin", "fred,bob", "sort", "Name").run(t)
+	cliTest(false, false, "machines", "list", "Name", "Re", "fred|bob", "sort", "Name").run(t)
+	cliTest(false, false, "machines", "destroy", "Name:bob").run(t)
+	cliTest(false, false, "machines", "destroy", "Name:fred").run(t)
+	cliTest(false, false, "machines", "destroy", "Name:julius").run(t)
+	cliTest(false, false, "profiles", "destroy", "foo").run(t)
+	cliTest(false, false, "profiles", "destroy", "bar").run(t)
 	verifyClean(t)
 }

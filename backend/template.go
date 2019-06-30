@@ -3,11 +3,12 @@ package backend
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"text/template"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 // Template represents a template that will be associated with a boot
@@ -35,11 +36,13 @@ func (t *Template) SaveClean() store.KeySaver {
 func (t *Template) Indexes() map[string]index.Maker {
 	fix := AsTemplate
 	res := index.MakeBaseIndexes(t)
-	res["ID"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool { return fix(i).ID < fix(j).ID },
-		func(ref models.Model) (gte, gt index.Test) {
+	res["ID"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).ID < fix(j).ID },
+		Eq:     func(i, j models.Model) bool { return fix(i).ID == fix(j).ID },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).ID) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refID := fix(ref).ID
 			return func(s models.Model) bool {
 					return fix(s).ID >= refID
@@ -48,11 +51,12 @@ func (t *Template) Indexes() map[string]index.Maker {
 					return fix(s).ID > refID
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			tmpl := fix(t.New())
 			tmpl.ID = s
 			return tmpl, nil
-		})
+		},
+	}
 	return res
 }
 
@@ -219,10 +223,10 @@ func AsTemplates(o []models.Model) []*Template {
 
 var templateLockMap = map[string][]string{
 	"get":     {"templates"},
-	"create":  {"stages", "templates", "bootenvs", "machines", "tasks"},
-	"update":  {"stages", "templates", "bootenvs", "machines", "tasks"},
-	"patch":   {"stages", "templates", "bootenvs", "machines", "tasks"},
-	"delete":  {"stages", "templates", "bootenvs", "machines", "tasks"},
+	"create":  {"stages:rw", "templates:rw", "bootenvs:rw", "machines:rw", "tasks:rw"},
+	"update":  {"stages:rw", "templates:rw", "bootenvs:rw", "machines:rw", "tasks:rw"},
+	"patch":   {"stages:rw", "templates:rw", "bootenvs:rw", "machines:rw", "tasks:rw"},
+	"delete":  {"stages:rw", "templates:rw", "bootenvs:rw", "machines:rw", "tasks:rw"},
 	"actions": {"templates", "profiles", "params"},
 }
 

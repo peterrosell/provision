@@ -1,9 +1,12 @@
 package backend
 
 import (
+	"regexp"
+	"strings"
+
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 // Workflow is a the backend model wrapper for Workflow.
@@ -60,13 +63,13 @@ func (w *Workflow) New() store.KeySaver {
 func (w *Workflow) Indexes() map[string]index.Maker {
 	fix := AsWorkflow
 	res := index.MakeBaseIndexes(w)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).Name < fix(j).Name
-		},
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			name := fix(ref).Name
 			return func(ss models.Model) bool {
 					return fix(ss).Name >= name
@@ -75,9 +78,40 @@ func (w *Workflow) Indexes() map[string]index.Maker {
 					return fix(ss).Name > name
 				}
 		},
-		func(ss string) (models.Model, error) {
+		Fill: func(ss string) (models.Model, error) {
 			res := fix(w.New())
 			res.Name = ss
+			return res, nil
+		},
+	}
+	res["Stages"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Stages
+			p2 := fix(j).Stages
+			probes := map[string]bool{}
+			for _, k := range p2 {
+				probes[k] = false
+			}
+			for _, k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(s string) (models.Model, error) {
+			res := fix(w.New())
+			keys := strings.Split(s, ",")
+			for i := range keys {
+				keys[i] = strings.TrimSpace(keys[i])
+			}
+			res.Stages = keys
 			return res, nil
 		})
 	return res
@@ -124,10 +158,10 @@ func (w *Workflow) OnLoad() error {
 
 var workflowLockMap = map[string][]string{
 	"get":     {"workflows"},
-	"create":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"update":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"patch":   {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
-	"delete":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows"},
+	"create":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw"},
+	"update":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw"},
+	"patch":   {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw"},
+	"delete":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "workflows:rw"},
 	"actions": {"workflows", "stages", "profiles", "params"},
 }
 

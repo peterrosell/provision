@@ -9,7 +9,7 @@ import (
 
 func TestReservationCrud(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "reservations", "subnets")
+	rt := dt.Request(dt.Logger, "reservations:rw", "subnets")
 	tests := []crudTest{
 		{"Test Invalid Reservation Create", rt.Create, &models.Reservation{}, false},
 		{"Test Incorrect IP Address Create", rt.Create, &models.Reservation{Addr: net.ParseIP("127.0.0.1"), Token: "token", Strategy: "token"}, false},

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/models"
 	"github.com/gin-gonic/gin"
@@ -105,6 +106,8 @@ func (f *Frontend) InitPrefApi() {
 			if err.ContainsError() {
 				c.JSON(err.Code, err)
 			} else {
+				pcLogLvl, _ := logger.ParseLevel(f.dt.Prefs()["debugPlugins"])
+				f.pc.SetLevel(pcLogLvl)
 				if restartPlugins {
 					f.pc.RestartPlugins()
 				}

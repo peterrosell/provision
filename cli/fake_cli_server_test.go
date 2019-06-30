@@ -55,6 +55,7 @@ func fakeServer() error {
 		"--metrics-port", "10006",
 		"--static-ip", "127.0.0.1",
 		"--fake-pinger",
+		"--no-watcher",
 		"--drp-id", "Fred",
 		"--backend", "memory:///",
 		"--plugin-comm-root", "/tmp",

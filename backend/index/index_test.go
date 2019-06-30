@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 type testThing int64
@@ -46,6 +46,14 @@ func (t testThing) Indexes() map[string]Maker {
 					func(s models.Model) bool {
 						return s.(testThing) > ref.(testThing)
 					}
+			},
+			func(s string) (models.Model, error) {
+				res, err := strconv.ParseInt(s, 10, 64)
+				return testThing(res), err
+			}),
+		"Odd": MakeUnordered("odd",
+			func(i, j models.Model) bool {
+				return i.(testThing)&1 == j.(testThing)&1
 			},
 			func(s string) (models.Model, error) {
 				res, err := strconv.ParseInt(s, 10, 64)
@@ -231,4 +239,36 @@ func TestIndexes(t *testing.T) {
 		t.Errorf("Got unexpected error running Subset: %v", err)
 	}
 	matchIdx(t, sub, 6)
+}
+
+func TestOddIndexes(t *testing.T) {
+	objs := make([]models.Model, 10)
+	for i := range objs {
+		objs[i] = testThing(len(objs) - i)
+	}
+	idx := New(objs)
+	odds, err := Use(testThing(0).Indexes()["Odd"])(idx)
+	if err != nil {
+		t.Errorf("Unexpected error creating odds index from a list of number")
+	}
+	someOdds, err := Eq("1")(odds)
+	if err != nil {
+		t.Errorf("Error extracting 5 odd numbers from odds")
+	}
+	matchIdx(t, someOdds, 9, 7, 5, 3, 1)
+	someEvens, err := Eq("0")(odds)
+	if err != nil {
+		t.Errorf("Error extracting 5 even numbers from odds")
+	}
+	matchIdx(t, someEvens, 10, 8, 6, 4, 2)
+	someOdds, err = Ne("1")(odds)
+	if err != nil {
+		t.Errorf("Error extracting 5 not-odd numbers from odds")
+	}
+	matchIdx(t, someOdds, 10, 8, 6, 4, 2)
+	someEvens, err = Ne("0")(odds)
+	if err != nil {
+		t.Errorf("Error extracting 5 not-even numbers from odds")
+	}
+	matchIdx(t, someEvens, 9, 7, 5, 3, 1)
 }

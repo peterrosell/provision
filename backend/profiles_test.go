@@ -8,7 +8,7 @@ import (
 
 func TestProfilesCrud(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "stages", "profiles", "params", "machines")
+	rt := dt.Request(dt.Logger, "stages", "profiles:rw", "params", "machines")
 	tests := []crudTest{
 		{"Create empty profile", rt.Create, &models.Profile{}, false},
 		{"Create new profile with name", rt.Create, &models.Profile{Name: "Test Profile"}, true},
@@ -34,7 +34,7 @@ func TestProfilesCrud(t *testing.T) {
 
 func TestProfilesValidation(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "profiles", "params")
+	rt := dt.Request(dt.Logger, "profiles:rw", "params:rw")
 	tests := []crudTest{
 		{
 			"Create new Parameter",

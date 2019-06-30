@@ -11,7 +11,7 @@ import (
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/backend"
 	"github.com/digitalrebar/provision/utils"
-	"github.com/pin/tftp"
+	"github.com/digitalrebar/tftp"
 )
 
 type TftpHandler struct {

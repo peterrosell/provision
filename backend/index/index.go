@@ -3,6 +3,8 @@ package index
 import (
 	"errors"
 	"fmt"
+	"log"
+	"regexp"
 	s "sort"
 
 	"github.com/digitalrebar/provision/models"
@@ -15,9 +17,8 @@ type Indexer interface {
 // Tester is a function that tests to see if an item matches a condition
 type Test func(models.Model) bool
 
-// Less is a function that tests to see if the first item is less than
-// the second item.
-type Less func(models.Model, models.Model) bool
+// Cmp is a function that tests to see if the first item comapres to the second item.
+type Cmp func(models.Model, models.Model) bool
 
 // TestMaker is a function that takes a reference object and spits out
 // appropriate Tests for gte and gt, in that order.
@@ -29,11 +30,17 @@ type TestMaker func(models.Model) (Test, Test)
 // from a string to the appropriate type for the index.
 type Filler func(string) (models.Model, error)
 
+type Matcher func(models.Model, *regexp.Regexp) bool
+
 // Maker is used to hold reference functions for a specific index on a
 // specific struct.  The functions are:
 //
 // Less, which compares one item in the index with another, and
 // returns true if it is.  It is used to sort values in the index.
+//
+// Eq, which is used to comapre of item a is equal to item b in some way.
+// A Maker that has an Eq function without a Less function cannot be used for
+// sorting.
 //
 // Tests, which takes an example item of the type indexed with the
 // appropriate reference field filled in.  It returns a pair of
@@ -43,12 +50,29 @@ type Filler func(string) (models.Model, error)
 // Fill, which takes a string from a query parameter and turns it into
 // a models.Model that has the appropriate slot filled.
 type Maker struct {
-	keyOrder bool
-	Unique   bool
-	Type     string
-	Less     Less      `json:"-"`
-	Tests    TestMaker `json:"-"`
-	Fill     Filler    `json:"-"`
+	keyOrder  bool
+	Unique    bool
+	Unordered bool
+	Regex     bool
+	Type      string
+	Less      Cmp       `json:"-"`
+	Eq        Cmp       `json:"-"`
+	Match     Matcher   `json:"-"`
+	Tests     TestMaker `json:"-"`
+	Fill      Filler    `json:"-"`
+}
+
+func (m Maker) Sortable() bool { return m.Less != nil }
+
+func (m Maker) EqualItems(a, b models.Model) bool {
+	if m.Eq != nil {
+		return m.Eq(a, b)
+	}
+	if m.Less != nil {
+		return m.Less(a, b) == m.Less(b, a)
+	}
+	log.Panicf("Maker %s has no equality or order testing!", m.Type)
+	return false
 }
 
 // Index declares a struct field that can be indexed for a given
@@ -64,8 +88,12 @@ type Index struct {
 
 // Make takes a Less function, a TestMaker function, and a Filler
 // function and returns a Maker.  t is a textual type identifier for docs/helps
-func Make(unique bool, t string, less Less, maker TestMaker, filler Filler) Maker {
+func Make(unique bool, t string, less Cmp, maker TestMaker, filler Filler) Maker {
 	return Maker{Unique: unique, Type: t, Less: less, Tests: maker, Fill: filler}
+}
+
+func MakeUnordered(t string, eq Cmp, fill Filler) Maker {
+	return Maker{Type: t, Eq: eq, Fill: fill}
 }
 
 func Create(objs []models.Model) *Index {
@@ -86,9 +114,9 @@ func MakeKey() Maker {
 		keyOrder: true,
 		Unique:   true,
 		Type:     "string",
-		Less: func(i, j models.Model) bool {
-			return i.Key() < j.Key()
-		},
+		Less:     func(i, j models.Model) bool { return i.Key() < j.Key() },
+		Eq:       func(i, j models.Model) bool { return i.Key() == j.Key() },
+		Match:    func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(i.Key()) },
 		Tests: func(ref models.Model) (gte, gt Test) {
 			key := ref.Key()
 			return func(s models.Model) bool { return s.Key() >= key },
@@ -136,18 +164,8 @@ func MakeBaseIndexes(m models.Model) map[string]Maker {
 		res["Valid"] = Maker{
 			Unique: false,
 			Type:   "boolean",
-			Less: func(i, j models.Model) bool {
-				return !fix(i).Useable() && fix(j).Useable()
-			},
-			Tests: func(ref models.Model) (gte, gt Test) {
-				valid := fix(ref).Useable()
-				return func(s models.Model) bool {
-						v := fix(s).Useable()
-						return v || (v == valid)
-					},
-					func(s models.Model) bool {
-						return fix(s).Useable() && !valid
-					}
+			Eq: func(i, j models.Model) bool {
+				return fix(i).Useable() == fix(j).Useable()
 			},
 			Fill: func(s string) (models.Model, error) {
 				valid := false
@@ -165,18 +183,8 @@ func MakeBaseIndexes(m models.Model) map[string]Maker {
 		res["Available"] = Maker{
 			Unique: false,
 			Type:   "boolean",
-			Less: func(i, j models.Model) bool {
-				return !fix(i).IsAvailable() && fix(j).IsAvailable()
-			},
-			Tests: func(ref models.Model) (gte, gt Test) {
-				valid := fix(ref).IsAvailable()
-				return func(s models.Model) bool {
-						v := fix(s).IsAvailable()
-						return v || (v == valid)
-					},
-					func(s models.Model) bool {
-						return fix(s).IsAvailable() && !valid
-					}
+			Eq: func(i, j models.Model) bool {
+				return fix(i).IsAvailable() == fix(j).IsAvailable()
 			},
 			Fill: func(s string) (models.Model, error) {
 				valid := false
@@ -197,18 +205,8 @@ func MakeBaseIndexes(m models.Model) map[string]Maker {
 		res["ReadOnly"] = Maker{
 			Unique: false,
 			Type:   "boolean",
-			Less: func(i, j models.Model) bool {
-				return !fix(i).IsReadOnly() && fix(j).IsReadOnly()
-			},
-			Tests: func(ref models.Model) (gte, gt Test) {
-				valid := fix(ref).IsReadOnly()
-				return func(s models.Model) bool {
-						v := fix(s).IsReadOnly()
-						return v || (v == valid)
-					},
-					func(s models.Model) bool {
-						return fix(s).IsReadOnly() && !valid
-					}
+			Eq: func(i, j models.Model) bool {
+				return fix(i).IsReadOnly() == fix(j).IsReadOnly()
 			},
 			Fill: func(s string) (models.Model, error) {
 				valid := false
@@ -226,11 +224,13 @@ func MakeBaseIndexes(m models.Model) map[string]Maker {
 	}
 	if _, ok := m.(models.Bundler); ok {
 		fix := func(m models.Model) models.Bundler { return m.(models.Bundler) }
-		res["Bundle"] = Make(
-			false,
-			"string",
-			func(i, j models.Model) bool { return fix(i).GetBundle() < fix(j).GetBundle() },
-			func(ref models.Model) (gte, gt Test) {
+		res["Bundle"] = Maker{
+			Unique: false,
+			Type:   "string",
+			Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).GetBundle()) },
+			Less:   func(i, j models.Model) bool { return fix(i).GetBundle() < fix(j).GetBundle() },
+			Eq:     func(i, j models.Model) bool { return fix(i).GetBundle() == fix(j).GetBundle() },
+			Tests: func(ref models.Model) (gte, gt Test) {
 				refBundle := fix(ref).GetBundle()
 				return func(s models.Model) bool {
 						return fix(s).GetBundle() >= refBundle
@@ -239,9 +239,10 @@ func MakeBaseIndexes(m models.Model) map[string]Maker {
 						return fix(s).GetBundle() > refBundle
 					}
 			},
-			func(s string) (models.Model, error) {
+			Fill: func(s string) (models.Model, error) {
 				return FakeBundler(s), nil
-			})
+			},
+		}
 	}
 	return res
 }
@@ -429,6 +430,17 @@ func (i *Index) cp(newObjs []models.Model) *Index {
 	}
 }
 
+func (i *Index) sortInPlace() {
+	if i.sorted {
+		return
+	}
+	if !i.Sortable() {
+		panic("Cannot sort unsortable index")
+	}
+	s.SliceStable(i.objs, func(j, k int) bool { return i.Less(i.objs[j], i.objs[k]) })
+	i.sorted = true
+}
+
 // Subset causes the index to discard all elements that fall outside
 // the first index for which lower returns true and the first index
 // for which upper returns true.  The index must be sorted first, or
@@ -438,13 +450,33 @@ func (i *Index) cp(newObjs []models.Model) *Index {
 // determine where the subset should start and end at, and must choose
 // items based on what the index is currently sorted by.
 func (i *Index) subset(lower, upper Test) *Index {
-	if !i.sorted {
-		panic("Cannot take subset of unsorted index")
+	if i.sorted {
+		totalCount := len(i.objs)
+		start := s.Search(totalCount, func(j int) bool { return lower(i.objs[j]) })
+		end := s.Search(totalCount, func(j int) bool { return upper(i.objs[j]) })
+		return i.cp(i.objs[start:end])
 	}
-	totalCount := len(i.objs)
-	start := s.Search(totalCount, func(j int) bool { return lower(i.objs[j]) })
-	end := s.Search(totalCount, func(j int) bool { return upper(i.objs[j]) })
-	return i.cp(i.objs[start:end])
+	objs := []models.Model{}
+	for idx := range i.objs {
+		if lower(i.objs[idx]) && !upper(i.objs[idx]) {
+			objs = append(objs, i.objs[idx])
+		}
+	}
+	return i.cp(objs)
+}
+
+func (i *Index) selectItems(t Test) *Index {
+	objs := []models.Model{}
+	for idx := range i.objs {
+		if t(i.objs[idx]) {
+			objs = append(objs, i.objs[idx])
+		}
+	}
+	return &Index{
+		Maker:  i.Maker,
+		sorted: i.sorted,
+		objs:   objs,
+	}
 }
 
 // Filter is a function that takes an index, does stuff with it, and
@@ -484,14 +516,13 @@ func Any(filters ...Filter) Filter {
 	}
 }
 
-func nativeLess(a, b models.Model) bool {
-	return a.Key() < b.Key()
-}
-
 // Sort returns a filter that sorts an index references in a stable
 // fashion based on the passed-in Less function.
-func sort(l Less) Filter {
+func sort(l Cmp) Filter {
 	return func(i *Index) (*Index, error) {
+		if !i.Sortable() {
+			return nil, fmt.Errorf("index %s not sortable", i.Type)
+		}
 		res := i.cp(i.objs)
 		less := func(j, k int) bool { return l(res.objs[j], res.objs[k]) }
 		s.SliceStable(res.objs, less)
@@ -502,7 +533,7 @@ func sort(l Less) Filter {
 
 // Native returns a filter that will sort an Index based on key order.
 func Native() Filter {
-	return sort(nativeLess)
+	return Sort(MakeKey())
 }
 
 // Resort sorts the index with the same function passed in to the most
@@ -510,6 +541,15 @@ func Native() Filter {
 func Resort() Filter {
 	return func(i *Index) (*Index, error) {
 		return sort(i.Less)(i)
+	}
+}
+
+func Use(m Maker) Filter {
+	return func(i *Index) (*Index, error) {
+		j := i.cp(i.objs[:])
+		j.sorted = false
+		j.Maker = m
+		return j, nil
 	}
 }
 
@@ -531,7 +571,9 @@ func alwaysTrue(models.Model) bool  { return true }
 // and gt functions that SetComparators takes.
 func Subset(lower, upper Test) Filter {
 	return func(i *Index) (*Index, error) {
-		return i.subset(lower, upper), nil
+		res := i.subset(lower, upper)
+		res.sortInPlace()
+		return res, nil
 	}
 }
 
@@ -604,8 +646,25 @@ func Eq(ref string) Filter {
 		if err != nil {
 			return i, err
 		}
-		lower, upper := i.Tests(refTest)
-		return i.subset(lower, upper), nil
+		if i.sorted {
+			lower, upper := i.Tests(refTest)
+			return i.subset(lower, upper), nil
+		}
+		return i.selectItems(func(t models.Model) bool { return i.EqualItems(t, refTest) }), nil
+	}
+}
+
+// Re returns a filter that will keep all items that match ref as a regular expression
+func Re(ref string) Filter {
+	re, reErr := regexp.Compile(ref)
+	return func(i *Index) (*Index, error) {
+		if reErr != nil {
+			return nil, reErr
+		}
+		if i.Match == nil {
+			return nil, errors.New("cannot match via regular expression")
+		}
+		return i.selectItems(func(t models.Model) bool { return i.Match(t, re) }), nil
 	}
 }
 
@@ -643,11 +702,14 @@ func Ne(ref string) Filter {
 		if err != nil {
 			return i, err
 		}
-		lower, upper := i.Tests(refTest)
-		lowerParts := i.subset(alwaysTrue, lower)
-		upperParts := i.subset(upper, alwaysFalse)
-		lowerParts.objs = append(lowerParts.objs, upperParts.objs...)
-		return lowerParts, nil
+		if i.sorted {
+			lower, upper := i.Tests(refTest)
+			lowerParts := i.subset(alwaysTrue, lower)
+			upperParts := i.subset(upper, alwaysFalse)
+			lowerParts.objs = append(lowerParts.objs, upperParts.objs...)
+			return lowerParts, nil
+		}
+		return i.selectItems(func(t models.Model) bool { return !i.EqualItems(t, refTest) }), nil
 	}
 }
 
@@ -701,5 +763,28 @@ func Reverse() Filter {
 			res.objs[lower], res.objs[upper] = res.objs[upper], res.objs[lower]
 		}
 		return res, nil
+	}
+}
+
+// Uniq returns a filter that will uniq'ify an index.  Uniquification
+// always happens by key, and does not disturb the sort order
+func Uniq(q Filter) Filter {
+	return func(i *Index) (*Index, error) {
+		sf, err := q(i)
+		if err != nil {
+			return sf, err
+		}
+		seen := map[string]struct{}{}
+		objs := []models.Model{}
+		for j := range sf.objs {
+			k := sf.objs[j].Key()
+			if _, ok := seen[k]; ok {
+				continue
+			}
+			seen[k] = struct{}{}
+			objs = append(objs, sf.objs[j])
+		}
+		sf.objs = objs
+		return sf, nil
 	}
 }

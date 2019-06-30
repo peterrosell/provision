@@ -118,6 +118,10 @@ template.  RenderData has the following fields:
     Param returns values as simple strings! For complex output, look at
     .ParamAsJSON and .ParamAsYAML below.
 
+  - **.ParamExpand <key>** returns the value for the specified key for this
+    rendering, but then re-expands the string value again through the renderer.
+    If not a string, no expansion is done.
+
   - **.ParamAsJSON <key>** returns the value for the specified key for this
     rendering preserved in JSON formatting.  This is important for templates
     that rely on ``jq`` or other commands that need consistent formatting
@@ -655,6 +659,12 @@ Machine objects have many fields used for different tasks:
 
 - **Runnable**: A flag that indicates whether the machine agent is allowed
   to create and execute Jobs against this Machine.
+
+- **Locked**: A flag that indicates whether user-initiated changes to
+  a Machine will be accepted.  When true, any changes that do not
+  include change that sets this flag to false will be rejected.
+  Changes from non-user sources will still be accepted -- this includes
+  changes made while running tasks on a machine.
 
 - **Workflow**: The name of the Workflow that the Machine is going
   through.  If the Workflow field is not empty, the Stage and BootEnv

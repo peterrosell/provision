@@ -5,6 +5,8 @@ import (
 	"runtime"
 )
 
+// Stat contains a basic statistic sbout dr-provision
+//
 // swagger:model
 type Stat struct {
 	// required: true
@@ -13,6 +15,9 @@ type Stat struct {
 	Count int `json:"count"`
 }
 
+// Info contains information on how the running instance of
+// dr-provision is configured.
+//
 // swagger:model
 type Info struct {
 	// required: true
@@ -52,6 +57,8 @@ type Info struct {
 	License  LicenseBundle
 }
 
+// HasFeature is a helper function to determine if a requested feature
+// is present.
 func (i *Info) HasFeature(f string) bool {
 	for _, v := range i.Features {
 		if v == f {
@@ -66,9 +73,6 @@ func (i *Info) Fill() {
 	i.Os = runtime.GOOS
 	if i.Stats == nil {
 		i.Stats = make([]Stat, 0, 0)
-	}
-	if i.Scopes == nil {
-		i.Scopes = allScopes
 	}
 	if i.Features == nil {
 		i.Features = []string{
@@ -102,6 +106,17 @@ func (i *Info) Fill() {
 			"secure-params-in-content-packs",
 			"task-prerequisites",
 			"content-prerequisite-version-checking",
+			"stage-paramer",
+			"auto-boot-target",
+			"partial-objects",
+			"regex-string-filters",
 		}
+	}
+	if i.Scopes == nil {
+		scopes := map[string]map[string]struct{}{}
+		actionScopeLock.Lock()
+		defer actionScopeLock.Unlock()
+		Remarshal(allScopes, &scopes)
+		i.Scopes = scopes
 	}
 }

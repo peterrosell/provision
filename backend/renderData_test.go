@@ -16,7 +16,9 @@ const (
 Name = {{.Machine.Name}}
 HexAddress = {{.Machine.HexAddress}}
 ShortName = {{.Machine.ShortName}}
-FooParam = {{.Param "foo"}}`
+FooParam = {{.Param "foo"}}
+ExpandParamNoExpand = {{.Param "fooExpand"}}
+ExpandParam = {{.ParamExpand "fooExpand"}}`
 
 	tmplDefault = `{{template "included" .}}
 
@@ -41,6 +43,8 @@ Name = Test Name
 HexAddress = C0A87C0B
 ShortName = Test Name
 FooParam = bar
+ExpandParamNoExpand = bar{{.ProvisionerURL}}
+ExpandParam = barhttp://127.0.0.1:8091
 
 BootEnv:
 Name = default
@@ -57,6 +61,8 @@ Name = Test Name
 HexAddress = C0A87C0B
 ShortName = Test Name
 FooParam = bar
+ExpandParamNoExpand = bar{{.ProvisionerURL}}
+ExpandParam = barhttp://127.0.0.1:8091
 
 BootEnv:
 Name = default
@@ -84,15 +90,15 @@ ApiURL = https://127.0.0.1:8092`
 func TestRenderData(t *testing.T) {
 	dt := mkDT()
 	rt := dt.Request(dt.Logger,
-		"stages",
-		"bootenvs",
-		"templates",
-		"machines",
-		"profiles",
-		"params",
-		"tasks",
-		"preferences",
-		"workflows")
+		"stages:rw",
+		"bootenvs:rw",
+		"templates:rw",
+		"machines:rw",
+		"profiles:rw",
+		"params:rw",
+		"tasks:rw",
+		"preferences:rw",
+		"workflows:rw")
 	claimrt := dt.Request(dt.Logger, "roles")
 	var machine *Machine
 	var paramWithDefault *Param
@@ -178,6 +184,9 @@ func TestRenderData(t *testing.T) {
 		}
 		t.Logf("Created new test machine")
 		machine.Params["foo"] = "bar"
+		machine.Params["fooExpand"] = "bar{{.ProvisionerURL}}"
+		machine.Params["fooBadExpand"] = "bar{{.ProvisionerURL"
+		machine.Params["fooBadExpand2"] = "bar{{.PrionerURL}}"
 		rt.Save(machine)
 	})
 	genLocs := []string{
@@ -416,6 +425,24 @@ func TestRenderData(t *testing.T) {
 		} else if e.Error() != "No such machine parameter bogus" {
 			t.Errorf("Param should return an error: No such machine parameter bogus, but returned: %s\n", e.Error())
 		}
+		_, e = rd.ParamExpand("bogus")
+		if e == nil {
+			t.Errorf("ParamExpand should return an error when machine is not defined in RenderData\n")
+		} else if e.Error() != "No such machine parameter bogus" {
+			t.Errorf("ParamExpand should return an error: No such machine parameter bogus, but returned: %s\n", e.Error())
+		}
+		_, e = rd.ParamExpand("fooBadExpand")
+		if e == nil {
+			t.Errorf("ParamExpand should return an error when bad data in parameter\n")
+		} else if e.Error() != "Error compiling parameter fooBadExpand: template: machine:1: unclosed action" {
+			t.Errorf("ParamExpand should return an error: Error compiling parameter fooBadExpand: template: machine:1: unclosed action, but returned: %s\n", e.Error())
+		}
+		_, e = rd.ParamExpand("fooBadExpand2")
+		if e == nil {
+			t.Errorf("ParamExpand should return an error when bad data in parameter\n")
+		} else if e.Error() != "Error rendering parameter fooBadExpand2: template: machine:1:5: executing \"machine\" at <.PrionerURL>: can't evaluate field PrionerURL in type *backend.RenderData" {
+			t.Errorf("ParamExpand should return an error: Error rendering parameter fooBadExpand2: template: machine:1:5: executing \"machine\" at <.PrionerURL>: can't evaluate field PrionerURL in type *backend.RenderData, but returned: %s\n", e.Error())
+		}
 		ok := rd.ParamExists("bogus")
 		if ok {
 			t.Errorf("ParamExists should return false when machine is not defined in RenderData\n")
@@ -432,6 +459,30 @@ func TestRenderData(t *testing.T) {
 		} else {
 			if s != "bar" {
 				t.Errorf("Parameter foo should have been bar: %s\n", s)
+			}
+		}
+		p, e = rd.ParamExpand("foo")
+		if e != nil {
+			t.Errorf("ParamExpand foo should NOT return an error: %v\n", e)
+		}
+		s, ok = p.(string)
+		if !ok {
+			t.Errorf("ParameterExpand foo should have been a string\n")
+		} else {
+			if s != "bar" {
+				t.Errorf("ParameterExpand foo should have been bar: %s\n", s)
+			}
+		}
+		p, e = rd.ParamExpand("fooExpand")
+		if e != nil {
+			t.Errorf("ParamExpand fooExpand should NOT return an error: %v\n", e)
+		}
+		s, ok = p.(string)
+		if !ok {
+			t.Errorf("ParamExpand fooExpand should have been a string\n")
+		} else {
+			if s != "barhttp://127.0.0.1:8091" {
+				t.Errorf("ParamExpand foo should have been bar: %s\n", s)
 			}
 		}
 		ok = rd.ParamExists("foo")

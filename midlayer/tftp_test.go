@@ -17,7 +17,7 @@ import (
 
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/backend"
-	"github.com/pin/tftp"
+	"github.com/digitalrebar/tftp"
 )
 
 func TestTftpFiles(t *testing.T) {

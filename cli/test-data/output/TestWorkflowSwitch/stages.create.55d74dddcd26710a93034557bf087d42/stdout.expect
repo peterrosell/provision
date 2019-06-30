@@ -9,6 +9,8 @@
   "Meta": {},
   "Name": "stage4",
   "OptionalParams": [],
+  "Params": {},
+  "Partial": false,
   "Profiles": [],
   "ReadOnly": false,
   "Reboot": false,

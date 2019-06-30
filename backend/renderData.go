@@ -37,12 +37,14 @@ type renderer struct {
 	write      func(net.IP) (io.Reader, error)
 }
 
-func (r renderer) register(fs *FileSystem) {
-	fs.AddDynamicFile(r.path, r.write)
+func (r renderer) register(rt *RequestTracker) {
+	rt.Tracef("Registering dynamic file at %s", r.path)
+	rt.dt.FS.AddDynamicFile(r.path, r.write)
 }
 
-func (r renderer) deregister(fs *FileSystem) {
-	fs.DelDynamicFile(r.path)
+func (r renderer) deregister(rt *RequestTracker) {
+	rt.Tracef("Deregistering dynamic file at %s", r.path)
+	rt.dt.FS.DelDynamicFile(r.path)
 }
 
 type renderers []renderer
@@ -53,22 +55,50 @@ type renderable interface {
 	templates() *template.Template
 }
 
-func (r renderers) register(fs *FileSystem) {
+func (r renderers) register(rt *RequestTracker) {
 	if r == nil || len(r) == 0 {
 		return
 	}
-	for _, rt := range r {
-		rt.register(fs)
+	start := time.Now()
+	rt.dt.FS.Lock()
+	defer rt.dt.FS.Unlock()
+	for _, rq := range r {
+		rt.dt.FS.addDynamicFile(rq.path, rq.write)
 	}
+	rt.Tracef("rt: render register took %s", time.Since(start))
 }
 
-func (r renderers) deregister(fs *FileSystem) {
+func (r renderers) deregister(rt *RequestTracker) {
 	if r == nil || len(r) == 0 {
 		return
 	}
-	for _, rt := range r {
-		rt.deregister(fs)
+	start := time.Now()
+	rt.dt.FS.Lock()
+	defer rt.dt.FS.Unlock()
+	for _, rq := range r {
+		rt.dt.FS.delDynamicFile(rq.path)
 	}
+	rt.Tracef("rt: render deregister took %s", time.Since(start))
+}
+
+func replaceDynamicFSRenderers(rt *RequestTracker, rm, add renderers) {
+	if len(add) == 0 && len(rm) == 0 {
+		return
+	}
+	start := time.Now()
+	rt.dt.FS.Lock()
+	defer rt.dt.FS.Unlock()
+	if len(rm) > 0 {
+		for _, rq := range rm {
+			rt.dt.FS.delDynamicFile(rq.path)
+		}
+	}
+	if len(add) > 0 {
+		for _, rq := range add {
+			rt.dt.FS.addDynamicFile(rq.path, rq.write)
+		}
+	}
+	rt.Tracef("rt: dynamic fs update took %s", time.Since(start))
 }
 
 func newRenderedTemplate(r *RenderData,
@@ -78,22 +108,22 @@ func newRenderedTemplate(r *RenderData,
 	if r.Task != nil {
 		prefixes = append(prefixes, "tasks")
 		keys = append(keys, r.Task.Key())
-		r.rt.Debugf("Making renderer for %s:%s template %s at path %s", r.Task.Prefix(), r.Task.Key(), tmplKey, path)
+		r.rt.Tracef("Making renderer for %s:%s template %s at path %s", r.Task.Prefix(), r.Task.Key(), tmplKey, path)
 	}
 	if r.Stage != nil {
 		prefixes = append(prefixes, "stages")
 		keys = append(keys, r.Stage.Key())
-		r.rt.Debugf("Making renderer for %s:%s template %s at path %s", r.Stage.Prefix(), r.Stage.Key(), tmplKey, path)
+		r.rt.Tracef("Making renderer for %s:%s template %s at path %s", r.Stage.Prefix(), r.Stage.Key(), tmplKey, path)
 	}
 	if r.Env != nil {
 		prefixes = append(prefixes, "bootenvs")
 		keys = append(keys, r.Env.Key())
-		r.rt.Debugf("Making renderer for %s:%s template %s at path %s", r.Env.Prefix(), r.Env.Key(), tmplKey, path)
+		r.rt.Tracef("Making renderer for %s:%s template %s at path %s", r.Env.Prefix(), r.Env.Key(), tmplKey, path)
 	}
 	if r.Machine != nil {
 		prefixes = append(prefixes, "machines")
 		keys = append(keys, r.Machine.Key())
-		r.rt.Debugf("Making renderer for %s:%s template %s at path %s", r.Machine.Prefix(), r.Machine.Key(), tmplKey, path)
+		r.rt.Tracef("Making renderer for %s:%s template %s at path %s", r.Machine.Prefix(), r.Machine.Key(), tmplKey, path)
 	}
 	targetPrefix := r.target.Prefix()
 	dt := r.rt.dt
@@ -543,7 +573,7 @@ func (r *RenderData) MachineRepos() []*Repo {
 		found = append(found, li)
 	}
 	found = append(found, r.fetchRepos(func(rd *Repo) bool {
-		if li != nil && rd.InstallSource {
+		if li != nil && li.renderStyle() != "apt" && rd.InstallSource {
 			return false
 		}
 		ok := rd.Arch == "any" && !rd.InstallSource
@@ -694,7 +724,7 @@ func (r *RenderData) GenerateToken() string {
 			AddRawClaim("tasks", "get", "*").
 			AddRawClaim("info", "get", "*").
 			AddRawClaim("events", "post", "*").
-			AddRawClaim("reservations", "create", "*").
+			AddRawClaim("reservations", "get,create", "*").
 			AddRawClaim("reservations", "*", models.Hexaddr(r.Machine.Address)).
 			AddMachine(r.Machine.Key()).
 			AddSecrets("", grantorSecret, r.Machine.Secret).
@@ -731,7 +761,7 @@ func (r *RenderData) GenerateInfiniteToken() string {
 		AddRawClaim("tasks", "get", "*").
 		AddRawClaim("info", "get", "*").
 		AddRawClaim("events", "post", "*").
-		AddRawClaim("reservations", "create", "*").
+		AddRawClaim("reservations", "get,create", "*").
 		AddRawClaim("reservations", "*", models.Hexaddr(r.Machine.Address)).
 		AddMachine(r.Machine.Key()).
 		AddSecrets("", grantorSecret, r.Machine.Secret).
@@ -828,6 +858,28 @@ func (r *RenderData) Param(key string) (interface{}, error) {
 		}
 	}
 	return nil, fmt.Errorf("No such machine parameter %s", key)
+}
+
+func (r *RenderData) ParamExpand(key string) (interface{}, error) {
+	sobj, err := r.Param(key)
+	if err != nil {
+		return nil, err
+	}
+	s, ok := sobj.(string)
+	if !ok {
+		return sobj, nil
+	}
+
+	res := &bytes.Buffer{}
+	tmpl, err := template.New("machine").Funcs(models.DrpSafeFuncMap()).Parse(s)
+	if err != nil {
+		return nil, fmt.Errorf("Error compiling parameter %s: %v", key, err)
+	}
+	tmpl = tmpl.Option("missingkey=error")
+	if err := tmpl.Execute(res, r); err != nil {
+		return nil, fmt.Errorf("Error rendering parameter %s: %v", key, err)
+	}
+	return res.String(), nil
 }
 
 // ParamAsJSON will return the specified parameter as a JSON

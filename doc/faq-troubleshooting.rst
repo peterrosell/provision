@@ -175,11 +175,16 @@ use                       user          password
 ========================  ============  ============
 ``drp endpoint auth``     rocketskates  r0cketsk8ts
 ``sledgehammer``          root          rebar1
-``most bootenvs``         root          RocketSkates
-``debian / ubuntu``       rocketskates  RocketSkates
+``most bootenvs`` (*)     root          RocketSkates
+``debian`` / ``ubuntu``   rocketskates  RocketSkates
+``cloud-init`` images     <varies> (*)  RocketSkates
 ========================  ============  ============
 
+.. note:: ``(*)`` "most bootenvs" and ``cloud-init`` images refers to CentOS, Ubuntu, CoreOS, ESXi, etc.  Generally speaking, this is the default "installed" credentials.  Note that each distro has it's own rules about ``root`` versus installed default user accounts.  DRP follows most vendors "patterns" with regards to ``root`` -vs- unprivileged user creation, with the username changed to "rocketskates".  Some vendor specific notes are below.
+
 For ``debian / ubuntu`` bootenvs, the default user (``rocketskates``, can be changed by setting ``provisioner-default-user`` Param), has ``sudo`` privileges.
+
+For Images with ``cloud-init`` pieces, there often is an injected ``centos`` user for CentOS, ``ubuntu`` for Ubuntu, etc. user.  This is controlled by the ``cloud-init`` configurations of the image build process.
 
 .. _rs_rsclirc:
 
@@ -257,6 +262,17 @@ Missing VBoxNet Network
 Virtual Box does not add host only networks until a VM is attempting to use them.  If you are using the interfaces API (or UX wizard) to find available networks and ``vboxnet0`` does not appear then start your VM and recreate the address.
 
 Virtual Box may also fail to allocate an IP to the host network due to incomplete configuration.  In this case, ``ip addr`` will show the network but no IPv4 address has been allocated; consequently, Digital Rebar will not report this as a working interface.
+
+.. _rs_vbox_no_boot:
+
+VirtualBox "no bootable medium" on second boot
+----------------------------------------------
+
+VirtualBox PXE firmware does not handle PXE chaining effectively.  This happens because DRP treats known and unknown machines differently so the first boot gets more different boot instructions.
+
+The workaround is to use DHCP option 67 to supply the correct boot file.  Setting DHCP option 67 to `lpxelinux.0` bypasses the chainloader after the machine has registered.
+
+See also :ref:`rs_uefi_boot_option`
 
 .. _rs_debug_sledgehammer:
 
@@ -365,6 +381,15 @@ Plugin downloads require two steps.  First, use the Catalog to locate the correc
 
       # download the plugin - AWS cares about extra slashes ... blech
       curl -s ${BASE}${PART} -o drp-plugin-ipmi
+
+.. _rs_plugin_providers_license:
+
+Import plugin failed pool: define failed
+----------------------------------------
+
+If you are using the DRPCLI to upload a licensed RackN plugin, the endpoint will reject the upload with a defined failed error.
+
+Install the license content pack and try again.  If you've saved the `rackn-license.json` file then you can use the DRPCLI to upload it via `drpcli contents upload rackn-license.json`.
 
 .. _rs_update_content_command_line:
 
@@ -611,7 +636,7 @@ Example URLs:
 
 .. _rs_ubuntu_local_repo:
 
-Booting Ubunutu Without External Access
+Booting Ubuntu Without External Access
 ---------------------------------------
 
 Default Ubuntu ISOs will attempt to check internet repositories, this can cause problems during provisioning if your environment does not have outbound access.

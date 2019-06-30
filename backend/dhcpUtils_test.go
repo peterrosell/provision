@@ -54,7 +54,7 @@ func (l *ltf) find(t *testing.T, rt *RequestTracker) {
 
 func TestDHCPRenew(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "subnets", "reservations", "leases")
+	rt := dt.Request(dt.Logger, "subnets:rw", "reservations:rw", "leases:rw")
 	startObjs := []crudTest{
 		{
 			"Initial Subnet",
@@ -212,7 +212,7 @@ func (l *ltc) test(t *testing.T, rt *RequestTracker) {
 
 func TestDHCPCreateReservationOnly(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "subnets", "reservations", "leases")
+	rt := dt.Request(dt.Logger, "subnets", "reservations:rw", "leases:rw")
 	startObjs := []crudTest{
 		{"Res1", rt.Create, &models.Reservation{Addr: net.ParseIP("192.168.123.10"), Token: "res1", Strategy: "mac"}, true},
 		{"Res2", rt.Create, &models.Reservation{Addr: net.ParseIP("192.168.124.10"), Token: "res2", Strategy: "mac"}, true},
@@ -232,9 +232,7 @@ func TestDHCPCreateReservationOnly(t *testing.T) {
 	for _, obj := range createTests {
 		obj.test(t, rt)
 	}
-	func() {
-		d, unlocker := dt.lockEnts("subnets", "reservations", "leases")
-		defer unlocker()
+	rt.Do(func(d Stores) {
 		// Expire one lease
 		lease := AsLease(d("leases").Find(models.Hexaddr(net.ParseIP("192.168.123.10"))))
 		lease.ExpireTime = time.Now().Add(-2 * time.Second)
@@ -242,7 +240,7 @@ func TestDHCPCreateReservationOnly(t *testing.T) {
 		// Make another refer to a different Token
 		lease = AsLease(d("leases").Find(models.Hexaddr(net.ParseIP("192.168.124.10"))))
 		lease.Token = "resn"
-	}()
+	})
 	renewTests := []ltc{
 		{"Renew expired lease for Res1", "mac", "res1", nil, nil, true, net.ParseIP("192.168.123.10")},
 		{"Fail to create lesase for Res2 when conflicting lease exists", "mac", "res2", nil, nil, false, nil},
@@ -254,7 +252,7 @@ func TestDHCPCreateReservationOnly(t *testing.T) {
 
 func TestDHCPCreateSubnet(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "subnets", "leases", "reservations")
+	rt := dt.Request(dt.Logger, "subnets:rw", "leases:rw", "reservations:rw")
 	var subnet *Subnet
 	// A subnet with 3 active addresses
 	startObjs := []crudTest{
@@ -316,7 +314,7 @@ func TestDHCPCreateSubnet(t *testing.T) {
 
 func TestDHCPP2P(t *testing.T) {
 	dt := mkDT()
-	rt := dt.Request(dt.Logger, "subnets", "leases", "reservations")
+	rt := dt.Request(dt.Logger, "subnets:rw", "leases:rw", "reservations")
 	// A subnet with 3 active addresses
 	startObjs := []crudTest{
 		{

@@ -91,6 +91,15 @@ func (f *Frontend) makeParamEndpoints(obj models.Paramer, idKey string) (
 			rt.Do(func(_ backend.Stores) {
 				params = rt.GetParams(ob.(models.Paramer), aggregator(c), f.wantDecodeSecure(c))
 			})
+			if tp := c.Query("params"); tp != "" {
+				tmp := map[string]interface{}{}
+				for _, k := range strings.Split(tp, ",") {
+					if v, ok := params[k]; ok {
+						tmp[k] = v
+					}
+				}
+				params = tmp
+			}
 			c.JSON(http.StatusOK, params)
 		},
 		/* getOne */ func(c *gin.Context) {

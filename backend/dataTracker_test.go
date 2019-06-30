@@ -10,7 +10,7 @@ import (
 
 	"github.com/digitalrebar/logger"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 var (
@@ -85,7 +85,8 @@ func mkDT() *DataTracker {
 		"fred",
 		l,
 		map[string]string{"systemGrantorSecret": "itisfred", "defaultStage": "none", "defaultBootEnv": "local", "unknownBootEnv": "ignore"},
-		NewPublishers(baseLog))
+		NewPublishers(baseLog),
+		nil)
 	return dt
 }
 

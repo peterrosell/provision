@@ -1,13 +1,14 @@
 package backend
 
 import (
+	"regexp"
 	"strings"
 	"sync"
 	"text/template"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 // Task is a thing that can run on a Machine.
@@ -16,6 +17,11 @@ type Task struct {
 	validate
 	rootTemplate *template.Template
 	tmplMux      sync.Mutex
+}
+
+// SetReadOnly interface function to set the ReadOnly flag.
+func (t *Task) SetReadOnly(b bool) {
+	t.ReadOnly = b
 }
 
 func (t *Task) sanityCheck(rt *RequestTracker, e models.ErrorAdder, seen map[string]int) (prereqs []string, sane bool) {
@@ -98,11 +104,13 @@ func (t *Task) New() store.KeySaver {
 func (t *Task) Indexes() map[string]index.Maker {
 	fix := AsTask
 	res := index.MakeBaseIndexes(t)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refName := fix(ref).Name
 			return func(s models.Model) bool {
 					return fix(s).Name >= refName
@@ -111,11 +119,12 @@ func (t *Task) Indexes() map[string]index.Maker {
 					return fix(s).Name > refName
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			task := fix(t.New())
 			task.Name = s
 			return task, nil
-		})
+		},
+	}
 	return res
 }
 
@@ -234,10 +243,10 @@ func (t *Task) render(rt *RequestTracker, m *Machine, e *models.Error) renderers
 
 var taskLockMap = map[string][]string{
 	"get":     {"templates", "tasks"},
-	"create":  {"stages", "machines", "templates", "tasks", "bootenvs", "workflows", "profiles"},
-	"update":  {"stages", "machines", "templates", "tasks", "bootenvs", "workflows", "profiles"},
-	"patch":   {"stages", "machines", "templates", "tasks", "bootenvs", "workflows", "profiles"},
-	"delete":  {"stages", "tasks", "machines", "workflows", "profiles"},
+	"create":  {"stages:rw", "machines", "templates", "tasks:rw", "bootenvs", "workflows", "profiles"},
+	"update":  {"stages:rw", "machines", "templates", "tasks:rw", "bootenvs", "workflows", "profiles"},
+	"patch":   {"stages:rw", "machines", "templates", "tasks:rw", "bootenvs", "workflows", "profiles"},
+	"delete":  {"stages", "tasks:rw", "machines", "workflows", "profiles"},
 	"actions": {"tasks", "profiles", "params"},
 }
 

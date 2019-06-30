@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"text/template"
@@ -20,7 +21,7 @@ import (
 	"github.com/VictorLowther/jsonpatch2/utils"
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 	"github.com/mholt/archiver"
 )
 
@@ -57,13 +58,13 @@ func (b *BootEnv) SaveClean() store.KeySaver {
 func (b *BootEnv) Indexes() map[string]index.Maker {
 	fix := AsBootEnv
 	res := index.MakeBaseIndexes(b)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).Name < fix(j).Name
-		},
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			name := fix(ref).Name
 			return func(s models.Model) bool {
 					return fix(s).Name >= name
@@ -72,18 +73,19 @@ func (b *BootEnv) Indexes() map[string]index.Maker {
 					return fix(s).Name > name
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			res := fix(b.New())
 			res.Name = s
 			return res, nil
-		})
-	res["OsName"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool {
-			return fix(i).OS.Name < fix(j).OS.Name
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+	}
+	res["OsName"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).OS.Name < fix(j).OS.Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).OS.Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).OS.Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			name := fix(ref).OS.Name
 			return func(s models.Model) bool {
 					return fix(s).OS.Name >= name
@@ -92,26 +94,16 @@ func (b *BootEnv) Indexes() map[string]index.Maker {
 					return fix(s).OS.Name > name
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			res := fix(b.New())
 			res.OS.Name = s
 			return res, nil
-		})
-	res["OnlyUnknown"] = index.Make(
-		false,
+		},
+	}
+	res["OnlyUnknown"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
-			return !fix(i).OnlyUnknown && fix(j).OnlyUnknown
-		},
-		func(ref models.Model) (gte, gt index.Test) {
-			unknown := fix(ref).OnlyUnknown
-			return func(s models.Model) bool {
-					v := fix(s).OnlyUnknown
-					return v || (v == unknown)
-				},
-				func(s models.Model) bool {
-					return fix(s).OnlyUnknown && !unknown
-				}
+			return fix(i).OnlyUnknown == fix(j).OnlyUnknown
 		},
 		func(s string) (models.Model, error) {
 			res := fix(b.New())
@@ -413,7 +405,7 @@ func (b *BootEnv) sledgeExploder(rt *RequestTracker, arch string, archInfo model
 		defer explodeMux.Unlock()
 		sPath := filepath.Join(lp, path.Dir(archInfo.Kernel))
 		if _, err := os.Stat(b.localPathFor(rt, archInfo.Kernel, arch)); err == nil {
-			rt.Infof("BootEnv %s: %s slready exists", b.Name, sPath)
+			rt.Infof("BootEnv %s: %s already exists", b.Name, sPath)
 			return
 		}
 		rt.Errorf("Sledgehammer: Extracting %s to %s", archInfo.IsoFile, lp)
@@ -621,7 +613,7 @@ func (b *BootEnv) AfterDelete() {
 		if err.ContainsError() {
 			b.Errors = err.Messages
 		} else {
-			rts.deregister(b.rt.dt.FS)
+			rts.deregister(b.rt)
 		}
 		idx, idxerr := index.All(
 			index.Sort(b.Indexes()["OsName"]),
@@ -699,7 +691,7 @@ func (b *BootEnv) AfterSave() {
 		}
 	})
 	if b.Available && b.renderers != nil {
-		b.renderers.register(b.rt.dt.FS)
+		b.renderers.register(b.rt)
 	}
 	b.AddDynamicTree()
 	b.renderers = nil
@@ -707,10 +699,10 @@ func (b *BootEnv) AfterSave() {
 
 var bootEnvLockMap = map[string][]string{
 	"get":     {"bootenvs"},
-	"create":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "params", "workflows"},
-	"update":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "params", "workflows"},
-	"patch":   {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "params", "workflows"},
-	"delete":  {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "params", "workflows"},
+	"create":  {"stages:rw", "bootenvs:rw", "machines", "tasks", "templates:rw", "profiles", "params", "workflows:rw"},
+	"update":  {"stages:rw", "bootenvs:rw", "machines", "tasks", "templates:rw", "profiles", "params", "workflows:rw"},
+	"patch":   {"stages:rw", "bootenvs:rw", "machines", "tasks", "templates:rw", "profiles", "params", "workflows:rw"},
+	"delete":  {"stages", "bootenvs:rw", "machines", "tasks", "templates", "profiles", "params"},
 	"actions": {"stages", "bootenvs", "machines", "tasks", "templates", "profiles", "params"},
 }
 

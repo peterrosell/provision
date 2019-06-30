@@ -35,6 +35,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"os/user"
 	"path"
 	"path/filepath"
 	"runtime/pprof"
@@ -48,8 +49,8 @@ import (
 	"github.com/digitalrebar/provision/frontend"
 	"github.com/digitalrebar/provision/midlayer"
 	"github.com/digitalrebar/provision/models"
+	"github.com/digitalrebar/provision/store"
 	"github.com/digitalrebar/provision/utils"
-	"github.com/digitalrebar/store"
 )
 
 // EmbeddedAssetsExtractFunc is a function pointer that can set at initialization
@@ -67,7 +68,7 @@ type ProgOpts struct {
 	MetricsPort         int    `long:"metrics-port" description:"Port the metrics HTTP server should listen on" default:"8080" env:"RS_METRICS_PORT"`
 	StaticPort          int    `long:"static-port" description:"Port the static HTTP file server should listen on" default:"8091" env:"RS_STATIC_PORT"`
 	TftpPort            int    `long:"tftp-port" description:"Port for the TFTP server to listen on" default:"69" env:"RS_TFTP_PORT"`
-	ApiPort             int    `long:"api-port" description:"Port for the API server to listen on" default:"8092" env:"RS_API_PORT"`
+	APIPort             int    `long:"api-port" description:"Port for the API server to listen on" default:"8092" env:"RS_API_PORT"`
 	DhcpPort            int    `long:"dhcp-port" description:"Port for the DHCP server to listen on" default:"67" env:"RS_DHCP_PORT"`
 	BinlPort            int    `long:"binl-port" description:"Port for the PXE/BINL server to listen on" default:"4011" env:"RS_BINL_PORT"`
 	UnknownTokenTimeout int    `long:"unknown-token-timeout" description:"The default timeout in seconds for the machine create authorization token" default:"600" env:"RS_UNKNOWN_TOKEN_TIMEOUT"`
@@ -75,8 +76,8 @@ type ProgOpts struct {
 	OurAddress          string `long:"static-ip" description:"IP address to advertise for the static HTTP file server" default:"" env:"RS_STATIC_IP"`
 	ForceStatic         bool   `long:"force-static" description:"Force the system to always use the static IP." env:"RS_FORCE_STATIC"`
 
-	BackEndType    string `long:"backend" description:"Storage to use for persistent data. Can be either 'consul', 'directory', or a store URI" default:"directory" env:"RS_BACKEND_TYPE"`
-	SecretsType    string `long:"secrets" description:"Storage to use for persistent data. Can be either 'consul', 'directory', or a store URI.  Will default to being the same as 'backend'" default:"" env:"RS_SECRETS_TYPE"`
+	BackEndType    string `long:"backend" description:"Storage to use for persistent data. Can be either 'directory', or a store URI" default:"directory" env:"RS_BACKEND_TYPE"`
+	SecretsType    string `long:"secrets" description:"Storage to use for persistent data. Can be either 'directory', or a store URI.  Will default to being the same as 'backend'" default:"" env:"RS_SECRETS_TYPE"`
 	LocalContent   string `long:"local-content" description:"Storage to use for local overrides." default:"directory:///etc/dr-provision?codec=yaml" env:"RS_LOCAL_CONTENT"`
 	DefaultContent string `long:"default-content" description:"Store URL for local content" default:"file:///usr/share/dr-provision/default.yaml?codec=yaml" env:"RS_DEFAULT_CONTENT"`
 
@@ -102,23 +103,25 @@ type ProgOpts struct {
 	DebugRenderer string `long:"debug-renderer" description:"Debug level for the Template Renderer" default:"warn" env:"RS_DEBUG_RENDERER"`
 	DebugFrontend string `long:"debug-frontend" description:"Debug level for the Frontend" default:"warn" env:"RS_DEBUG_FRONTEND"`
 	DebugPlugins  string `long:"debug-plugins" description:"Debug level for the Plug-in layer" default:"warn" env:"RS_DEBUG_PLUGINS"`
-	TlsKeyFile    string `long:"tls-key" description:"The TLS Key File" default:"server.key" env:"RS_TLS_KEY_FILE"`
-	TlsCertFile   string `long:"tls-cert" description:"The TLS Cert File" default:"server.crt" env:"RS_TLS_CERT_FILE"`
+	TLSKeyFile    string `long:"tls-key" description:"The TLS Key File" default:"server.key" env:"RS_TLS_KEY_FILE"`
+	TLSCertFile   string `long:"tls-cert" description:"The TLS Cert File" default:"server.crt" env:"RS_TLS_CERT_FILE"`
 	UseOldCiphers bool   `long:"use-old-ciphers" description:"Use Original Less Secure Cipher List" env:"RS_USE_OLD_CIPHERS"`
-	DrpId         string `long:"drp-id" description:"The id of this Digital Rebar Provision instance" default:"" env:"RS_DRP_ID"`
-	HaId          string `long:"ha-id" description:"The id of this Digital Rebar Provision HA Cluster" default:"" env:"RS_HA_ID"`
+	DrpID         string `long:"drp-id" description:"The id of this Digital Rebar Provision instance" default:"" env:"RS_DRP_ID"`
+	HaID          string `long:"ha-id" description:"The id of this Digital Rebar Provision HA Cluster" default:"" env:"RS_HA_ID"`
 	CurveOrBits   string `long:"cert-type" description:"Type of cert to generate. values are: P224, P256, P384, P521, RSA, or <number of RSA bits>" default:"P384" env:"RS_CURVE_OR_BITS"`
 
 	BaseTokenSecret     string `long:"base-token-secret" description:"Auth Token secret to allow revocation of all tokens" default:"" env:"RS_BASE_TOKEN_SECRET"`
 	SystemGrantorSecret string `long:"system-grantor-secret" description:"Auth Token secret to allow revocation of all Machine tokens" default:"" env:"RS_SYSTEM_GRANTOR_SECRET"`
 	FakePinger          bool   `hidden:"true" long:"fake-pinger" env:"RS_FAKE_PINGER"`
+	NoWatcher           bool   `hidden:"true" long:"no-watcher" env:"RS_NO_WATCHER"`
 	DefaultLogLevel     string `long:"log-level" description:"Level to log messages at" default:"warn" env:"RS_DEFAULT_LOG_LEVEL"`
 
 	HaEnabled   bool   `long:"ha-enabled" description:"Enable HA" env:"RS_HA_ENABLED"`
 	HaAddress   string `long:"ha-address" description:"IP address to advertise as our HA address" default:"" env:"RS_HA_ADDRESS"`
 	HaInterface string `long:"ha-interface" description:"Interface to put the VIP on for HA" default:"" env:"RS_HA_INTERFACE"`
+	HaPassive   bool   `long:"ha-passive" description:"Wait for SIGUSR1 to switch to the active dr-provision" env:"RS_HA_PASSIVE"`
 
-	PromGwUrl      string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:"" env:"RS_PROM_GW_URL"`
+	PromGwURL      string `long:"prometheus-gateway-url" description:"URL to push metrics to" default:"" env:"RS_PROM_GW_URL"`
 	PromInterval   int    `long:"prometheus-interval" description:"Duration in seconds to push metrics" default:"5" env:"RS_PROM_INTERVAL"`
 	CleanupCorrupt bool   `long:"cleanup" description:"Clean up corrupted writable data.  Only use when directed." env:"RS_CLEANUP_CORRUPT"`
 }
@@ -128,6 +131,7 @@ func mkdir(d string) error {
 }
 
 func processArgs(localLogger *log.Logger, cOpts *ProgOpts) error {
+	localLogger.Printf("Processing arguments")
 	var err error
 
 	if cOpts.VersionFlag {
@@ -150,9 +154,6 @@ func processArgs(localLogger *log.Logger, cOpts *ProgOpts) error {
 	if cOpts.SecretsType == "directory" && strings.IndexRune(cOpts.SecretsRoot, filepath.Separator) != 0 {
 		cOpts.SecretsRoot = filepath.Join(cOpts.BaseRoot, cOpts.SecretsRoot)
 	}
-	if cOpts.SecretsType == "consul" && strings.IndexRune(cOpts.SecretsRoot, filepath.Separator) != 0 {
-		cOpts.SecretsRoot = fmt.Sprintf("/%s", cOpts.SecretsRoot)
-	}
 	if strings.IndexRune(cOpts.PluginRoot, filepath.Separator) != 0 {
 		cOpts.PluginRoot = filepath.Join(cOpts.BaseRoot, cOpts.PluginRoot)
 	}
@@ -164,9 +165,6 @@ func processArgs(localLogger *log.Logger, cOpts *ProgOpts) error {
 	}
 	if cOpts.BackEndType == "directory" && strings.IndexRune(cOpts.DataRoot, filepath.Separator) != 0 {
 		cOpts.DataRoot = filepath.Join(cOpts.BaseRoot, cOpts.DataRoot)
-	}
-	if cOpts.BackEndType == "consul" && strings.IndexRune(cOpts.DataRoot, filepath.Separator) != 0 {
-		cOpts.DataRoot = fmt.Sprintf("/%s", cOpts.DataRoot)
 	}
 	if strings.IndexRune(cOpts.LogRoot, filepath.Separator) != 0 {
 		cOpts.LogRoot = filepath.Join(cOpts.BaseRoot, cOpts.LogRoot)
@@ -214,23 +212,32 @@ func processArgs(localLogger *log.Logger, cOpts *ProgOpts) error {
 			return fmt.Errorf("Error creating required directory %s: %v", cOpts.SecretsRoot, err)
 		}
 	}
-	// Validate HA args - Assumes a local consul server running talking to the "cluster"
+
+	// Validate HA args.
 	if cOpts.HaEnabled {
-		if cOpts.SecretsType != "consul" || cOpts.BackEndType != "consul" {
-			return fmt.Errorf("Error: HA must be run on consul backends: %s, %s", cOpts.SecretsType, cOpts.BackEndType)
+		if cOpts.HaAddress == "" {
+			return fmt.Errorf("Error: HA must specify a VIP in CIDR format that DRP will move around")
 		}
 
-		if cOpts.HaAddress == "" {
-			return fmt.Errorf("Error: HA must specify a VIP that DRP will move around")
+		ip, cidr, err := net.ParseCIDR(cOpts.HaAddress)
+		if err != nil {
+			return fmt.Errorf("Error: HA IP address %s not valid: %v", cOpts.HaAddress, err)
 		}
+		cidr.IP = ip
 
 		if cOpts.HaInterface == "" {
 			return fmt.Errorf("Error: HA must specify an interface for the VIP that DRP will move around")
-		}
-
-		ip := net.ParseIP(cOpts.HaAddress)
-		if ip == nil {
-			return fmt.Errorf("Error: HA must be an IP address: %s", cOpts.HaAddress)
+		} else if iface, err := net.InterfaceByName(cOpts.HaInterface); err != nil {
+			return fmt.Errorf("Error: HA interface %s not found: %v", cOpts.HaInterface, err)
+		} else if addrs, err := iface.Addrs(); err != nil {
+			return fmt.Errorf("Error: Unable to get address list from HA interface %s: %v", cOpts.HaInterface, err)
+		} else {
+			cmp := ip.String() + "/"
+			for _, addr := range addrs {
+				if strings.HasPrefix(addr.String(), cmp) {
+					return fmt.Errorf("Error: HA interface %s already has address %v", cOpts.HaInterface, addr.String())
+				}
+			}
 		}
 
 		if cOpts.OurAddress != "" {
@@ -264,30 +271,31 @@ func makeLogBuffer(localLogger *log.Logger, cOpts *ProgOpts) (*logger.Buffer, er
 	return logger.New(localLogger).SetDefaultLevel(logLevel), nil
 }
 
-func waitOnApi(cOpts *ProgOpts) {
+func waitOnAPI(cOpts *ProgOpts) {
 	// Wait for Api to come up
-	for count := 0; count < 5; count++ {
-		if count > 0 {
-			log.Printf("Waiting for API (%d) to come up...\n", count)
-		}
-		timeout := time.Duration(5 * time.Second)
+	for count := 1; count <= 7; count++ {
+		log.Printf("Waiting for API (%d) to come up...\n", count)
+		timeout := time.Duration(count) * time.Second
 		tr := &http.Transport{
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-			TLSHandshakeTimeout:   5 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+			TLSHandshakeTimeout:   time.Duration(5*count) * time.Second,
+			ExpectContinueTimeout: time.Duration(count) * time.Second,
 		}
 		client := &http.Client{Transport: tr, Timeout: timeout}
-		if _, err := client.Get(fmt.Sprintf("https://127.0.0.1:%d/api/v3", cOpts.ApiPort)); err == nil {
-			break
+		if _, err := client.Get(fmt.Sprintf("https://127.0.0.1:%d/api/v3", cOpts.APIPort)); err == nil {
+			return
 		}
+		time.Sleep(time.Second * time.Duration(count-1))
 	}
+	log.Fatalf("ERROR: API failed to come up in a timely fashion! (we gave it around 31 seconds)")
 }
 
 func bootstrapPlugins(
 	localLogger *log.Logger,
 	l logger.Logger,
 	cOpts *ProgOpts,
-	secretStore store.Store) (*midlayer.PluginController, map[string]*models.PluginProvider, error) {
+	secretStore store.Store) (*backend.PluginController, map[string]*models.PluginProvider, error) {
+	localLogger.Printf("Bootstrapping plugins")
 	scratchStore, err := backend.InitDataStack(cOpts.SaasContentRoot, cOpts.FileRoot, l)
 	if err != nil {
 		return nil, nil, err
@@ -301,8 +309,8 @@ func bootstrapPlugins(
 		"127.0.0.1",
 		cOpts.ForceStatic,
 		cOpts.StaticPort,
-		cOpts.ApiPort,
-		cOpts.HaId,
+		cOpts.APIPort,
+		cOpts.HaID,
 		l,
 		map[string]string{
 			"debugBootEnv":        cOpts.DebugBootEnv,
@@ -319,28 +327,30 @@ func bootstrapPlugins(
 			"baseTokenSecret":     cOpts.BaseTokenSecret,
 			"systemGrantorSecret": cOpts.SystemGrantorSecret,
 		},
-		publishers)
-	pc, err := midlayer.InitPluginController(cOpts.PluginRoot, cOpts.PluginCommRoot, l)
+		publishers,
+		nil)
+	pc, err := backend.InitPluginController(cOpts.PluginRoot, cOpts.PluginCommRoot, l)
 	if err != nil {
 		return nil, nil, err
 	}
 	fe := frontend.NewFrontend(dt, l,
 		"127.0.0.1",
-		cOpts.ApiPort, cOpts.StaticPort, cOpts.DhcpPort, cOpts.BinlPort,
+		cOpts.APIPort, cOpts.StaticPort, cOpts.DhcpPort, cOpts.BinlPort,
 		cOpts.FileRoot,
-		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, []string{cOpts.DrpId, cOpts.DrpId, cOpts.HaId}, pc,
+		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, []string{cOpts.DrpID, cOpts.DrpID, cOpts.HaID}, pc,
 		cOpts.DisableDHCP, cOpts.DisableTftpServer, cOpts.DisableProvisioner, cOpts.DisableBINL,
 		cOpts.SaasContentRoot)
 	srv := &http.Server{
 		TLSConfig: &tls.Config{},
-		Addr:      fmt.Sprintf("127.0.0.1:%d", cOpts.ApiPort),
+		Addr:      fmt.Sprintf("127.0.0.1:%d", cOpts.APIPort),
 		Handler:   fe.MgmtApi,
 	}
-	go srv.ListenAndServeTLS(cOpts.TlsCertFile, cOpts.TlsKeyFile)
+	go srv.ListenAndServeTLS(cOpts.TLSCertFile, cOpts.TLSKeyFile)
 	defer srv.Shutdown(context.Background())
-	waitOnApi(cOpts)
+	waitOnAPI(cOpts)
 	rt := dt.Request(l)
 	providers, err := pc.Define(rt, cOpts.FileRoot)
+	localLogger.Printf("Plugins bootstrapped")
 	return pc, providers, err
 }
 
@@ -351,13 +361,29 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	}
 	services := make([]midlayer.Service, 0, 0)
 
-	// HA waits here.
 	if cOpts.HaEnabled {
-		midlayer.RemoveIP(cOpts.HaAddress, cOpts.HaInterface)
-
-		leader := midlayer.BecomeLeader(localLogger)
-		services = append(services, leader)
-
+		if cOpts.HaPassive {
+			localLogger.Println("Waiting on SIGUSR1 to become active")
+			ch := make(chan os.Signal)
+			signal.Notify(ch, syscall.SIGUSR1)
+			<-ch
+			newArgs := make([]string, 0, len(os.Args))
+			for _, arg := range os.Args {
+				if strings.HasPrefix(arg, "--ha-passive") {
+					continue
+				}
+				newArgs = append(newArgs, arg)
+			}
+			newEnv := []string{}
+			for _, env := range os.Environ() {
+				if strings.HasPrefix(env, "RS_HA_PASSIVE") {
+					continue
+				}
+				newEnv = append(newEnv, env)
+			}
+			syscall.Exec(newArgs[0], newArgs, newEnv)
+			localLogger.Fatalln("Reexec failed")
+		}
 		if err := midlayer.AddIP(cOpts.HaAddress, cOpts.HaInterface); err != nil {
 			return fmt.Errorf("Unable to add address: %v", err)
 		}
@@ -376,13 +402,19 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		return fmt.Errorf("Unable to open secrets store: %v", err)
 	}
 
-	// No DrpId - get a mac address
+	// No DrpID - get a mac address
 	intfs, err := net.Interfaces()
 	if err != nil {
-		return fmt.Errorf("Error getting interfaces for DrpId: %v", err)
+		return fmt.Errorf("Error getting interfaces for DrpID: %v", err)
 	}
 
-	var localId string
+	if _, err := os.Stat(cOpts.TLSCertFile); os.IsNotExist(err) {
+		if err = buildKeys(cOpts.CurveOrBits, cOpts.TLSCertFile, cOpts.TLSKeyFile); err != nil {
+			return fmt.Errorf("Error building certs: %v", err)
+		}
+	}
+
+	var localID string
 	for _, intf := range intfs {
 		if (intf.Flags & net.FlagLoopback) == net.FlagLoopback {
 			continue
@@ -393,14 +425,14 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		if strings.HasPrefix(intf.Name, "veth") {
 			continue
 		}
-		localId = intf.HardwareAddr.String()
+		localID = intf.HardwareAddr.String()
 		break
 	}
-	if cOpts.DrpId == "" {
-		cOpts.DrpId = localId
+	if cOpts.DrpID == "" {
+		cOpts.DrpID = localID
 	}
-	if cOpts.HaId == "" {
-		cOpts.HaId = cOpts.DrpId
+	if cOpts.HaID == "" {
+		cOpts.HaID = cOpts.DrpID
 	}
 	pc, providers, err := bootstrapPlugins(localLogger, buf.Log("bootstrap"), cOpts, secretStore)
 	if err != nil {
@@ -408,11 +440,11 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	}
 	providerStores := map[string]store.Store{}
 	for k, v := range providers {
-		if ps, err := v.Store(); err != nil {
+		ps, err := v.Store()
+		if err != nil {
 			return fmt.Errorf("Error getting Store from plugin %s: %v", k, err)
-		} else {
-			providerStores[k] = ps
 		}
+		providerStores[k] = ps
 	}
 
 	localLogger.Printf("Starting metrics server")
@@ -422,8 +454,8 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	}
 	services = append(services, svc)
 
-	if cOpts.PromGwUrl != "" {
-		ppg := utils.NewPrometheusPushGateway(buf.Log("promgateway"), cOpts.PromGwUrl,
+	if cOpts.PromGwURL != "" {
+		ppg := utils.NewPrometheusPushGateway(buf.Log("promgateway"), cOpts.PromGwURL,
 			fmt.Sprintf("http://127.0.0.1:%d/metrics", cOpts.MetricsPort),
 			time.Duration(cOpts.PromInterval)*time.Second)
 		services = append(services, ppg)
@@ -446,8 +478,8 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		cOpts.OurAddress,
 		cOpts.ForceStatic,
 		cOpts.StaticPort,
-		cOpts.ApiPort,
-		cOpts.HaId,
+		cOpts.APIPort,
+		cOpts.HaID,
 		buf.Log("backend"),
 		map[string]string{
 			"debugBootEnv":        cOpts.DebugBootEnv,
@@ -464,18 +496,21 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 			"baseTokenSecret":     cOpts.BaseTokenSecret,
 			"systemGrantorSecret": cOpts.SystemGrantorSecret,
 		},
-		publishers)
+		publishers,
+		pc)
 
 	if cOpts.CleanupCorrupt {
 		dt.Cleanup = true
 	}
+	pcLogLvl, _ := logger.ParseLevel(dt.Prefs()["debugPlugins"])
+	pc.SetLevel(pcLogLvl)
 	services = append(services, pc)
 
 	fe := frontend.NewFrontend(dt, buf.Log("frontend"),
 		cOpts.OurAddress,
-		cOpts.ApiPort, cOpts.StaticPort, cOpts.DhcpPort, cOpts.BinlPort,
+		cOpts.APIPort, cOpts.StaticPort, cOpts.DhcpPort, cOpts.BinlPort,
 		cOpts.FileRoot,
-		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, []string{cOpts.DrpId, localId, cOpts.HaId}, pc,
+		cOpts.LocalUI, cOpts.UIUrl, nil, publishers, []string{cOpts.DrpID, localID, cOpts.HaID}, pc,
 		cOpts.DisableDHCP, cOpts.DisableTftpServer, cOpts.DisableProvisioner, cOpts.DisableBINL,
 		cOpts.SaasContentRoot)
 	fe.TftpPort = cOpts.TftpPort
@@ -483,12 +518,6 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	fe.NoBinl = cOpts.DisableBINL
 	backend.SetLogPublisher(buf, publishers)
 	pc.AddStorageType = fe.AddStorageType
-
-	if _, err := os.Stat(cOpts.TlsCertFile); os.IsNotExist(err) {
-		if err = buildKeys(cOpts.CurveOrBits, cOpts.TlsCertFile, cOpts.TlsKeyFile); err != nil {
-			return fmt.Errorf("Error building certs: %v", err)
-		}
-	}
 
 	if !cOpts.DisableTftpServer {
 		localLogger.Printf("Starting TFTP server")
@@ -574,7 +603,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 	}
 	srv := &http.Server{
 		TLSConfig: cfg,
-		Addr:      fmt.Sprintf(":%d", cOpts.ApiPort),
+		Addr:      fmt.Sprintf(":%d", cOpts.APIPort),
 		Handler:   fe.MgmtApi,
 		ConnState: func(n net.Conn, cs http.ConnState) {
 			if cs == http.StateActive {
@@ -591,12 +620,16 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 
 	// Handle SIGHUP, SIGINT and SIGTERM.
 	ch := make(chan os.Signal)
-	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT)
+	toWait := []os.Signal{syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT}
+	if cOpts.HaEnabled {
+		toWait = append(toWait, syscall.SIGUSR2)
+	}
+	signal.Notify(ch, toWait...)
 
 	watchDone := make(chan struct{})
 
 	go func() {
-		waitOnApi(cOpts)
+		waitOnAPI(cOpts)
 		// Start the controller now that we have a frontend to front.
 		pc.Start(dt, providers, publishers)
 
@@ -650,7 +683,7 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 					})
 					localLogger.Println("Reload Complete")
 				}
-			case syscall.SIGTERM, syscall.SIGINT:
+			case syscall.SIGTERM, syscall.SIGINT, syscall.SIGUSR2:
 				if cOpts.HaEnabled {
 					localLogger.Printf("Removing VIP: %s:%s\n", cOpts.HaInterface, cOpts.HaAddress)
 					midlayer.RemoveIP(cOpts.HaAddress, cOpts.HaInterface)
@@ -662,6 +695,26 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 						localLogger.Printf("could not shutdown: %v", err)
 					}
 				}
+				if s == syscall.SIGUSR2 {
+					localLogger.Println("Switching to passive mode")
+					newArgs := make([]string, 0, len(os.Args))
+					for _, arg := range os.Args {
+						if strings.HasPrefix(arg, "--ha-passive") {
+							continue
+						}
+						newArgs = append(newArgs, arg)
+					}
+					newArgs = append(newArgs, "--ha-passive")
+					newEnv := []string{}
+					for _, env := range os.Environ() {
+						if strings.HasPrefix(env, "RS_HA_PASSIVE") {
+							continue
+						}
+						newEnv = append(newEnv, env)
+					}
+					syscall.Exec(newArgs[0], newArgs, newEnv)
+					localLogger.Fatalln("Reexec failed")
+				}
 				if watchDone != nil {
 					close(watchDone)
 				}
@@ -672,8 +725,8 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 
 	go func() {
 		localLogger.Printf("Starting API server")
-		fe.ApiGroup.Any("/plugin-apis/:plugin/*path", midlayer.ReverseProxy(pc))
-		if err = srv.ListenAndServeTLS(cOpts.TlsCertFile, cOpts.TlsKeyFile); err != http.ErrServerClosed {
+		fe.ApiGroup.Any("/plugin-apis/:plugin/*path", backend.ReverseProxy(pc))
+		if err = srv.ListenAndServeTLS(cOpts.TLSCertFile, cOpts.TLSKeyFile); err != http.ErrServerClosed {
 			// Stop the service gracefully.
 			for _, svc := range services {
 				localLogger.Println("Shutting down server...")
@@ -687,7 +740,15 @@ func server(localLogger *log.Logger, cOpts *ProgOpts) error {
 		}
 	}()
 
-	err = watchSelf(localLogger, watchDone, services)
+	setcap := false
+	if u, uerr := user.Current(); uerr == nil {
+		localLogger.Printf("UserId: %s\n", u.Uid)
+		if u.Uid != "0" {
+			setcap = true
+		}
+	}
+
+	err = watchSelf(localLogger, setcap, watchDone, services, cOpts.NoWatcher)
 	if err != nil {
 		err = fmt.Errorf("Error starting watcher service: %v", err)
 	}

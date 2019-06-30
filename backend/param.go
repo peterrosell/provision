@@ -2,10 +2,11 @@ package backend
 
 import (
 	"errors"
+	"regexp"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -61,11 +62,13 @@ func (p *Param) New() store.KeySaver {
 func (p *Param) Indexes() map[string]index.Maker {
 	fix := AsParam
 	res := index.MakeBaseIndexes(p)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refName := fix(ref).Name
 			return func(s models.Model) bool {
 					return fix(s).Name >= refName
@@ -74,26 +77,16 @@ func (p *Param) Indexes() map[string]index.Maker {
 					return fix(s).Name > refName
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			param := fix(p.New())
 			param.Name = s
 			return param, nil
-		})
-	res["Secure"] = index.Make(
-		false,
+		},
+	}
+	res["Secure"] = index.MakeUnordered(
 		"boolean",
 		func(i, j models.Model) bool {
-			return (!fix(i).Secure) && fix(j).Secure
-		},
-		func(ref models.Model) (gte, gt index.Test) {
-			avail := fix(ref).Secure
-			return func(s models.Model) bool {
-					v := fix(s).Secure
-					return v || (v == avail)
-				},
-				func(s models.Model) bool {
-					return fix(s).Secure && !avail
-				}
+			return fix(i).Secure == fix(j).Secure
 		},
 		func(s string) (models.Model, error) {
 			res := fix(p.New())
@@ -201,10 +194,10 @@ func ValidateParams(rt *RequestTracker, e models.ErrorAdder, params map[string]i
 
 var paramLockMap = map[string][]string{
 	"get":     {"params"},
-	"create":  {"params", "profiles"},
-	"update":  {"params", "profiles"},
-	"patch":   {"params", "profiles"},
-	"delete":  {"params", "profiles"},
+	"create":  {"params:rw", "profiles"},
+	"update":  {"params:rw", "profiles"},
+	"patch":   {"params:rw", "profiles"},
+	"delete":  {"params:rw", "profiles"},
 	"actions": {"params", "profiles"},
 }
 

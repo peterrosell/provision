@@ -9,6 +9,8 @@
   "Meta": {},
   "Name": "john",
   "OptionalParams": [],
+  "Params": {},
+  "Partial": false,
   "Profiles": [],
   "ReadOnly": false,
   "Reboot": false,

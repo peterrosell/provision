@@ -14,14 +14,17 @@ import (
 func (o *ops) commands() []*cobra.Command {
 	canSlim := false
 	canDecode := false
+	canParam := false
 	if _, ok := o.example().(models.MetaHaver); ok {
 		canSlim = true
 	}
 	if _, ok := o.example().(models.Paramer); ok {
 		canSlim = true
+		canParam = true
 		canDecode = true
 	}
 	slim := ""
+	params := ""
 	decode := false
 	cmds := []*cobra.Command{}
 	listCmd := &cobra.Command{
@@ -45,12 +48,22 @@ To filter by indexes, you can use the following stanzas:
   This will return items Greater Than *value* according to *index*
 * *index* Gte *value*
   This will return items Greater Than Or Equal to *value* according to *index*
+* *index* Re *re2 compatible regular expression*
+  This will return items in *index* that match the passed-in regular expression
+  We use the regular expression syntax described at
+  https://github.com/google/re2/wiki/Syntax
 * *index* Between *lower* *upper*
   This will return items Greater Than Or Equal to *lower*
   and Less Than Or Equal to *upper* according to *index*
 * *index* Except *lower* *upper*
   This will return items Less Than *lower* or
   Greater Than *upper* according to *index*
+* *index* In *comma,separated,list,of,values*
+  This will return any items In the set passed for the
+  comma-separated list of values.
+* *index* Nin *comma,separated,list,of,values*
+  This will return any items Not In the set passed for the
+  comma-separated list of values.
 
 You can chain any number of filters together, and they will pipeline into
 each other as appropriate.  After the above filters have been applied, you can
@@ -88,6 +101,9 @@ further tweak how the results are returned using the following meta-filters:
 				if slim != "" {
 					args = append(args, fmt.Sprintf("slim=%s", slim))
 				}
+				if params != "" {
+					args = append(args, fmt.Sprintf("params=%s", params))
+				}
 				if decode {
 					args = append(args, "decode=true")
 				}
@@ -107,6 +123,9 @@ further tweak how the results are returned using the following meta-filters:
 				}
 				if slim != "" {
 					args = append(args, "slim", slim)
+				}
+				if params != "" {
+					args = append(args, "params", params)
 				}
 				if decode {
 					args = append(args, "decode")
@@ -132,6 +151,12 @@ further tweak how the results are returned using the following meta-filters:
 			"slim",
 			"",
 			"Should elide certain fields.  Can be 'Params', 'Meta', or a comma-separated list of both.")
+	}
+	if canParam {
+		listCmd.Flags().StringVar(&params,
+			"params",
+			"",
+			"Should return only the parameters specified as a comma-separated list of parameter names.")
 	}
 	if canDecode {
 		listCmd.Flags().BoolVar(&decode,
@@ -174,6 +199,9 @@ format id as *index*:*value*
 			if decode {
 				req = req.Params("decode", "true")
 			}
+			if params != "" {
+				req = req.Params("params", params)
+			}
 			if err := req.Do(&data); err != nil {
 				return generateError(err, "Failed to fetch %v: %v", o.singleName, args[0])
 			} else {
@@ -186,6 +214,12 @@ format id as *index*:*value*
 			"slim",
 			"",
 			"Should elide certain fields.  Can be 'Params', 'Meta', or a comma-separated list of both.")
+	}
+	if canParam {
+		showCmd.Flags().StringVar(&params,
+			"params",
+			"",
+			"Should return only the parameters specified as a comma-separated list of parameter names.")
 	}
 	if canDecode {
 		showCmd.Flags().BoolVar(&decode,
@@ -246,7 +280,11 @@ empty object of that type.  For User, BootEnv, Machine, and Profile, it will be 
 						return fmt.Errorf("Unable to create a new %s: %v", o.singleName, err)
 					}
 				}
-				if err := session.CreateModel(ref); err != nil {
+				req := session.Req().Post(ref).UrlFor(ref.Prefix())
+				if force {
+					req.Params("force", "true")
+				}
+				if err := req.Do(&ref); err != nil {
 					return generateError(err, "Unable to create new %v", o.singleName)
 				}
 				return prettyPrint(ref)
@@ -274,7 +312,11 @@ empty object of that type.  For User, BootEnv, Machine, and Profile, it will be 
 					if err != nil {
 						return generateError(err, "Failed to generate changed %s:%s object", o.name, args[0])
 					}
-					if err := session.PutModel(toPut); err != nil {
+					req := session.Req().Put(toPut).UrlForM(toPut)
+					if force {
+						req.Params("force", "true")
+					}
+					if err := req.Do(&toPut); err != nil {
 						return generateError(err, "Unable to update %v", args[0])
 					}
 					return prettyPrint(toPut)
@@ -300,7 +342,11 @@ empty object of that type.  For User, BootEnv, Machine, and Profile, it will be 
 					if err != nil {
 						return generateError(err, "Failed to generate changed %s:%s object", o.name, args[0])
 					}
-					if res, err := session.PatchToFull(refObj, toPut, ref != ""); err != nil {
+					req := session.Req()
+					if force {
+						req.Params("force", "true")
+					}
+					if res, err := req.PatchToFull(refObj, toPut, ref != ""); err != nil {
 						return generateError(err, "Unable to update %v", args[0])
 					} else {
 						return prettyPrint(res)

@@ -2,10 +2,12 @@ package backend
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/digitalrebar/provision/backend/index"
 	"github.com/digitalrebar/provision/models"
-	"github.com/digitalrebar/store"
+	"github.com/digitalrebar/provision/store"
 )
 
 // Plugin represents a single instance of a running plugin.
@@ -31,11 +33,13 @@ func (n *Plugin) SaveClean() store.KeySaver {
 func (n *Plugin) Indexes() map[string]index.Maker {
 	fix := AsPlugin
 	res := index.MakeBaseIndexes(n)
-	res["Name"] = index.Make(
-		true,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
-		func(ref models.Model) (gte, gt index.Test) {
+	res["Name"] = index.Maker{
+		Unique: true,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Name < fix(j).Name },
+		Eq:     func(i, j models.Model) bool { return fix(i).Name == fix(j).Name },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Name) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refName := fix(ref).Name
 			return func(s models.Model) bool {
 					return fix(s).Name >= refName
@@ -44,16 +48,19 @@ func (n *Plugin) Indexes() map[string]index.Maker {
 					return fix(s).Name > refName
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			plugin := fix(n.New())
 			plugin.Name = s
 			return plugin, nil
-		})
-	res["Provider"] = index.Make(
-		false,
-		"string",
-		func(i, j models.Model) bool { return fix(i).Provider < fix(j).Provider },
-		func(ref models.Model) (gte, gt index.Test) {
+		},
+	}
+	res["Provider"] = index.Maker{
+		Unique: false,
+		Type:   "string",
+		Less:   func(i, j models.Model) bool { return fix(i).Provider < fix(j).Provider },
+		Eq:     func(i, j models.Model) bool { return fix(i).Provider == fix(j).Provider },
+		Match:  func(i models.Model, re *regexp.Regexp) bool { return re.MatchString(fix(i).Provider) },
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			refProvider := fix(ref).Provider
 			return func(s models.Model) bool {
 					return fix(s).Provider >= refProvider
@@ -62,10 +69,41 @@ func (n *Plugin) Indexes() map[string]index.Maker {
 					return fix(s).Provider > refProvider
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			plugin := fix(n.New())
 			plugin.Provider = s
 			return plugin, nil
+		},
+	}
+	res["Params"] = index.MakeUnordered(
+		"list",
+		func(i, j models.Model) bool {
+			p1 := fix(i).Params
+			p2 := fix(j).Params
+			probes := map[string]bool{}
+			for k := range p2 {
+				probes[k] = false
+			}
+			for k := range p1 {
+				if v, ok := probes[k]; ok && !v {
+					probes[k] = true
+				}
+			}
+			for _, v := range probes {
+				if !v {
+					return false
+				}
+			}
+			return true
+		},
+		func(s string) (models.Model, error) {
+			res := fix(n.New())
+			keys := strings.Split(s, ",")
+			res.Params = map[string]interface{}{}
+			for _, v := range keys {
+				res.Params[strings.TrimSpace(v)] = struct{}{}
+			}
+			return res, nil
 		})
 	return res
 }
@@ -78,15 +116,15 @@ func (n *Plugin) ParameterMaker(rt *RequestTracker, parameter string) (index.Mak
 	}
 	param := AsParam(pobj)
 
-	return index.Make(
-		false,
-		"parameter",
-		func(i, j models.Model) bool {
+	return index.Maker{
+		Unique: false,
+		Type:   "parameter",
+		Less: func(i, j models.Model) bool {
 			ip, _ := rt.GetParam(fix(i), parameter, true, false)
 			jp, _ := rt.GetParam(fix(j), parameter, true, false)
 			return GeneralLessThan(ip, jp)
 		},
-		func(ref models.Model) (gte, gt index.Test) {
+		Tests: func(ref models.Model) (gte, gt index.Test) {
 			jp, _ := rt.GetParam(fix(ref), parameter, true, false)
 			return func(s models.Model) bool {
 					ip, _ := rt.GetParam(fix(s), parameter, true, false)
@@ -97,7 +135,7 @@ func (n *Plugin) ParameterMaker(rt *RequestTracker, parameter string) (index.Mak
 					return GeneralGreaterThan(ip, jp)
 				}
 		},
-		func(s string) (models.Model, error) {
+		Fill: func(s string) (models.Model, error) {
 			obj, err := GeneralValidateParam(param, s)
 			if err != nil {
 				return nil, err
@@ -106,7 +144,8 @@ func (n *Plugin) ParameterMaker(rt *RequestTracker, parameter string) (index.Mak
 			res.Params = map[string]interface{}{}
 			res.Params[parameter] = obj
 			return res, nil
-		}), nil
+		},
+	}, nil
 
 }
 
@@ -171,10 +210,10 @@ func AsPlugins(o []models.Model) []*Plugin {
 
 var pluginLockMap = map[string][]string{
 	"get":     {"plugins", "params", "profiles"},
-	"create":  {"plugins", "params"},
-	"update":  {"plugins", "params"},
-	"patch":   {"plugins", "params"},
-	"delete":  {"plugins", "params"},
+	"create":  {"plugins:rw", "params", "profiles"},
+	"update":  {"plugins:rw", "params", "profiles"},
+	"patch":   {"plugins:rw", "params", "profiles"},
+	"delete":  {"plugins:rw", "params", "profiles"},
 	"actions": {"plugins", "profiles", "params"},
 }
 

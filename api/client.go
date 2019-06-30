@@ -43,11 +43,18 @@ type Client struct {
 	traceLvl                     string
 	traceToken                   string
 	info                         *models.Info
+	iMux                         *sync.Mutex
 }
 
+// Endpoint returns the address of the dr-provision API endpoint that
+// we are talking to.
 func (c *Client) Endpoint() string {
 	return c.endpoint
 }
+
+// Username returns the username that the Client is using.  If the
+// client was created via TokenSession, then this will return an empty
+// string.
 func (c *Client) Username() string {
 	return c.username
 }
@@ -82,6 +89,10 @@ func (c *Client) TraceToken(t string) {
 	c.traceToken = t
 }
 
+// File initiates a download from the static file service on the
+// dr-provision endpoint.  It is up to the caller to ensure that the
+// returned ReadCloser gets closed, otherwise stale HTTP connections
+// will leak.
 func (c *Client) File(pathParts ...string) (io.ReadCloser, error) {
 	info, err := c.Info()
 	if err != nil {
@@ -202,6 +213,7 @@ func (r *R) ParanoidPatch() *R {
 	return r
 }
 
+// PatchObj generates a PATCH request for the differences between old and new.
 func (r *R) PatchObj(old, new interface{}) *R {
 	b, err := GenPatch(old, new, r.paranoid)
 	if err != nil {
@@ -211,6 +223,7 @@ func (r *R) PatchObj(old, new interface{}) *R {
 	return r.Meth("PATCH").Body(b)
 }
 
+// PatchTo generates a Patch request that will transform old into new.
 func (r *R) PatchTo(old, new models.Model) *R {
 	if old.Prefix() != new.Prefix() || old.Key() != new.Key() {
 		r.err.Model = old.Prefix()
@@ -233,6 +246,8 @@ func (r *R) PatchToFull(old models.Model, new models.Model, paranoid bool) (mode
 	return res, err
 }
 
+// Fill fills in m with the corresponding data from the dr-provision
+// server.
 func (r *R) Fill(m models.Model) error {
 	r.err.Model = m.Prefix()
 	r.err.Model = m.Key()
@@ -243,13 +258,13 @@ func (r *R) Fill(m models.Model) error {
 	return r.Get().UrlForM(m).Do(&m)
 }
 
-// Post sets the R method to POST, and arranged for b to be the body
+// Post sets the R method to POST, and arranges for b to be the body
 // of the request by calling r.Body().
 func (r *R) Post(b interface{}) *R {
 	return r.Meth("POST").Body(b)
 }
 
-// Delete deletes a single object
+// Delete deletes a single object.
 func (r *R) Delete(m models.Model) error {
 	r.err.Model = m.Prefix()
 	r.err.Model = m.Key()
@@ -310,6 +325,10 @@ func (r *R) Params(args ...string) *R {
 // describes how you want the results filtered.  Currently, filterArgs must be
 // in the following format:
 //
+//    "slim" "Meta|Params|Meta,Params"
+//        to reduce the amount of data sent back
+//    "params" "p1,p2,p3"
+//        to reduce the returned parameters to the specified set.
 //    "reverse"
 //        to reverse the order of the results
 //    "sort" "indexName"
@@ -320,8 +339,13 @@ func (r *R) Params(args ...string) *R {
 //        to skip <number> of results before returning
 //    "indexName" "Eq/Lt/Lte/Gt/Gte/Ne" "value"
 //        to return results Equal, Less Than, Less Than Or Equal, Greater Than, Greater Than Or Equal, or Not Equal to value according to IndexName
+//    "indexName" "Re" "re2 compatible regular expression"
+//        to return results where values in indexName match the passed-in regular expression.
+//        The index must have the Regex flag equal to True
 //    "indexName" "Between/Except" "lowerBound" "upperBound"
 //        to return values Between(inclusive) lowerBound and Upperbound or its complement for Except.
+//    "indexName" "In/Nin" "comma,separated,list,of,values"
+//        to return values either in the list of values or not in the listr of values
 //
 // If formatArgs does not contain some valid combination of the above, the request will fail.
 func (r *R) Filter(prefix string, filterArgs ...string) *R {
@@ -334,7 +358,7 @@ func (r *R) Filter(prefix string, filterArgs ...string) *R {
 		case "reverse", "decode":
 			finalParams = append(finalParams, filter, "true")
 			i++
-		case "sort", "limit", "offset", "slim":
+		case "sort", "limit", "offset", "slim", "params":
 			if len(filterArgs)-i < 2 {
 				r.err.Errorf("Invalid Filter: %s requires exactly one parameter", filter)
 				return r
@@ -349,7 +373,7 @@ func (r *R) Filter(prefix string, filterArgs ...string) *R {
 			op := strings.Title(strings.ToLower(filterArgs[i+1]))
 			i += 2
 			switch op {
-			case "Eq", "Lt", "Lte", "Gt", "Gte", "Ne":
+			case "Eq", "Lt", "Lte", "Gt", "Gte", "Ne", "In", "Nin", "Re":
 				if len(filterArgs)-i < 1 {
 					r.err.Errorf("Invalid Filter: %s op %s requires 1 parameter", filter, op)
 					return r
@@ -357,12 +381,17 @@ func (r *R) Filter(prefix string, filterArgs ...string) *R {
 				finalParams = append(finalParams, filter, fmt.Sprintf("%s(%s)", op, filterArgs[i]))
 				i++
 			case "Between", "Except":
-				if len(filterArgs)-i < 2 {
-					r.err.Errorf("Invalid Filter: %s op %s requires 2 parameters", filter, op)
+				if len(filterArgs)-i < 1 || (len(filterArgs)-i < 2 && !strings.Contains(filterArgs[i], ",")) {
+					r.err.Errorf("Invalid Filter: %s op %s requires 1 or 2 parameters", filter, op)
 					return r
 				}
-				finalParams = append(finalParams, filter, fmt.Sprintf("%s(%s,%s)", op, filterArgs[i], filterArgs[i+1]))
-				i += 2
+				if !strings.Contains(filterArgs[i], ",") {
+					finalParams = append(finalParams, filter, fmt.Sprintf("%s(%s,%s)", op, filterArgs[i], filterArgs[i+1]))
+					i += 2
+				} else {
+					finalParams = append(finalParams, filter, fmt.Sprintf("%s(%s)", op, filterArgs[i]))
+					i += 1
+				}
 			default:
 				r.err.Errorf("Invalid Filter %s: unknown op %s", filter, op)
 				return r
@@ -429,7 +458,7 @@ func (r *R) FailFast() *R {
 // Do attempts to execute the reqest built up by previous method calls
 // on R.  If any errors occurred while building up the request, they
 // will be returned and no API interaction will actually take place.
-// Otherwise, Do will generate am http.Request, perform it, and
+// Otherwise, Do will generate an http.Request, perform it, and
 // marshal the results to val.  If any errors occur while processing
 // the request, fibbonaci based backoff will be performed up to 6
 // times.
@@ -488,6 +517,9 @@ func (r *R) Do(val interface{}) error {
 			break
 		}
 		if r.body == nil {
+			r.c.iMux.Lock()
+			r.c.info = nil
+			r.c.iMux.Unlock()
 			time.Sleep(waitFor)
 			continue
 		}
@@ -516,6 +548,9 @@ func (r *R) Do(val interface{}) error {
 	}
 	if r.method == "HEAD" {
 		if resp.StatusCode <= 300 {
+			if val != nil {
+				return models.Remarshal(resp.Header, val)
+			}
 			return nil
 		}
 		r.err.Errorf(http.StatusText(resp.StatusCode))
@@ -560,11 +595,13 @@ func (r *R) Do(val interface{}) error {
 // in the background, and force any API calls made to this client that
 // would communicate with the server to return an error
 func (c *Client) Close() {
-	c.closer <- struct{}{}
 	close(c.closer)
 	c.mux.Lock()
 	c.closed = true
 	c.mux.Unlock()
+	c.iMux.Lock()
+	c.info = nil
+	c.iMux.Unlock()
 }
 
 // Token returns the current authentication token associated with the
@@ -579,10 +616,13 @@ func (c *Client) Token() string {
 // Info returns some basic system information that was retrieved as
 // part of the initial authentication.
 func (c *Client) Info() (*models.Info, error) {
+	c.iMux.Lock()
 	if c.info != nil {
+		c.iMux.Unlock()
 		return c.info, nil
 	}
 	c.info = &models.Info{}
+	c.iMux.Unlock()
 	return c.info, c.Req().UrlFor("info").Do(c.info)
 }
 
@@ -627,12 +667,33 @@ func (c *Client) GetBlob(dest io.Writer, at ...string) error {
 	return c.Req().UrlFor(path.Join("/", path.Join(at...))).Do(dest)
 }
 
+// GetBlobSum fetches the checksum for the blob
+func (c *Client) GetBlobSum(at ...string) (string, error) {
+	h := http.Header{}
+	err := c.Req().Head().UrlFor(path.Join("/", path.Join(at...))).Do(&h)
+	if err != nil {
+		return "", err
+	}
+	return h.Get("X-DRP-SHA256SUM"), nil
+}
+
+// PostBlobExplode uploads the binary blob contained in the passed io.Reader
+// to the location specified by at on the server.  You are responsible
+// for closing the passed io.Reader.  Sends the explode boolean as a query parameter.
+func (c *Client) PostBlobExplode(blob io.Reader, explode bool, at ...string) (models.BlobInfo, error) {
+	res := models.BlobInfo{}
+	r := c.Req().Post(blob).UrlFor(path.Join("/", path.Join(at...)))
+	if explode {
+		r = r.Params("explode", "true")
+	}
+	return res, r.Do(&res)
+}
+
 // PostBlob uploads the binary blob contained in the passed io.Reader
 // to the location specified by at on the server.  You are responsible
 // for closing the passed io.Reader.
 func (c *Client) PostBlob(blob io.Reader, at ...string) (models.BlobInfo, error) {
-	res := models.BlobInfo{}
-	return res, c.Req().Post(blob).UrlFor(path.Join("/", path.Join(at...))).Do(&res)
+	return c.PostBlobExplode(blob, false, at...)
 }
 
 // DeleteBlob deletes a blob on the server at the location indicated
@@ -663,6 +724,8 @@ func (c *Client) OneIndex(prefix, param string) (models.Index, error) {
 	return res, c.Req().UrlFor("indexes", prefix, param).Do(&res)
 }
 
+// ListModel returns a list of models for prefix matching the request
+// parameters passed in by params.
 func (c *Client) ListModel(prefix string, params ...string) ([]models.Model, error) {
 	ref, err := models.New(prefix)
 	if err != nil {
@@ -782,6 +845,7 @@ func TokenSession(endpoint, token string) (*Client, error) {
 		Client:   &http.Client{Transport: tr},
 		closer:   make(chan struct{}, 0),
 		token:    &models.UserToken{Token: token},
+		iMux:     &sync.Mutex{},
 	}
 	go func() {
 		<-c.closer
@@ -823,6 +887,7 @@ func UserSessionToken(endpoint, username, password string, usetoken bool) (*Clie
 		password: password,
 		Client:   &http.Client{Transport: tr},
 		closer:   make(chan struct{}, 0),
+		iMux:     &sync.Mutex{},
 	}
 	basicAuth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 	token := &models.UserToken{}
@@ -833,6 +898,7 @@ func UserSessionToken(endpoint, username, password string, usetoken bool) (*Clie
 		return nil, err
 	}
 	if usetoken {
+		c.token = token
 		go func() {
 			ticker := time.NewTicker(300 * time.Second)
 			for {
@@ -857,7 +923,6 @@ func UserSessionToken(endpoint, username, password string, usetoken bool) (*Clie
 				}
 			}
 		}()
-		c.token = token
 	}
 	return c, nil
 }

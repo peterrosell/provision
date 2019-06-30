@@ -15,7 +15,7 @@ fi
 if [[ $BASE == tip || $TAG == tip ]] ; then
     Extra="-tip"
     set +e
-    TAG=$(git describe --tags --abbrev=1000 tip^1)
+    TAG=$(git describe --tags --abbrev=1000 tip^2)
     set -e
     if [[ $TAG =~ $tag_re ]]; then
         BASE="${BASH_REMATCH[1]}"
